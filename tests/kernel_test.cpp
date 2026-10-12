@@ -1494,6 +1494,69 @@ static void testTabs() {
     CHECK(!dl.empty());
 }
 
+static void testTabsOverflow() {
+    XmlParser p;
+    auto res = p.parse(R"XML(<screen id="s">
+  <panel id="bg" x="0" y="0" w="800" h="600"/>
+  <tabs id="tb" x="100" y="200" w="160" h="120" theight="24" active="0">
+    <tab label="Alpha"><label id="p0" text="0" x="8" y="8" w="30" h="16"/></tab>
+    <tab label="Beta"><label id="p1" text="1" x="8" y="8" w="30" h="16"/></tab>
+    <tab label="Gamma"><label id="p2" text="2" x="8" y="8" w="30" h="16"/></tab>
+    <tab label="Delta"><label id="p3" text="3" x="8" y="8" w="30" h="16"/></tab>
+    <tab label="Epsilon"><label id="p4" text="4" x="8" y="8" w="30" h="16"/></tab>
+  </tabs>
+</screen>)XML");
+    CHECK(res.root != nullptr);
+    if (!res.root) return;
+
+    auto s = std::make_shared<Screen>("s");
+    s->widgets.push_back(res.root);
+    s->width = 800;
+    s->height = 600;
+
+    Kernel k;
+    k.init();
+    k.pushScreen(s);
+
+    auto* tabs = dynamic_cast<Tabs*>(k.findWidget("tb"));
+    CHECK(tabs != nullptr);
+    if (!tabs) return;
+
+    InputState st = makeInput();
+    idle(k, st);
+
+    // Five labelled cells never fit 160px minus the "..." reserve.
+    const int vis = tabs->visibleTabs(160.0f);
+    CHECK(vis >= 1);
+    CHECK(vis < 5);
+    CHECK(tabs->visibleTabs(900.0f) == 5);
+
+    // A hidden tab's region is inert until picked from the menu.
+    float vx = 0.0f;
+    for (int i = 0; i < vis; ++i) vx += tabs->tabCellWidth(i);
+    CHECK(vx + 4.0f < 132.0f);   // inside a hidden cell, outside the button
+    pressAt(k, st, 100.0f + vx + 4.0f, 212.0f);
+    releaseAt(k, st);
+    CHECK(tabs->active() == 0);
+
+    // Click the "..." button at the right edge of the header strip.
+    pressAt(k, st, 100.0f + 146.0f, 212.0f);
+    releaseAt(k, st);
+    CHECK(k.popupOpen());
+    auto pop = std::dynamic_pointer_cast<MenuPopup>(k.popup());
+    CHECK(pop && pop->rowCount() == 5 - vis);
+    if (!pop) return;
+
+    // First popup row is the first hidden tab (index `vis`).
+    const Rect pb = pop->bounds();
+    pressAt(k, st, pb.x + pb.w * 0.5f, pb.y + 12.0f);
+    releaseAt(k, st);
+    CHECK(tabs->active() == vis);
+    CHECK(!k.popupOpen());
+    const std::string pid = "p" + std::to_string(vis);
+    if (Widget* page = k.findWidget(pid)) CHECK(page->isVisible());
+}
+
 static void testTooltip() {
     XmlParser p;
     auto res = p.parse(R"XML(<screen id="s">
@@ -2224,6 +2287,7 @@ int main() {
     testRadioButtonGroup();
     testFindAndGetText();
     testTabs();
+    testTabsOverflow();
     testTooltip();
     testScrollView();
     testTween();

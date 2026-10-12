@@ -2313,6 +2313,52 @@ int Tabs::tabAt(float localX) const {
     return -1;
 }
 
+int Tabs::visibleTabs(float headerW) const {
+    const std::vector<Tab*> ps = pages();
+    float total = 0.0f;
+    for (int i = 0; i < static_cast<int>(ps.size()); ++i) total += tabCellWidth(i);
+    if (total <= headerW) return static_cast<int>(ps.size());
+    // Reserve the "..." button, then fit as many cells as possible.
+    constexpr float kBtnW = 28.0f;
+    float x = 0.0f;
+    int n = 0;
+    for (int i = 0; i < static_cast<int>(ps.size()); ++i) {
+        const float w = tabCellWidth(i);
+        if (x + w > headerW - kBtnW) break;
+        x += w;
+        ++n;
+    }
+    return n;
+}
+
+void Tabs::openOverflow() {
+    const std::vector<Tab*> ps = pages();
+    const Rect b = bounds();
+    const int vis = visibleTabs(b.w);
+    if (vis >= static_cast<int>(ps.size())) return;
+
+    if (!m_overflow) m_overflow = std::make_shared<MenuPopup>();
+    std::vector<MenuEntry> entries;
+    for (int i = vis; i < static_cast<int>(ps.size()); ++i) {
+        MenuEntry e;
+        e.label = ps[i]->label();
+        e.command = std::to_string(i);
+        entries.push_back(e);
+    }
+    m_overflow->setEntries(entries);
+    m_overflow->fadeIn();
+    m_overflow->setVisible(true);
+    const Offset2D o = absoluteOrigin();
+    m_overflow->setBounds(Rect{o.x + b.w - 170.0f, o.y + m_headerHeight,
+                               170.0f, m_overflow->contentHeight()});
+    m_overflow->setOnSelect([this](const std::string& cmd) {
+        if (Kernel* k = kernel()) k->closePopup();
+        if (m_overflow) m_overflow->setVisible(false);
+        setActive(std::atoi(cmd.c_str()));
+    });
+    if (Kernel* k = kernel()) k->openPopup(m_overflow);
+}
+
 void Tabs::layout(float parentWidth, float parentHeight) {
     Rect b = bounds();
     const float cw = b.w > 0.0f ? b.w : parentWidth;
@@ -2344,10 +2390,19 @@ void Tabs::onPointerDown(MouseButton, const Offset2D& p) {
     // Content clicks land on the page itself; this only ever fires for the
     // header strip (or dead space beside the cells).
     const Offset2D o = absoluteOrigin();
+    const Rect b = bounds();
     const float localY = static_cast<float>(p.y) - o.y;
     if (localY < 0.0f || localY > m_headerHeight) return;
-    const int idx = tabAt(static_cast<float>(p.x) - o.x);
-    if (idx >= 0) setActive(idx);
+    const float localX = static_cast<float>(p.x) - o.x;
+    const int vis = visibleTabs(b.w);
+    const bool truncated = vis < static_cast<int>(pages().size());
+    // The "..." button owns the right-most 28px whenever pages are hidden.
+    if (truncated && localX >= b.w - 28.0f) {
+        openOverflow();
+        return;
+    }
+    const int idx = tabAt(localX);
+    if (idx >= 0 && idx < vis) setActive(idx);
 }
 
 void Tabs::onKeyDown(KeyCode key, uint32_t) {
@@ -2377,8 +2432,10 @@ void Tabs::onDraw(Rasterizer& r) const {
     r.drawRect(Rect{b.x, b.y, b.w, hh}, m_headerColor);
 
     const std::vector<Tab*> ps = pages();
+    const int vis = visibleTabs(b.w);
+    const bool truncated = vis < static_cast<int>(ps.size());
     float x = b.x;
-    for (int i = 0; i < static_cast<int>(ps.size()); ++i) {
+    for (int i = 0; i < vis; ++i) {
         const float w = tabCellWidth(i);
         const bool act = (i == m_active);
         r.drawRect(Rect{x, b.y, w, hh}, act ? m_activeColor : m_tabColor);
@@ -2388,6 +2445,16 @@ void Tabs::onDraw(Rasterizer& r) const {
                    act ? hexColor("#ffffff") : m_textColor,
                    Align::Center, VertAlign::Middle);
         x += w;
+    }
+    if (truncated) {
+        const bool actHidden = (m_active >= vis);
+        const Rect btn{b.x + b.w - 28.0f, b.y, 28.0f, hh};
+        r.drawRect(btn, actHidden ? m_activeColor : m_tabColor);
+        if (actHidden) r.drawRect(Rect{btn.x, b.y, btn.w, 2.0f}, m_accentColor);
+        r.drawText("...", btn.x + btn.w * 0.5f, b.y + hh * 0.5f,
+                   m_fontSize, m_fontFamily,
+                   actHidden ? hexColor("#ffffff") : m_textColor,
+                   Align::Center, VertAlign::Middle);
     }
 
     r.drawRect(Rect{b.x, b.y + hh - 1.0f, b.w, 1.0f}, hexColor("#333333"));

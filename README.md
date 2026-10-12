@@ -310,7 +310,7 @@ theme default.
 | `colorpicker` | swatch + hex label; click opens a popup with a saturation/value grid, a hue strip and a live hex readout; drags update the color and fire the widget's `bind()` | `color` (`#rrggbb`) |
 | `pathpicker` | read-only path field with a `...` button that opens a file-browser popup (folders first with a trailing `/`, `..` to go up, capped at 40 entries); picking a file fires the widget's `bind()` | `value`, `placeholder`, `path` (start folder), `filter` (extension, e.g. `.png`) |
 | `separator` | rule, horizontal or vertical | `thickness`, `color` |
-| `tabs` / `tab` | header strip over stacked pages (inactive pages take no input) | `active`, `theight`, `headercolor`, `tabcolor`, `activecolor`, `accent` / `label` |
+| `tabs` / `tab` | header strip over stacked pages (inactive pages take no input); pages that don't fit the width collapse into a `...` popup menu | `active`, `theight`, `headercolor`, `tabcolor`, `activecolor`, `accent` / `label` |
 | `group` | titled grouping box | `name` |
 | `image` | RGBA image file (PNG/JPG/… decoded by `ImageManager` via stb_image): stretched to the bounds, or repeated at native size with `tile`; `border` draws a frame on top; a missing file draws nothing | `src` (path, relative to the working directory), `tile` |
 | `scrollview` | wheel-scrollable clipped viewport over its children | `scrollx`, `scrolly`, `scrollstep` |

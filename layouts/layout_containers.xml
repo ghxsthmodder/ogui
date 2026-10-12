@@ -37,7 +37,7 @@
            text="Um paragrafo comprido que ultrapassa a altura da viewport, por isso mora dentro de um ScrollView. Continue rolando para ver o resto do texto aparecer linha a linha conforme o conteudo se desloca para cima."/>
   </scrollview>
 
-  <tabs id="tb_demo" x="1.25%" y="81%" w="97.5%" h="16%" theight="24" active="0"
+  <tabs id="tb_demo" x="1.25%" y="81%" w="45%" h="16%" theight="24" active="0"
         headercolor="#222" tabcolor="#1a1a1a" activecolor="#2a2a2a" accent="#4488ff">
     <tab label="Aba 1">
       <label x="12" y="8" w="95%" h="20" text="Conteudo da primeira aba."/>
@@ -45,6 +45,15 @@
     <tab label="Aba 2">
       <label x="12" y="8" w="95%" h="20" text="Conteudo da segunda aba."/>
       <button x="12" y="34" w="120" h="26" text="Botao" bg="#555" color="#fff" radius="6"/>
+    </tab>
+    <tab label="Texturas">
+      <label x="12" y="8" w="95%" h="20" text="Pagina escondida no menu de overflow (...)."/>
+    </tab>
+    <tab label="Iluminacao">
+      <label x="12" y="8" w="95%" h="20" text="Iluminacao global."/>
+    </tab>
+    <tab label="Pos-processamento">
+      <label x="12" y="8" w="95%" h="20" text="Filtros de pos-processamento."/>
     </tab>
   </tabs>
 </screen>

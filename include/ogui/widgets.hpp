@@ -27,6 +27,7 @@ class Column;
 class Group;
 class ComboOption;
 class ComboPopup;
+class MenuPopup;
 class ComboBox;
 
 // ------------------------------------------------------------------
@@ -928,6 +929,8 @@ public:
     float tabCellWidth(int i) const;
     // Page whose header cell contains localX (widget-local); -1 when none.
     int tabAt(float localX) const;
+    // How many header cells fit in headerW; the rest go behind "..." .
+    int visibleTabs(float headerW) const;
 
     virtual void layout(float parentWidth, float parentHeight) override;
     virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
@@ -936,6 +939,7 @@ public:
 
 private:
     std::vector<Tab*> pages() const;   // non-owning, in document order
+    void openOverflow();               // "..." popup listing hidden pages
 
     int m_active = 0;
     float m_headerHeight = 28.0f;
@@ -951,6 +955,7 @@ private:
     Color m_borderColor{ogui::hexColor("#4488ff")};
     float m_borderWidth = 1.0f;
     ChangedCallback m_onChanged;
+    std::shared_ptr<MenuPopup> m_overflow;
 };
 
 // ------------------------------------------------------------------
