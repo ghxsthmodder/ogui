@@ -308,6 +308,11 @@ protected:
     int m_fontSize = 14;
     bool m_focused = false;
     bool m_dragging = false;      // pointer is selecting
+    // Last pointer x/y processed while dragging. The kernel delivers a
+    // move with the press position in the same frame; applying it would
+    // undo a double/triple-click selection (it re-parks the caret on the
+    // click point).
+    Offset2D m_lastMove{-1.0f, -1.0f};
     float m_scrollX = 0.0f;       // horizontal scroll of the text slice
     size_t m_caret = 0;           // insertion point
     size_t m_selAnchor = 0;       // fixed end of the selection

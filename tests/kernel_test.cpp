@@ -71,13 +71,15 @@ void idle(Kernel& k, InputState& st) {
 }
 
 // Press and release `key` over two frames while `mod` stays held.
-void tapKey(Kernel& k, InputState& st, int key, int mod = -1) {
+void tapKey(Kernel& k, InputState& st, int key, int mod = -1, int mod2 = -1) {
     if (mod >= 0) st.keyDown[mod] = true;
+    if (mod2 >= 0) st.keyDown[mod2] = true;
     st.keyDown[key] = true;
     k.frame(st);
     st.keyDown[key] = false;
     k.frame(st);
     if (mod >= 0) st.keyDown[mod] = false;
+    if (mod2 >= 0) st.keyDown[mod2] = false;
 }
 
 // Focuses the <textinput> of makeScreen() (abs origin 120,154; 200x36).
@@ -380,6 +382,80 @@ static void testTextInputClickAndDrag() {
     pressAt(k, st, 120 + 60, 154 + 18);
     releaseAt(k, st);
     CHECK(!inp->hasSelection());
+}
+
+static void testTextInputWordSelection() {
+    Kernel k;
+    k.init();
+    k.pushScreen(makeScreen());
+
+    InputState st = makeInput();
+    idle(k, st);
+
+    TextInput* inp = focusInput(k, st);
+    CHECK(inp != nullptr);
+    if (!inp) return;
+    inp->setText("gato preto");
+
+    const float wx = 120 + 7, wy = 154 + 18;   // inside the first word
+
+    // A click outside the double-click window is a fresh single click.
+    st.time += 1.0f;
+    pressAt(k, st, wx, wy);
+    releaseAt(k, st);
+    CHECK(k.clickCount() == 1);
+    CHECK(!inp->hasSelection());
+
+    // Double-click selects the word under the pointer.
+    pressAt(k, st, wx, wy);
+    releaseAt(k, st);
+    CHECK(k.clickCount() == 2);
+    CHECK(inp->selectionStart() == 0);
+    CHECK(inp->selectionEnd() == 4);
+    CHECK(inp->selectedText() == "gato");
+
+    // Triple-click selects everything.
+    pressAt(k, st, wx, wy);
+    releaseAt(k, st);
+    CHECK(k.clickCount() == 3);
+    CHECK(inp->selectionStart() == 0);
+    CHECK(inp->selectionEnd() == 10);
+
+    // Shift+click extends from the caret instead of resetting the anchor.
+    st.time += 1.0f;
+    pressAt(k, st, 120 + 190, wy);      // plain click past the end
+    releaseAt(k, st);
+    CHECK(inp->caret() == 10);
+    CHECK(!inp->hasSelection());
+    st.keyDown[Key_LSHIFT] = true;
+    pressAt(k, st, wx, wy);
+    releaseAt(k, st);
+    st.keyDown[Key_LSHIFT] = false;
+    CHECK(inp->selectedText() == "gato preto");
+
+    // Ctrl+Left jumps a whole word; Ctrl+Shift+Left selects across it.
+    st.time += 1.0f;
+    pressAt(k, st, 120 + 190, wy);      // park the caret at the end
+    releaseAt(k, st);
+    CHECK(inp->caret() == 10);
+    tapKey(k, st, Key_Left, Key_LCTRL);
+    CHECK(inp->caret() == 5);
+    CHECK(!inp->hasSelection());
+    tapKey(k, st, Key_Left, Key_LCTRL, Key_LSHIFT);
+    CHECK(inp->caret() == 0);
+    CHECK(inp->selectionStart() == 0);
+    CHECK(inp->selectionEnd() == 5);
+    CHECK(inp->selectedText() == "gato ");
+    tapKey(k, st, Key_Right, Key_LCTRL);   // collapse to end, then jump
+    CHECK(inp->caret() == 10);
+
+    // Double-click on the trailing separator falls back to the word before.
+    st.time += 1.0f;
+    pressAt(k, st, 120 + 190, wy);
+    releaseAt(k, st);
+    pressAt(k, st, 120 + 190, wy);
+    releaseAt(k, st);
+    CHECK(inp->selectedText() == "preto");
 }
 
 static void testLabelWrapAndColumnAutoHeight() {
@@ -1712,6 +1788,7 @@ int main() {
     testKeyboardRouting();
     testTextInputSelection();
     testTextInputClickAndDrag();
+    testTextInputWordSelection();
     testLabelWrapAndColumnAutoHeight();
     testNewWidgets();
     testRadioButtonGroup();

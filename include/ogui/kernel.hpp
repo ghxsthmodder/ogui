@@ -137,6 +137,12 @@ public:
     // effects inside one widget, e.g. SpinBox buttons).
     Offset2D mousePos() const { return {m_input.mouseX, m_input.mouseY}; }
 
+    // ---- pointer context (read inside onPointerDown) ----
+    // Presses at the same spot within the double-click window count up:
+    // 1 = single, 2 = double, 3 = triple. Modifier bits (see ModBits).
+    int clickCount() const { return m_clickCount; }
+    uint32_t mods() const { return currentMods(); }
+
     // ---- tooltip ----
     // True while the hover tooltip panel should be on screen.
     bool tooltipVisible() const;
@@ -172,6 +178,13 @@ private:
     bool m_prevDown = false;
     uint32_t m_prevChar = 0;
     bool m_prevKeys[256] = {false};
+
+    // multi-click detection (double/triple press at the same spot)
+    int m_clickCount = 0;
+    int m_lastClickBtn = -1;
+    float m_lastClickTime = 0.0f;
+    float m_lastClickX = 0.0f;
+    float m_lastClickY = 0.0f;
 
     // tooltip hover timing
     Widget* m_tipTarget = nullptr;

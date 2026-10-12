@@ -148,6 +148,11 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_LBUTTONDOWN: self->input.mouseDown[0] = true; self->input.mouseButton = 0; SetCapture(hwnd); return 0;
         case WM_RBUTTONDOWN: self->input.mouseDown[1] = true; self->input.mouseButton = 1; SetCapture(hwnd); return 0;
         case WM_MBUTTONDOWN: self->input.mouseDown[2] = true; self->input.mouseButton = 2; SetCapture(hwnd); return 0;
+        // The second press of a double-click arrives as DBLCLK, not DOWN:
+        // treat it as a fresh press so the kernel's click count reaches 2.
+        case WM_LBUTTONDBLCLK: self->input.mouseDown[0] = true; self->input.mouseButton = 0; SetCapture(hwnd); return 0;
+        case WM_RBUTTONDBLCLK: self->input.mouseDown[1] = true; self->input.mouseButton = 1; SetCapture(hwnd); return 0;
+        case WM_MBUTTONDBLCLK: self->input.mouseDown[2] = true; self->input.mouseButton = 2; SetCapture(hwnd); return 0;
         case WM_LBUTTONUP:   self->input.mouseDown[0] = false; self->input.mouseButton = -1; ReleaseCapture(); return 0;
         case WM_RBUTTONUP:   self->input.mouseDown[1] = false; self->input.mouseButton = -1; ReleaseCapture(); return 0;
         case WM_MBUTTONUP:   self->input.mouseDown[2] = false; self->input.mouseButton = -1; ReleaseCapture(); return 0;

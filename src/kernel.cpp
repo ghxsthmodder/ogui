@@ -2,6 +2,7 @@
 #include "ogui/rasterizer.hpp"
 #include "ogui/widgets.hpp"
 #include <algorithm>
+#include <cmath>
 #include <chrono>
 
 namespace ogui {
@@ -317,6 +318,17 @@ void Kernel::update() {
     else m_tipFade = std::max(0.0f, m_tipFade - dt * 6.0f);
 
     if (pressedEdge) {
+        // Multi-click: same button, same spot (6px) inside 0.5s counts up.
+        const bool chained = btn == m_lastClickBtn &&
+                             m_input.time - m_lastClickTime <= 0.5f &&
+                             std::fabs(p.x - m_lastClickX) <= 6.0f &&
+                             std::fabs(p.y - m_lastClickY) <= 6.0f;
+        m_clickCount = chained ? m_clickCount + 1 : 1;
+        m_lastClickBtn = btn;
+        m_lastClickTime = m_input.time;
+        m_lastClickX = p.x;
+        m_lastClickY = p.y;
+
         bool swallowed = false;
         if (m_popup) {
             if (popupHit) {

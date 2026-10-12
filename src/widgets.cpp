@@ -31,6 +31,42 @@ namespace {
     // Horizontal padding between the frame and the text (onDraw/layout agree
     // on this, so clicks land on the same glyph the caret renders at).
     constexpr float kTextPadX = 6.0f;
+
+    // Word units for double-click selection and Ctrl+arrow caret moves.
+    // Bytes >= 0x80 are UTF-8 lead/continuation bytes: keeping them as word
+    // bytes makes every boundary decision land on ASCII, so a "word" slice
+    // can never split an accented character.
+    bool isWordByte(unsigned char c) {
+        return c >= 0x80 || std::isalnum(c) != 0 || c == '_';
+    }
+
+    // [begin,end) of the word containing or adjacent to pos; empty when the
+    // click sits on a separator with no word to grab.
+    std::pair<size_t, size_t> wordRange(const std::string& s, size_t pos) {
+        size_t b = pos, e = pos;
+        while (b > 0 && isWordByte(static_cast<unsigned char>(s[b - 1]))) --b;
+        while (e < s.size() && isWordByte(static_cast<unsigned char>(s[e]))) ++e;
+        if (b == e && pos > 0) {   // separator: fall back to the word before
+            b = pos;
+            while (b > 0 && !isWordByte(static_cast<unsigned char>(s[b - 1]))) --b;
+            if (b == pos) b = e = pos;   // trailing separator: nothing to do
+        }
+        return {b, e};
+    }
+
+    size_t wordPrevBoundary(const std::string& s, size_t pos) {
+        size_t i = pos;
+        while (i > 0 && !isWordByte(static_cast<unsigned char>(s[i - 1]))) --i;
+        while (i > 0 && isWordByte(static_cast<unsigned char>(s[i - 1]))) --i;
+        return i;
+    }
+
+    size_t wordNextBoundary(const std::string& s, size_t pos) {
+        size_t i = pos;
+        while (i < s.size() && isWordByte(static_cast<unsigned char>(s[i]))) ++i;
+        while (i < s.size() && !isWordByte(static_cast<unsigned char>(s[i]))) ++i;
+        return i;
+    }
 } // namespace
 
 // ------------------------------------------------------------------
@@ -412,8 +448,23 @@ void TextInput::onPointerDown(MouseButton btn, const Offset2D& p) {
     if (btn != Mouse_Left) return;   // right/middle must not move the caret
     m_focused = true;
     const Offset2D o = absoluteOrigin();
-    m_caret = indexAtX(static_cast<float>(p.x) - static_cast<float>(o.x));
-    m_selAnchor = m_caret;
+    m_lastMove = {static_cast<float>(p.x) - o.x, static_cast<float>(p.y) - o.y};
+    const size_t pos = indexAtX(m_lastMove.x);
+    Kernel* k = kernel();
+    const uint32_t mods = k ? k->mods() : 0;
+    const int clicks = k ? k->clickCount() : 1;
+    if (mods & Mod_Shift) {
+        m_caret = pos;               // extend from the existing anchor
+    } else if (clicks >= 3) {
+        m_selAnchor = 0;             // triple click: whole line
+        m_caret = m_text.size();
+    } else if (clicks == 2) {
+        const auto [b, e] = wordRange(m_text, pos);   // double: word
+        m_selAnchor = b;
+        m_caret = e;
+    } else {
+        m_caret = m_selAnchor = pos;
+    }
     m_dragging = true;
     syncState();
 }
@@ -437,7 +488,11 @@ void TextInput::onPointerUp(MouseButton) {
 void TextInput::onPointerMove(const Offset2D& p) {
     if (!m_dragging) return;
     const Offset2D o = absoluteOrigin();
-    m_caret = indexAtX(static_cast<float>(p.x) - static_cast<float>(o.x));
+    const float lx = static_cast<float>(p.x) - o.x;
+    const float ly = static_cast<float>(p.y) - o.y;
+    if (lx == m_lastMove.x && ly == m_lastMove.y) return;
+    m_lastMove = {lx, ly};
+    m_caret = indexAtX(lx);
     syncState();
 }
 
@@ -460,6 +515,22 @@ void TextInput::onKeyDown(KeyCode key, uint32_t mods) {
                 Clipboard::instance().setText(selectedText());
                 deleteSelection();
                 return;
+            case Key_Left:
+            case Key_Right: {
+                // Word-wise caret; Shift extends the selection. Without
+                // shift an active selection collapses to its near end first,
+                // like the standard editors do.
+                size_t from = m_caret;
+                if (!shift && hasSelection())
+                    from = key == Key_Left ? m_selectionStart : m_selectionEnd;
+                const size_t next = key == Key_Left
+                    ? wordPrevBoundary(m_text, from)
+                    : wordNextBoundary(m_text, from);
+                m_caret = next;
+                if (!shift) m_selAnchor = m_caret;
+                syncState();
+                return;
+            }
             case Key_V: {
                 std::string clip = Clipboard::instance().text();
                 // Single line: drop control characters (CR/LF/TAB) so a
@@ -846,8 +917,23 @@ void TextArea::onPointerDown(MouseButton btn, const Offset2D& p) {
         }
     }
     m_focused = true;
-    m_caret = indexAtPoint(lx, ly);
-    m_selAnchor = m_caret;
+    m_lastMove = {lx, ly};
+    const size_t pos = indexAtPoint(lx, ly);
+    Kernel* k = kernel();
+    const uint32_t mods = k ? k->mods() : 0;
+    const int clicks = k ? k->clickCount() : 1;
+    if (mods & Mod_Shift) {
+        m_caret = pos;                       // extend from the existing anchor
+    } else if (clicks >= 3) {
+        m_selAnchor = 0;                     // triple click: all text
+        m_caret = m_text.size();
+    } else if (clicks == 2) {
+        const auto [b, e] = wordRange(m_text, pos);   // double: word
+        m_selAnchor = b;
+        m_caret = e;
+    } else {
+        m_caret = m_selAnchor = pos;
+    }
     m_dragging = true;
     syncState();
 }
@@ -864,8 +950,11 @@ void TextArea::onPointerMove(const Offset2D& p) {
         return;
     }
     if (!m_dragging) return;
-    m_caret = indexAtPoint(static_cast<float>(p.x) - o.x,
-                           static_cast<float>(p.y) - o.y);
+    const float lx = static_cast<float>(p.x) - o.x;
+    const float ly = static_cast<float>(p.y) - o.y;
+    if (lx == m_lastMove.x && ly == m_lastMove.y) return;
+    m_lastMove = {lx, ly};
+    m_caret = indexAtPoint(lx, ly);
     syncState();
 }
 

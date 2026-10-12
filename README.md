@@ -256,8 +256,8 @@ theme default.
 | `row` | lays children out horizontally, tiling authored widths with a gap | — |
 | `label` | text | `text`, `wrap`, `align="left\|center\|right"` |
 | `button` | clickable button, press/release feedback | `text` |
-| `textinput` | single-line UTF-8 editor: caret, selection, Ctrl+A/C/X/V | `text`, `placeholder` |
-| `textarea` | multiline UTF-8 editor: Enter inserts a newline, Up/Down navigate lines, selection spans lines, long lines soft-wrap to the widget width, wheel scrolls, vertical scrollbar (drag the thumb or click the track) when content overflows | `text`, `placeholder` (style attrs as `textinput`) |
+| `textinput` | single-line UTF-8 editor: caret, click-drag / Shift+arrows / Shift+click selection, double-click selects the word, triple-click selects all, Ctrl+Left/Right jump words, Ctrl+A/C/X/V | `text`, `placeholder` |
+| `textarea` | multiline UTF-8 editor: Enter inserts a newline, Up/Down navigate lines, selection spans lines (word/line drag, double/triple-click and Shift+click like `textinput`), long lines soft-wrap to the widget width, wheel scrolls, vertical scrollbar (drag the thumb or click the track) when content overflows | `text`, `placeholder` (style attrs as `textinput`) |
 | `listbox` | scrollable list with single selection (click, wheel, Up/Down/Home/End) | `selected`, `rowheight`, `highlight` + `<item>` children |
 | `item` | a `listbox` entry | `label` / `text`, `value` |
 | `table` | data grid: header click sorts (re-click flips direction), row click selects, wheel + Up/Down/Home/End; drag a header edge to resize a `resizable` column, click a cell in an `editable` column (or press F2) to edit it inline (Enter saves, Esc cancels), overflowing cell text marquees per `scrollingtext` | `selected`, `rowheight`, `headerheight`, `sortable`, `headerbg`, `highlight` + `<th>`/`<tr>` children |
