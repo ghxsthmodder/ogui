@@ -590,6 +590,13 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
             b->setBorderColor(st.borderColor); b->setBorderWidth(st.borderWidth);
             b->setRadius(st.radius);
         }
+    } else if (auto* si = dynamic_cast<SearchInput*>(w.get())) {
+        // Before the TextInput branch: SearchInput inherits from it.
+        if (const std::string* v = get("text")) si->setText(*v);
+        if (const std::string* v = get("placeholder")) si->setPlaceholder(*v);
+        if (hasStyle) {
+            si->setBgColor(st.backgroundColor); si->setFgColor(st.textColor);
+        }
     } else if (auto* t = dynamic_cast<TextInput*>(w.get())) {
         if (const std::string* v = get("text")) t->setText(*v);
         if (const std::string* v = get("placeholder")) t->setPlaceholder(*v);
@@ -661,6 +668,7 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         if (const std::string* v = get("color")) sep->setLineColor(hexColor(*v));
         else if (const std::string* v = get("bg")) sep->setLineColor(hexColor(*v));
     } else if (auto* pr = dynamic_cast<ProgressBar*>(w.get())) {
+        if (const std::string* v = get("indeterminate")) pr->setIndeterminate(toBool(*v));
         if (const std::string* v = get("value")) {
             float val = 0.0f;
             toFloat(*v, val);
@@ -758,6 +766,36 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         if (const std::string* v = get("cols")) gd->setCols(*v);
         if (const std::string* v = get("gap")) { float g = 4.0f; toFloat(*v, g); gd->setGap(g); }
         if (const std::string* v = get("rowheight")) { float rh = 0.0f; toFloat(*v, rh); gd->setRowHeight(rh); }
+    } else if (auto* bd = dynamic_cast<Badge*>(w.get())) {
+        if (const std::string* v = get("text")) bd->setText(*v);
+        if (const std::string* v = get("count")) { int c = -1; toInt(*v, c); bd->setCount(c); }
+        if (const std::string* v = get("removable")) bd->setRemovable(toBool(*v));
+        if (const std::string* v = get("bg")) bd->setBgColor(hexColor(*v));
+        if (const std::string* v = get("color")) bd->setFgColor(hexColor(*v));
+    } else if (auto* spn = dynamic_cast<Spinner*>(w.get())) {
+        if (const std::string* v = get("text")) spn->setText(*v);
+        if (const std::string* v = get("variant")) spn->setVariant(*v);
+        if (const std::string* v = get("speed")) { float s = 8.0f; toFloat(*v, s); spn->setSpeed(s); }
+        if (const std::string* v = get("color")) spn->setFgColor(hexColor(*v));
+    } else if (auto* acc = dynamic_cast<Accordion*>(w.get())) {
+        if (const std::string* v = get("exclusive")) acc->setExclusive(toBool(*v));
+        if (const std::string* v = get("gap")) { float g = 4.0f; toFloat(*v, g); acc->setGap(g); }
+    } else if (auto* sec = dynamic_cast<AccordionSection*>(w.get())) {
+        if (const std::string* v = get("header")) sec->setHeader(*v);
+        else if (const std::string* v = get("text")) sec->setHeader(*v);
+        if (const std::string* v = get("expanded")) sec->setExpanded(toBool(*v));
+        if (const std::string* v = get("headerheight")) { float h = 24.0f; toFloat(*v, h); sec->setHeaderHeight(h); }
+    } else if (auto* md = dynamic_cast<Modal*>(w.get())) {
+        if (const std::string* v = get("title")) md->setTitle(*v);
+        if (const std::string* v = get("open")) md->setOpen(toBool(*v));
+        if (const std::string* v = get("panelw")) { float f = 340.0f; toFloat(*v, f); md->setPanelSize(f, md->panelSize().h); }
+        if (const std::string* v = get("panelh")) { float f = 160.0f; toFloat(*v, f); md->setPanelSize(md->panelSize().w, f); }
+    } else if (auto* sl = dynamic_cast<Sparkline*>(w.get())) {
+        if (const std::string* v = get("values")) sl->setValues(*v);
+        if (const std::string* v = get("label")) sl->setLabel(*v);
+        if (const std::string* v = get("max")) { int n = 60; toInt(*v, n); sl->setMaxSamples(n); }
+        if (const std::string* v = get("color")) sl->setLineColor(hexColor(*v));
+        if (const std::string* v = get("bg")) sl->setBgColor(hexColor(*v));
     } else if (auto* tb = dynamic_cast<Tabs*>(w.get())) {
         if (const std::string* v = get("active")) {
             int idx = 0;

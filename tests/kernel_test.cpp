@@ -647,6 +647,123 @@ static void testGrid() {
     }
 }
 
+// Batch A spec widgets: accordion exclusivity, badge removal,
+// searchinput clear button, modal open/close input semantics.
+static void testBatchAWidgets() {
+    Kernel k;
+    k.init();
+
+    XmlParser p;
+    auto res = p.parse(R"(<screen id="s">
+  <panel id="bg" x="0" y="0" w="800" h="600" bg="#101010"/>
+  <accordion id="ac" x="20" y="20" w="300" h="200" gap="4">
+    <section id="sec1" header="H1" expanded="true" headerheight="24">
+      <label id="l1" x="0" y="0" w="100%" h="18" text="A"/>
+    </section>
+    <section id="sec2" header="H2" headerheight="24">
+      <label id="l2" x="0" y="0" w="100%" h="18" text="B"/>
+    </section>
+  </accordion>
+  <badge id="bd1" x="20" y="300" w="100" h="24" text="Tag" removable="true"/>
+  <badge id="bd2" x="130" y="300" w="100" h="24" text="Keep" removable="true"/>
+  <searchinput id="se" x="20" y="340" w="200" h="30" placeholder="Buscar..."/>
+  <modal id="md" x="0" y="0" w="100%" h="100%" title="T" open="false"
+         panelw="320" panelh="170">
+    <button id="md_ok" x="40" y="112" w="110" h="30" text="OK"/>
+  </modal>
+</screen>)");
+    assert(res.root);
+    auto s = std::make_shared<Screen>("s");
+    s->widgets.push_back(res.root);
+    s->width = 800;
+    s->height = 600;
+    k.pushScreen(s);
+
+    auto find = [&](const char* id) -> Widget* {
+        Widget* out = nullptr;
+        std::function<void(Widget*)> rec = [&](Widget* w) {
+            if (out) return;
+            if (w->id() == id) { out = w; return; }
+            for (const auto& c : w->children()) rec(c.get());
+        };
+        rec(res.root.get());
+        return out;
+    };
+
+    InputState st = makeInput();
+    idle(k, st);
+
+    // Accordion: exclusive collapse/hide of section content.
+    auto* sec1 = dynamic_cast<AccordionSection*>(find("sec1"));
+    auto* sec2 = dynamic_cast<AccordionSection*>(find("sec2"));
+    CHECK(sec1 && sec2);
+    if (sec1 && sec2) {
+        CHECK(sec1->expanded() && !sec2->expanded());
+        CHECK(find("l1")->isVisible() && !find("l2")->isVisible());
+        const Rect s2b = sec2->bounds();   // parent-relative (accordion at 20,20)
+        pressAt(k, st, 20.0f + s2b.x + 40.0f, 20.0f + s2b.y + 10.0f);
+        releaseAt(k, st);
+        idle(k, st);
+        CHECK(sec2->expanded() && !sec1->expanded());
+        CHECK(!find("l1")->isVisible() && find("l2")->isVisible());
+    }
+
+    // Badge: clicking the ✕ region hides only that badge.
+    Widget* bd1 = find("bd1");
+    CHECK(bd1);
+    if (bd1) {
+        const Rect b = bd1->bounds();
+        pressAt(k, st, b.x + b.w - 10.0f, b.y + b.h * 0.5f);
+        releaseAt(k, st);
+        idle(k, st);
+        CHECK(!bd1->isVisible());
+        CHECK(find("bd2")->isVisible());
+    }
+
+    // SearchInput: the clear button empties the text without focusing.
+    auto* se = dynamic_cast<SearchInput*>(find("se"));
+    CHECK(se);
+    if (se) {
+        se->setText("ola");
+        const Rect b = se->bounds();
+        pressAt(k, st, b.x + b.w - 16.0f + 6.0f, b.y + b.h * 0.5f);
+        releaseAt(k, st);
+        idle(k, st);
+        CHECK(se->text().empty());
+    }
+
+    // Modal: hidden by default, blocks input once open.
+    auto* md = dynamic_cast<Modal*>(find("md"));
+    CHECK(md);
+    if (md) {
+        CHECK(!md->isOpen() && !md->isVisible());
+        int okHits = 0, bgHits = 0;
+        k.bind("md_ok", [&] { ++okHits; });
+        k.bind("bg", [&] { ++bgHits; });
+        md->setOpen(true);
+        idle(k, st);
+        CHECK(md->isVisible());
+        const Rect mb = md->bounds();
+        const Rect panel{mb.x + (mb.w - 320.0f) * 0.5f,
+                         mb.y + (mb.h - 170.0f) * 0.5f, 320.0f, 170.0f};
+        CHECK(find("md_ok")->bounds().x == panel.x + 40.0f);
+        // OK lives inside the panel and still works.
+        const Rect okb = find("md_ok")->bounds();
+        pressAt(k, st, okb.x + okb.w * 0.5f, okb.y + okb.h * 0.5f);
+        releaseAt(k, st);
+        CHECK(okHits == 1);
+        // The backdrop absorbs presses over widgets below.
+        pressAt(k, st, 400.0f, 300.0f);
+        releaseAt(k, st);
+        CHECK(bgHits == 0 && okHits == 1);
+        md->setOpen(false);
+        idle(k, st);
+        pressAt(k, st, 400.0f, 300.0f);   // backdrop gone: hits bg panel
+        releaseAt(k, st);
+        CHECK(bgHits == 1);
+    }
+}
+
 static void testLabelWrapAndColumnAutoHeight() {
     if (!FontManager::instance().get("sans", 14)) {
         std::cout << "  (no system font; skipping wrap checks)\n";
@@ -1981,6 +2098,7 @@ int main() {
     testTextInputSelectionDraw();
     testAnchors();
     testGrid();
+    testBatchAWidgets();
     testLabelWrapAndColumnAutoHeight();
     testNewWidgets();
     testRadioButtonGroup();

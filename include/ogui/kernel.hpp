@@ -124,6 +124,14 @@ public:
     bool popupOpen() const { return m_popup != nullptr; }
     std::shared_ptr<Widget> popup() const { return m_popup; }
 
+    // ---- toast notifications ----
+    // Bottom-right banners that expire on their own (3.5 s). Drawn above the
+    // tree and the tooltip; they are never an input target.
+    enum class ToastKind : uint8_t { Info = 0, Warn = 1, Error = 2 };
+    void showToast(const std::string& text, ToastKind kind = ToastKind::Info) {
+        m_toasts.push_back(ToastItem{text, static_cast<uint8_t>(kind), 0.0f});
+    }
+
     // ---- drawing ----
     // Builds the draw list for the current screen (idempotent per frame).
     const DrawList& buildDrawList();
@@ -202,6 +210,14 @@ private:
 
     // tooltip fade-in timed from when it becomes visible
     float m_tipFade = 0.0f;
+
+    // toast banners (see showToast)
+    struct ToastItem {
+        std::string text;
+        uint8_t kind;
+        float age;
+    };
+    std::vector<ToastItem> m_toasts;
 
     // frame clock (animations)
     float m_prevTime = 0.0f;

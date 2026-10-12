@@ -160,6 +160,24 @@ inline void install(ogui::Kernel& k, Gallery& g, int& index, int start = 0) {
         show();
     });
 
+    // Widgets screen: modal open/close and toast banners.
+    k.bind("btn_modal", [&k] {
+        if (auto* m = dynamic_cast<ogui::Modal*>(k.findWidget("md_confirm")))
+            m->setOpen(true);
+    });
+    k.bind("btn_cancel", [&k] {
+        if (auto* m = dynamic_cast<ogui::Modal*>(k.findWidget("md_confirm")))
+            m->setOpen(false);
+    });
+    k.bind("btn_ok", [&k] {
+        if (auto* m = dynamic_cast<ogui::Modal*>(k.findWidget("md_confirm")))
+            m->setOpen(false);
+        k.showToast("Shaders regravaidos.", ogui::Kernel::ToastKind::Info);
+    });
+    k.bind("btn_toast", [&k] {
+        k.showToast("Texturas carregadas (12).", ogui::Kernel::ToastKind::Warn);
+    });
+
     k.pushScreen(g.screens[static_cast<size_t>(index)]);
     show();
 }

@@ -296,12 +296,24 @@ theme default.
 | `optionspin` | text-only spin `[ < ][ option ][ > ]`: cycles through a fixed list of options as one unified widget; focused Right/Up forward, Left/Down back, Home/End first/last | `options` (comma-separated list), `value` (matching option text) or `index`, `wrap` (default true), `bg`, `color`, `buttoncolor`, `bordercolor`/`border`, `font` |
 | `rangeslider` | two-thumb slider over a `[low, high]` sub-range; drag the nearest thumb (the band between is filled), focused Left/Right nudge low and Up/Down nudge high | `min`, `max`, `low`, `high`, `color` (band), `bg` (track), `thumbcolor` |
 | `splitter` | two panes (first two children, placed in the splitter's own space) with a draggable divider kept at a `split` fraction; the panes resize as the handle is dragged | `orientation` (`"vertical"` = vertical divider/side-by-side panes (default), `"horizontal"` = stacked panes) or `vertical` (bool), `split` (0..1), `handlesize`, `handlecolor` |
-| `progress` | read-only fill | `value` (0..1), `color`, `bg`, `radius` |
+| `progress` | read-only fill; `indeterminate="true"` slides a block back and forth instead of showing a value | `value` (0..1), `indeterminate`, `color`, `bg`, `radius` |
+| `badge` | small pill tag (rounded to a capsule); `removable` adds an ✕ hit-region at the right that hides the badge when clicked; `count` appends `(n)` | `text`, `count` (-1 = none), `removable`, `bg`, `color` (text), `border` |
+| `spinner` | animated loading indicator ticked by the frame clock: `variant="glyph"` cycles &#124;/-\, `variant="blocks"` runs a comet of cells; optional trailing label | `text`, `variant` (`glyph`/`blocks`), `speed`, `color` |
+| `searchinput` | `textinput` with a magnifier icon inset on the left and a ✕ clear button on the right (click clears the text) | `text`, `placeholder`, `bg` |
+| `accordion` / `section` | stack of collapsible sections: clicking a section header toggles it; with `exclusive` (default) opening one closes its siblings; collapsed sections hide their children | `exclusive`, `gap` / `header`, `expanded`, `headerheight` |
+| `modal` | full-screen dim + centred panel that blocks all input below while open; children are laid out relative to the panel origin | `title`, `open`, `panelw`, `panelh` (toggle with `Modal::setOpen`) |
+| `sparkline` | mini line plot of a value history (scaled to min/max); `addSample(v)` from C++ pushes a point and trims to `max` samples | `values` (`;`-separated), `label`, `max`, `color`, `bg` |
 | `separator` | rule, horizontal or vertical | `thickness`, `color` |
 | `tabs` / `tab` | header strip over stacked pages (inactive pages take no input) | `active`, `theight`, `headercolor`, `tabcolor`, `activecolor`, `accent` / `label` |
 | `group` | titled grouping box | `name` |
 | `image` | RGBA image file (PNG/JPG/… decoded by `ImageManager` via stb_image): stretched to the bounds, or repeated at native size with `tile`; `border` draws a frame on top; a missing file draws nothing | `src` (path, relative to the working directory), `tile` |
 | `scrollview` | wheel-scrollable clipped viewport over its children | `scrollx`, `scrolly`, `scrollstep` |
+
+Toasts (transient notification banners) are a kernel layer rather than an
+XML element: `Kernel::showToast("saved", Kernel::ToastKind::Info)` stacks a
+banner bottom-right that fades out after ~3.5 s (`Info` / `Warn` / `Error`
+pick the accent bar colour). `Modal` open state is driven from C++
+(`Modal::setOpen`) or a `bind()` handler.
 
 ## Fonts
 

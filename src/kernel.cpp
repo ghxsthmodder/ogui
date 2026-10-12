@@ -90,6 +90,7 @@ void Kernel::init() {
     m_drawList.clear();
 
     m_tipTarget = nullptr;
+    m_toasts.clear();
     m_tipTimer = 0.0f;
     m_tipPrevTime = 0.0f;
     m_tipMouseX = 0.0f;
@@ -273,6 +274,13 @@ void Kernel::update() {
     const float dt = std::clamp(m_input.time - m_prevTime, 0.0f, 0.25f);
     m_prevTime = m_input.time;
     advanceAnimations(dt);
+
+    for (auto& t : m_toasts) t.age += dt;
+    while (!m_toasts.empty() && m_toasts.front().age > 3.5f)
+        m_toasts.erase(m_toasts.begin());
+    if (m_toasts.size() > 4)
+        m_toasts.erase(m_toasts.begin(),
+                       m_toasts.begin() + static_cast<long>(m_toasts.size() - 4));
 
     // Frame 0 delivers input before the first buildDrawList would lay the
     // tree out; laying out here keeps hit-testing honest from the start.
@@ -466,6 +474,38 @@ const DrawList& Kernel::buildDrawList() {
         if (f) {
             r.drawTextShifted(tip.c_str(), tx + kPad, ty + kPad, kTipFontSize,
                               *f, tinted("#eeeeee"));
+        }
+    }
+
+    // Toast banners: bottom-right stack, fading out over the last 0.5 s.
+    {
+        constexpr float kPad = 8.0f;
+        float y = screen->height - 8.0f;
+        for (size_t i = m_toasts.size(); i-- > 0;) {
+            const ToastItem& t = m_toasts[i];
+            const float fade = t.age > 3.0f ? (3.5f - t.age) * 2.0f : 1.0f;
+            const float a = std::clamp(fade, 0.0f, 1.0f);
+            static const char* kKindColor[3] = {"#2b78e4", "#e4a12b", "#e44b2b"};
+            const Font* f = r.resolveFont("sans", 13);
+            const float tw = f ? r.textWidth(t.text.c_str(), *f) : 120.0f;
+            const float bw = tw + kPad * 2.0f + 4.0f;
+            const float bh = 28.0f;
+            const Rect box{screen->width - bw - 8.0f, y - bh, bw, bh};
+            auto tint = [&](const char* hex) {
+                Color c = hexColor(hex);
+                c.a = static_cast<uint8_t>(static_cast<float>(c.a) * a);
+                return c;
+            };
+            r.drawRect(box, tint("#1e1f24"));
+            r.drawRect(Rect{box.x, box.y, 3.0f, box.h},
+                       tint(kKindColor[t.kind % 3]));
+            r.drawRectBorder(box, tint("#44464f"), 1.0f, 4.0f);
+            if (f) {
+                r.drawTextShifted(t.text.c_str(), box.x + kPad + 2.0f,
+                                  box.y + (box.h - 13.0f) * 0.5f, 13, *f,
+                                  tint("#eeeeee"));
+            }
+            y -= bh + 6.0f;
         }
     }
 

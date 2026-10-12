@@ -8,4 +8,5 @@
   <screen title="Selecao"    path="layouts/layout_selection.xml"/>
   <screen title="Dados"      path="layouts/layout_data.xml"/>
   <screen title="Containers" path="layouts/layout_containers.xml"/>
+  <screen title="Widgets"    path="layouts/layout_widgets.xml"/>
 </manifest>

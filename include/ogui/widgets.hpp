@@ -298,6 +298,12 @@ protected:
     // Replaces the selection (if any) with `s` and advances the caret.
     void insertText(const std::string& s);
 
+    // Horizontal space taken by subclass decorations (search icon, clear
+    // button). Text drawing, click-to-index mapping and caret scrolling all
+    // honour them, so a subclass only has to paint its own glyphs.
+    virtual float insetLeft() const { return 0.0f; }
+    virtual float insetRight() const { return 0.0f; }
+
     std::string m_text;
     std::string m_placeholder;
     Color m_bgColor{ogui::hexColor("#111")};
@@ -466,13 +472,20 @@ public:
     void setBorderColor(const Color& col) { m_borderColor = col; }
     void setBorderWidth(float w) { m_borderWidth = w; }
     void setRadius(float r) { m_radius = r; }
+    // Indeterminate mode ignores value: a block slides back and forth while
+    // the widget ticks. Use it when the progress amount is unknown.
+    void setIndeterminate(bool on) { m_indeterminate = on; }
+    bool indeterminate() const { return m_indeterminate; }
 
+    virtual void onTick(float dt) override;
     virtual void onDraw(Rasterizer& r) const override;
 
 private:
     float m_value = 0.0f;
     float m_radius = 4.0f;
     float m_borderWidth = 1.0f;
+    bool m_indeterminate = false;
+    float m_phase = 0.0f;
     Color m_bgColor{ogui::hexColor("#111")};
     Color m_barColor{ogui::hexColor("#4488ff")};
     Color m_borderColor{ogui::hexColor("#3a3a3a")};
@@ -1474,6 +1487,197 @@ private:
     Color m_dotColor{ogui::hexColor("#4488ff")};
     Color m_activeBgColor{ogui::hexColor("#161616")};
     ChangedCallback m_onChanged;
+};
+
+// ------------------------------------------------------------------
+// Badge / Tag / Chip: small pill label, optional count and [x] remove
+// button that fires the widget's binding when clicked.
+// ------------------------------------------------------------------
+class Badge : public Widget {
+public:
+    Badge();
+    virtual ~Badge() override;
+
+    void setText(const std::string& t) { m_text = t; }
+    const std::string& text() const { return m_text; }
+    void setCount(int c) { m_count = c; }
+    int count() const { return m_count; }
+    void setRemovable(bool r) { m_removable = r; }
+    void setBgColor(const Color& c) { m_bgColor = c; }
+    void setFgColor(const Color& c) { m_fgColor = c; }
+    void setBorderColor(const Color& c) { m_borderColor = c; }
+
+    virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
+    virtual void onPointerUp(MouseButton btn) override;
+    virtual void onDraw(Rasterizer& r) const override;
+
+private:
+    // Widget-local rect of the [x] button (empty when not removable).
+    Rect removeRect() const;
+
+    std::string m_text;
+    int m_count = -1;             // <0: hidden
+    bool m_removable = false;
+    bool m_removeHot = false;     // pointer pressed on the [x]
+    Color m_bgColor{ogui::hexColor("#31323a")};
+    Color m_fgColor{ogui::hexColor("#dddddd")};
+    Color m_borderColor{ogui::hexColor("#4a4b56")};
+    int m_fontSize = 12;
+};
+
+// ------------------------------------------------------------------
+// Spinner: animated loading indicator. variant="glyph" cycles |/-\,
+// variant="blocks" slides a filled window through [####......].
+// ------------------------------------------------------------------
+class Spinner : public Widget {
+public:
+    Spinner();
+    virtual ~Spinner() override;
+
+    void setText(const std::string& t) { m_text = t; }
+    void setVariant(const std::string& v);   // "glyph" | "blocks"
+    void setSpeed(float hz) { m_speed = hz > 0.0f ? hz : 8.0f; }
+    void setFgColor(const Color& c) { m_fgColor = c; }
+
+    virtual void onTick(float dt) override;
+    virtual void onDraw(Rasterizer& r) const override;
+
+private:
+    std::string m_text;
+    bool m_blocks = false;
+    float m_speed = 8.0f;
+    float m_phase = 0.0f;
+    Color m_fgColor{ogui::hexColor("#cccccc")};
+    int m_fontSize = 14;
+};
+
+// ------------------------------------------------------------------
+// SearchInput: text field with a magnifier inset and a [x] clear button
+// (clears the text and fires the binding).
+// ------------------------------------------------------------------
+class SearchInput : public TextInput {
+public:
+    SearchInput();
+    virtual ~SearchInput() override;
+
+    virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
+    virtual void onDraw(Rasterizer& r) const override;
+
+protected:
+    virtual float insetLeft() const override  { return kIconW; }
+    virtual float insetRight() const override { return kIconW; }
+
+private:
+    static constexpr float kIconW = 16.0f;
+    Rect clearRect() const;      // widget-local
+};
+
+// ------------------------------------------------------------------
+// Accordion: stack of collapsible sections.
+// <accordion><section header="...">...children...</section></accordion>
+// Clicking a header toggles it (one open at a time when exclusive).
+// ------------------------------------------------------------------
+class AccordionSection : public Widget {
+public:
+    AccordionSection();
+    virtual ~AccordionSection() override;
+
+    void setHeader(const std::string& h) { m_header = h; }
+    const std::string& header() const { return m_header; }
+    void setExpanded(bool e) { m_expanded = e; }
+    bool expanded() const { return m_expanded; }
+    float headerHeight() const { return m_headerH; }
+    void setHeaderHeight(float h) { if (h > 0.0f) m_headerH = h; }
+
+    virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
+    virtual void onDraw(Rasterizer& r) const override;
+
+private:
+    friend class Accordion;
+    std::string m_header;
+    bool m_expanded = false;
+    float m_headerH = 24.0f;
+    float m_contentH = 0.0f;   // measured by the accordion
+    Color m_headerColor{ogui::hexColor("#2a2b31")};
+    Color m_fgColor{ogui::hexColor("#dddddd")};
+    int m_fontSize = 14;
+};
+
+class Accordion : public Widget {
+public:
+    Accordion();
+    virtual ~Accordion() override;
+
+    void setExclusive(bool e) { m_exclusive = e; }
+    bool exclusive() const { return m_exclusive; }
+    void setGap(float g) { m_gap = g >= 0.0f ? g : 0.0f; }
+
+    virtual void layout(float parentWidth, float parentHeight) override;
+
+private:
+    bool m_exclusive = true;
+    float m_gap = 4.0f;
+};
+
+// ------------------------------------------------------------------
+// Modal: full-parent dim backdrop with a centered panel. The modal is
+// the hit target while open, blocking everything painted below it (put
+// it last among the screen's children). open shows/hides at runtime.
+// ------------------------------------------------------------------
+class Modal : public Widget {
+public:
+    Modal();
+    virtual ~Modal() override;
+
+    void setTitle(const std::string& t) { m_title = t; }
+    void setOpen(bool o);
+    bool isOpen() const { return m_open; }
+    void setPanelSize(float w, float h) { m_panelW = w; m_panelH = h; }
+    Rect panelSize() const { return Rect{0.0f, 0.0f, m_panelW, m_panelH}; }
+
+    virtual void layout(float parentWidth, float parentHeight) override;
+    virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
+    virtual void onDraw(Rasterizer& r) const override;
+
+private:
+    Rect panelRect() const;      // parent-space
+
+    std::string m_title;
+    bool m_open = true;
+    float m_panelW = 340.0f;
+    float m_panelH = 160.0f;
+
+    // Authored child offsets, captured once before we start repositioning.
+    std::vector<Offset2D> m_childOff;
+    bool m_childOffCaptured = false;
+};
+
+// ------------------------------------------------------------------
+// Sparkline / Plot: polyline over a value buffer (FPS, frametime...).
+// values="60;59;58;..." seeds it; addSample() appends live data.
+// ------------------------------------------------------------------
+class Sparkline : public Widget {
+public:
+    Sparkline();
+    virtual ~Sparkline() override;
+
+    void setValues(const std::string& csv);   // ';'- or ','-separated floats
+    void addSample(float v);
+    void setMaxSamples(int n) { if (n > 1) m_max = static_cast<size_t>(n); }
+    void setLabel(const std::string& l) { m_label = l; }
+    void setLineColor(const Color& c) { m_lineColor = c; }
+    void setBgColor(const Color& c) { m_bgColor = c; }
+
+    virtual void onDraw(Rasterizer& r) const override;
+
+private:
+    std::vector<float> m_values;
+    size_t m_max = 60;
+    std::string m_label;
+    Color m_lineColor{ogui::hexColor("#44dd88")};
+    Color m_bgColor{ogui::hexColor("#111111")};
+    Color m_gridColor{ogui::hexColor("#2a2a2a")};
+    int m_fontSize = 12;
 };
 
 // ------------------------------------------------------------------

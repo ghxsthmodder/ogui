@@ -408,7 +408,7 @@ void TextInput::syncState() {
 
     // Keep the caret on screen: onDraw clips the line to the frame and
     // shifts it by m_scrollX, so a long line still stays reachable.
-    const float viewW = bounds().w - kTextPadX * 2.0f;
+    const float viewW = bounds().w - kTextPadX * 2.0f - insetLeft() - insetRight();
     const Font* f = FontManager::instance().get("sans", m_fontSize);
     if (!f || viewW <= 0.0f) {
         m_scrollX = 0.0f;
@@ -423,7 +423,7 @@ void TextInput::syncState() {
 size_t TextInput::indexAtX(float lx) const {
     const Font* f = FontManager::instance().get("sans", m_fontSize);
     if (!f) return m_text.empty() ? 0 : m_text.size();
-    const float tx = lx - kTextPadX + m_scrollX;
+    const float tx = lx - kTextPadX - insetLeft() + m_scrollX;
     return f->indexFromX(m_text.c_str(), tx);
 }
 
@@ -476,7 +476,7 @@ void TextInput::onPointerScroll(float dx, float dy) {
     const float step = std::max(static_cast<float>(m_fontSize), 12.0f);
     const Font* f = FontManager::instance().get("sans", m_fontSize);
     const float textW = f ? f->measureRange(m_text.c_str(), m_text.size()) : 0.0f;
-    const float viewW = std::max(bounds().w - kTextPadX * 2.0f, 0.0f);
+    const float viewW = std::max(bounds().w - kTextPadX * 2.0f - insetLeft() - insetRight(), 0.0f);
     const float max = std::max(textW - viewW, 0.0f);
     const float d = (dy != 0.0f ? dy : dx) * step;
     m_scrollX = std::clamp(m_scrollX - d, 0.0f, max);
@@ -643,7 +643,7 @@ void TextInput::onDraw(Rasterizer& r) const {
     }
 
     const float midY = b.y + b.h * 0.5f;
-    const float textX = b.x + kTextPadX - m_scrollX;
+    const float textX = b.x + kTextPadX + insetLeft() - m_scrollX;
     const Font* f = r.resolveFont("sans", m_fontSize);
 
     r.beginFrame(b);   // text, selection and caret stay inside the widget
@@ -1443,13 +1443,27 @@ void ProgressBar::setValue(float v) {
     m_value = std::clamp(v, 0.0f, 1.0f);
 }
 
+void ProgressBar::onTick(float dt) {
+    Widget::onTick(dt);
+    if (m_indeterminate) m_phase += dt * 1.4f;
+}
+
 void ProgressBar::onDraw(Rasterizer& r) const {
     if (!m_style.isVisible) return;
     Rect b = bounds();
     if (m_bgColor.a > 0) r.drawRoundedRect(b, m_bgColor, m_radius);
 
-    if (m_value > 0.0f) {
-        const float inset = m_borderWidth > 0.0f ? m_borderWidth : 0.0f;
+    const float inset = m_borderWidth > 0.0f ? m_borderWidth : 0.0f;
+    if (m_indeterminate) {
+        // Ping-pong a 28% block across the track while ticking.
+        const float span = std::max(b.w - inset * 2.0f, 0.0f);
+        const float blockW = span * 0.28f;
+        const float t = m_phase - std::floor(m_phase * 0.5f) * 2.0f;  // 0..2
+        const float tri = t < 1.0f ? t : 2.0f - t;                    // 0..1..0
+        Rect fill{b.x + inset + (span - blockW) * tri, b.y + inset,
+                  blockW, b.h - inset * 2.0f};
+        if (fill.w > 0.0f && fill.h > 0.0f) r.drawRect(fill, m_barColor);
+    } else if (m_value > 0.0f) {
         Rect fill{b.x + inset, b.y + inset,
                   (b.w - inset * 2.0f) * m_value, b.h - inset * 2.0f};
         if (fill.w > 0.0f && fill.h > 0.0f) r.drawRect(fill, m_barColor);
@@ -3417,6 +3431,13 @@ std::map<std::string, WidgetFactory>& widgetRegistry() {
         reg["rangeslider"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<RangeSlider>(); };
         reg["splitter"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Splitter>(); };
         reg["grid"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Grid>(); };
+        reg["badge"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Badge>(); };
+        reg["spinner"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Spinner>(); };
+        reg["searchinput"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<SearchInput>(); };
+        reg["accordion"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Accordion>(); };
+        reg["section"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<AccordionSection>(); };
+        reg["modal"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Modal>(); };
+        reg["sparkline"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Sparkline>(); };
     }
     return reg;
 }
@@ -3431,4 +3452,393 @@ void ToggleSwitch::setState(bool state) {
     m_checked = state;
     if (m_onChanged) m_onChanged(state);
 }
+
+// ------------------------------------------------------------------
+// Badge
+// ------------------------------------------------------------------
+Badge::Badge() = default;
+Badge::~Badge() = default;
+
+Rect Badge::removeRect() const {
+    if (!m_removable) return Rect{};
+    const Rect b = bounds();
+    return Rect{b.x + b.w - 16.0f, b.y + b.h * 0.5f - 6.0f, 12.0f, 12.0f};
+}
+
+void Badge::onPointerDown(MouseButton btn, const Offset2D& p) {
+    if (btn != Mouse_Left) return;
+    const Offset2D o = absoluteOrigin();
+    const Rect b = bounds();
+    // Bounds (and removeRect) live in the parent's space: lift the local
+    // pointer back into it before comparing.
+    const Offset2D l{static_cast<float>(p.x) - o.x + b.x,
+                     static_cast<float>(p.y) - o.y + b.y};
+    const Rect r = removeRect();
+    if (r.w > 0.0f && l.x >= r.x && l.x <= r.x + r.w &&
+        l.y >= r.y && l.y <= r.y + r.h)
+        m_removeHot = true;
+}
+
+void Badge::onPointerUp(MouseButton) {
+    if (!m_removeHot) return;
+    m_removeHot = false;
+    setVisible(false);   // dynamic tag removal
+}
+
+void Badge::onDraw(Rasterizer& r) const {
+    if (!m_style.isVisible) return;
+    Rect b = bounds();
+    r.drawRoundedRect(b, m_bgColor, b.h * 0.5f);
+    r.drawRectBorder(b, m_borderColor, 1.0f, b.h * 0.5f);
+
+    const Font* f = r.resolveFont("sans", m_fontSize);
+    if (!f) return;
+    const float midY = b.y + b.h * 0.5f;
+    float x = b.x + 8.0f;
+    r.drawText(m_text.c_str(), x, midY, m_fontSize, "sans", m_fgColor,
+               Align::Left, VertAlign::Middle);
+    x += r.textWidth(m_text.c_str(), *f) + 4.0f;
+    if (m_count >= 0) {
+        char buf[16];
+        std::snprintf(buf, sizeof(buf), "(%d)", m_count);
+        Color dim = m_fgColor;
+        dim.a = static_cast<uint8_t>(dim.a > 60 ? dim.a - 60 : 0);
+        r.drawText(buf, x, midY, m_fontSize, "sans", dim,
+                   Align::Left, VertAlign::Middle);
+    }
+    if (m_removable) {
+        const Rect q = removeRect();
+        const Color col = m_removeHot ? hexColor("#ff8888") : m_fgColor;
+        r.drawLine({q.x + 2.0f, q.y + 2.0f},
+                   {q.x + q.w - 2.0f, q.y + q.h - 2.0f}, col, 1.5f);
+        r.drawLine({q.x + q.w - 2.0f, q.y + 2.0f},
+                   {q.x + 2.0f, q.y + q.h - 2.0f}, col, 1.5f);
+    }
+}
+
+// ------------------------------------------------------------------
+// Spinner
+// ------------------------------------------------------------------
+Spinner::Spinner() = default;
+Spinner::~Spinner() = default;
+
+void Spinner::setVariant(const std::string& v) {
+    m_blocks = (v == "blocks");
+}
+
+void Spinner::onTick(float dt) {
+    Widget::onTick(dt);
+    m_phase += dt * m_speed;
+}
+
+void Spinner::onDraw(Rasterizer& r) const {
+    if (!m_style.isVisible) return;
+    const Font* f = r.resolveFont("sans", m_fontSize);
+    if (!f) return;
+    const Rect b = bounds();
+    const float midY = b.y + b.h * 0.5f;
+
+    static const char* kGlyphs[4] = {"|", "/", "-", "\\"};
+    std::string s = m_text;
+    if (!s.empty()) s += " ";
+    if (!m_blocks) {
+        const int idx = static_cast<int>(m_phase) & 3;
+        s += kGlyphs[idx];
+    } else {
+        constexpr int kCells = 10;
+        constexpr int kRun = 3;
+        const int head = static_cast<int>(m_phase) % kCells;
+        s += '[';
+        for (int i = 0; i < kCells; ++i) {
+            const int d = (i - head + kCells) % kCells;
+            s += d < kRun ? '#' : '.';
+        }
+        s += ']';
+    }
+    r.drawText(s.c_str(), b.x + 4.0f, midY, m_fontSize, "sans", m_fgColor,
+               Align::Left, VertAlign::Middle);
+}
+
+// ------------------------------------------------------------------
+// SearchInput
+// ------------------------------------------------------------------
+SearchInput::SearchInput() = default;
+SearchInput::~SearchInput() = default;
+
+Rect SearchInput::clearRect() const {
+    const Rect b = bounds();
+    return Rect{b.x + b.w - kIconW - 6.0f, b.y + b.h * 0.5f - 6.0f,
+                12.0f, 12.0f};
+}
+
+void SearchInput::onPointerDown(MouseButton btn, const Offset2D& p) {
+    if (btn == Mouse_Left && !text().empty()) {
+        const Offset2D o = absoluteOrigin();
+        const Rect b = bounds();
+        const Offset2D l{static_cast<float>(p.x) - o.x + b.x,
+                         static_cast<float>(p.y) - o.y + b.y};
+        const Rect q = clearRect();
+        if (l.x >= q.x && l.x <= q.x + q.w &&
+            l.y >= q.y && l.y <= q.y + q.h) {
+            setText("");
+            return;   // consume; the kernel click fires the filter binding
+        }
+    }
+    TextInput::onPointerDown(btn, p);
+}
+
+void SearchInput::onDraw(Rasterizer& r) const {
+    TextInput::onDraw(r);
+    if (!m_style.isVisible) return;
+    const Rect b = bounds();
+    const float midY = b.y + b.h * 0.5f;
+    const Color ink = m_fgColor;
+
+    // Magnifier: ring + handle (the ring is an 8-segment polygon).
+    const float cx = b.x + 6.0f + 5.0f, cy = midY - 1.0f, rad = 4.0f;
+    Offset2D prev{cx + rad, cy};
+    for (int i = 1; i <= 8; ++i) {
+        const float a = 0.7853982f * static_cast<float>(i);
+        Offset2D pt{cx + rad * std::cos(a), cy + rad * std::sin(a)};
+        r.drawLine(prev, pt, ink, 1.5f);
+        prev = pt;
+    }
+    r.drawLine({cx + rad * 0.72f, cy + rad * 0.72f},
+               {cx + rad + 3.0f, cy + rad + 3.0f}, ink, 1.5f);
+
+    if (!text().empty()) {
+        const Rect q = clearRect();
+        r.drawLine({q.x + 1.0f, q.y + 1.0f},
+                   {q.x + q.w - 1.0f, q.y + q.h - 1.0f}, ink, 1.5f);
+        r.drawLine({q.x + q.w - 1.0f, q.y + 1.0f},
+                   {q.x + 1.0f, q.y + q.h - 1.0f}, ink, 1.5f);
+    }
+}
+
+// ------------------------------------------------------------------
+// Accordion
+// ------------------------------------------------------------------
+AccordionSection::AccordionSection() = default;
+AccordionSection::~AccordionSection() = default;
+
+void AccordionSection::onPointerDown(MouseButton btn, const Offset2D& p) {
+    if (btn != Mouse_Left) return;
+    const Offset2D o = absoluteOrigin();
+    if (static_cast<float>(p.y) - o.y > m_headerH) return;   // content click
+    const bool next = !m_expanded;
+    Widget* par = parent();
+    if (auto* acc = dynamic_cast<Accordion*>(par)) {
+        if (acc->exclusive() && next)
+            for (const auto& c : acc->children())
+                if (auto* s = dynamic_cast<AccordionSection*>(c.get()))
+                    s->m_expanded = (s == this);
+    }
+    m_expanded = next;
+}
+
+void AccordionSection::onDraw(Rasterizer& r) const {
+    if (!m_style.isVisible) return;
+    Rect b = bounds();
+    const Rect head{b.x, b.y, b.w, m_headerH};
+    r.drawRect(head, m_headerColor);
+    r.drawRectBorder(head, hexColor("#3f4047"), 1.0f, 0.0f);
+
+    // ▶ / ▼ glyph as a filled triangle.
+    const float cy = head.y + m_headerH * 0.5f;
+    const float cx = head.x + 12.0f;
+    if (m_expanded) {
+        r.drawTriangle({cx - 4.0f, cy - 3.0f}, {cx + 4.0f, cy - 3.0f},
+                       {cx, cy + 4.0f}, m_fgColor);
+    } else {
+        r.drawTriangle({cx - 3.0f, cy - 4.0f}, {cx - 3.0f, cy + 4.0f},
+                       {cx + 4.0f, cy}, m_fgColor);
+    }
+
+    const Font* f = r.resolveFont("sans", m_fontSize);
+    if (f) {
+        r.drawTextShifted(m_header.c_str(), cx + 10.0f,
+                          cy - static_cast<float>(m_fontSize) * 0.5f - 1.0f,
+                          m_fontSize, *f, m_fgColor);
+    }
+}
+
+Accordion::Accordion() = default;
+Accordion::~Accordion() = default;
+
+void Accordion::layout(float parentWidth, float parentHeight) {
+    const Rect b = bounds();
+    const float w = b.w > 0.0f ? b.w : parentWidth;
+    // Children keep parent-relative bounds: stack from our own origin.
+    float y = 0.0f;
+    for (const auto& c : children()) {
+        auto* sec = dynamic_cast<AccordionSection*>(c.get());
+        if (!sec) continue;
+        sec->resolveGeometry(w, parentHeight);
+        Rect sb = sec->bounds();
+        const float sw = sb.w > 0.0f ? sb.w : w;
+
+        float cy = sec->m_headerH;
+        for (const auto& gc : sec->children()) {
+            if (!gc) continue;
+            gc->resolveGeometry(sw, parentHeight);
+            Rect cb = gc->bounds();
+            if (sec->m_expanded) {
+                gc->setVisible(true);
+                gc->setBounds(Rect{m_gap, cy, cb.w, cb.h});
+                gc->layout(sw - 2.0f * m_gap, cb.h);
+                cy += cb.h + m_gap;
+            } else {
+                // Hidden content must not catch hits either.
+                gc->setVisible(false);
+            }
+        }
+        sec->m_contentH = cy - sec->m_headerH;
+        sec->setBounds(Rect{0.0f, y, sw,
+                            sec->m_expanded ? cy : sec->m_headerH});
+        sec->layout(sw, sec->bounds().h);
+        y += sec->bounds().h + m_gap;
+    }
+}
+
+// ------------------------------------------------------------------
+// Modal
+// ------------------------------------------------------------------
+Modal::Modal() = default;
+Modal::~Modal() = default;
+
+void Modal::setOpen(bool o) {
+    m_open = o;
+    setVisible(o);
+}
+
+Rect Modal::panelRect() const {
+    const Rect b = bounds();
+    float x = b.x + (b.w - m_panelW) * 0.5f;
+    float y = b.y + (b.h - m_panelH) * 0.5f;
+    if (x < b.x) x = b.x;
+    if (y < b.y) y = b.y;
+    return Rect{x, y,
+                std::min(m_panelW, b.w), std::min(m_panelH, b.h)};
+}
+
+void Modal::layout(float parentWidth, float parentHeight) {
+    Rect fb = bounds();
+    const float pw = fb.w > 0.0f ? fb.w : parentWidth;
+    const float ph = fb.h > 0.0f ? fb.h : parentHeight;
+    fb = Rect{fb.x, fb.y, pw, ph};
+    setBounds(fb);
+    const Rect pr = panelRect();
+    // Children are relative to our origin, so express the panel in that space.
+    const float px = pr.x - fb.x, py = pr.y - fb.y;
+    const auto& kids = children();
+    if (!m_childOffCaptured || m_childOff.size() != kids.size()) {
+        m_childOff.clear();
+        for (const auto& c : kids) {
+            Rect cb = c ? c->bounds() : Rect{};
+            m_childOff.push_back(Offset2D{cb.x, cb.y});
+        }
+        m_childOffCaptured = true;
+    }
+    size_t i = 0;
+    for (const auto& c : kids) {
+        if (!c) { ++i; continue; }
+        c->resolveGeometry(pr.w, pr.h);
+        Rect cb = c->bounds();
+        const Offset2D off = i < m_childOff.size() ? m_childOff[i]
+                                                   : Offset2D{cb.x, cb.y};
+        c->setBounds(Rect{px + off.x, py + off.y, cb.w, cb.h});
+        c->layout(cb.w, cb.h);
+        ++i;
+    }
+}
+
+void Modal::onPointerDown(MouseButton, const Offset2D&) {
+    // Consume the press so widgets below the backdrop never see it.
+}
+
+void Modal::onDraw(Rasterizer& r) const {
+    if (!m_style.isVisible) return;
+    const Rect b = bounds();
+    Color dim = hexColor("#000000");
+    dim.a = 140;
+    r.drawRect(b, dim);
+    const Rect pr = panelRect();
+    r.drawRoundedRect(pr, hexColor("#262626"), 6.0f);
+    r.drawRectBorder(pr, hexColor("#555555"), 1.0f, 6.0f);
+    if (!m_title.empty()) {
+        const Font* f = r.resolveFont("sans", 14);
+        if (f) {
+            r.drawTextShifted(m_title.c_str(), pr.x + 12.0f, pr.y + 8.0f,
+                              14, *f, hexColor("#eeeeee"));
+        }
+    }
+}
+
+// ------------------------------------------------------------------
+// Sparkline
+// ------------------------------------------------------------------
+Sparkline::Sparkline() = default;
+Sparkline::~Sparkline() = default;
+
+void Sparkline::setValues(const std::string& csv) {
+    m_values.clear();
+    std::string tok;
+    auto flush = [&]() {
+        if (!tok.empty()) {
+            char* end = nullptr;
+            const float v = std::strtof(tok.c_str(), &end);
+            if (end != tok.c_str()) m_values.push_back(v);
+        }
+        tok.clear();
+    };
+    for (char c : csv) {
+        if (c == ';' || c == ',' || c == ' ') flush();
+        else tok.push_back(c);
+    }
+    flush();
+    while (m_values.size() > m_max)
+        m_values.erase(m_values.begin());
+}
+
+void Sparkline::addSample(float v) {
+    m_values.push_back(v);
+    while (m_values.size() > m_max)
+        m_values.erase(m_values.begin());
+}
+
+void Sparkline::onDraw(Rasterizer& r) const {
+    if (!m_style.isVisible) return;
+    const Rect b = bounds();
+    r.drawRect(b, m_bgColor);
+    r.drawRectBorder(b, hexColor("#3a3a3a"), 1.0f, 0.0f);
+    if (m_values.size() < 2) return;
+
+    float lo = m_values[0], hi = m_values[0];
+    for (float v : m_values) {
+        if (v < lo) lo = v;
+        if (v > hi) hi = v;
+    }
+    const float span = hi - lo > 0.001f ? hi - lo : 1.0f;
+    const float dx = b.w / static_cast<float>(m_values.size() - 1);
+    auto yOf = [&](float v) {
+        return b.y + b.h - 2.0f - (v - lo) / span * (b.h - 4.0f);
+    };
+    for (size_t i = 1; i < m_values.size(); ++i) {
+        r.drawLine({b.x + static_cast<float>(i - 1) * dx, yOf(m_values[i - 1])},
+                   {b.x + static_cast<float>(i) * dx, yOf(m_values[i])},
+                   m_lineColor, 1.5f);
+    }
+
+    const Font* f = r.resolveFont("sans", m_fontSize);
+    if (!f) return;
+    std::string info = m_label;
+    if (!info.empty()) info += " ";
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%.1f", m_values.back());
+    info += buf;
+    Color ink = m_lineColor;
+    r.drawText(info.c_str(), b.x + 6.0f, b.y + 6.0f, m_fontSize, "sans", ink,
+               Align::Left, VertAlign::Top);
+}
+
 } // namespace ogui
