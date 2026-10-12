@@ -340,6 +340,37 @@ public:
     virtual void layout(float parentWidth, float parentHeight) override;
 };
 
+// ------------------------------------------------------------------
+// Grid: row-major tiling over column tracks.
+// cols="3" makes three equal tracks; a list ("120 1fr 25%") describes
+// tracks: bare numbers are pixels, "NN%" is percent of the content
+// width and "Nfr"/"fr" shares the leftover width after the fixed tracks.
+// Children flow into cells left to right, wrapping rows. Row heights are
+// the tallest child of each row, or fixed via rowheight. Child x/y are
+// ignored (the cell is the position); percent/fill components resolve
+// against the cell size.
+// ------------------------------------------------------------------
+class Grid : public Widget {
+public:
+    Grid();
+    virtual ~Grid() override;
+
+    void setCols(const std::string& spec);
+    void setGap(float px) { m_gap = px >= 0.0f ? px : 0.0f; }
+    void setRowHeight(float px) { m_rowH = px; }   // <= 0: auto
+
+    virtual void layout(float parentWidth, float parentHeight) override;
+
+private:
+    struct Track {
+        enum Kind { Px, Percent, Fr } kind = Fr;
+        float value = 1.0f;
+    };
+    std::vector<Track> m_tracks;
+    float m_gap = 4.0f;
+    float m_rowH = 0.0f;
+};
+
 // Group: draws a named named style background + border
 class Group : public Widget {
 public:

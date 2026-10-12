@@ -754,6 +754,10 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         if (const std::string* v = get("split")) { float f = 0.5f; toFloat(*v, f); sp->setSplit(f); }
         if (const std::string* v = get("handlesize")) { float h = 6.0f; toFloat(*v, h); sp->setHandleSize(h); }
         if (const std::string* v = get("handlecolor")) sp->setHandleColor(hexColor(*v));
+    } else if (auto* gd = dynamic_cast<Grid*>(w.get())) {
+        if (const std::string* v = get("cols")) gd->setCols(*v);
+        if (const std::string* v = get("gap")) { float g = 4.0f; toFloat(*v, g); gd->setGap(g); }
+        if (const std::string* v = get("rowheight")) { float rh = 0.0f; toFloat(*v, rh); gd->setRowHeight(rh); }
     } else if (auto* tb = dynamic_cast<Tabs*>(w.get())) {
         if (const std::string* v = get("active")) {
             int idx = 0;

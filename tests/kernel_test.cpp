@@ -559,6 +559,94 @@ static void testAnchors() {
     CHECK(r.x == 30 && r.y == 40 && r.w == 50 && r.h == 50);
 }
 
+static void testGrid() {
+    XmlParser p;
+    auto res = p.parse(R"(<screen id="s">
+  <grid id="g" x="0" y="0" w="100%" h="600" cols="3" gap="8">
+    <panel id="p1" w="100" h="50" bg="#111111"/>
+    <panel id="p2" w="100%" h="50" bg="#222222"/>
+    <panel id="p3" w="100" h="80" bg="#333333"/>
+    <panel id="p4" w="100" h="20" bg="#444444"/>
+  </grid>
+</screen>)");
+    assert(res.root);
+    auto s = std::make_shared<Screen>("s");
+    s->widgets.push_back(res.root);
+    s->width = 800;
+    s->height = 600;
+
+    Kernel k;
+    k.init();
+    k.pushScreen(s);
+    InputState st = makeInput();
+    idle(k, st);
+
+    auto findIn = [](Widget* w, const char* id) -> Widget* {
+        for (const auto& c : w->children())
+            if (c && c->id() == id) return c.get();
+        return nullptr;
+    };
+    Widget* grid = res.root->children().empty() ? nullptr : res.root->children()[0].get();
+    CHECK(grid && grid->id() == "g");
+    if (!grid) return;
+
+    // Three equal tracks over 800px with 2 gaps of 8: (800-16)/3 = 261.33.
+    const float tw = (800.0f - 16.0f) / 3.0f;
+    Widget* p1 = findIn(grid, "p1");
+    Widget* p2 = findIn(grid, "p2");
+    Widget* p3 = findIn(grid, "p3");
+    Widget* p4 = findIn(grid, "p4");
+    CHECK(p1 && p2 && p3 && p4);
+    if (!p1 || !p2 || !p3 || !p4) return;
+
+    Rect r = p1->bounds();
+    CHECK(r.x == 0.0f && r.y == 0.0f && r.w == 100.0f && r.h == 50.0f);
+    r = p2->bounds();
+    CHECK(r.x == tw + 8.0f && std::fabs(r.w - tw) < 0.5f);
+    r = p3->bounds();
+    CHECK(r.x == 2.0f * (tw + 8.0f));
+
+    // Row height is the tallest child (80), so p4 starts below it.
+    r = p4->bounds();
+    CHECK(r.x == 0.0f && r.y == 88.0f && r.h == 20.0f);
+
+    // Resizing the screen recomputes the tracks (no drift on re-layout).
+    s->width = 500;
+    idle(k, st);
+    idle(k, st);
+    const float tw2 = (500.0f - 16.0f) / 3.0f;
+    r = p2->bounds();
+    CHECK(r.x == tw2 + 8.0f && std::fabs(r.w - tw2) < 0.5f);
+
+    // Explicit track list: px + fr + %.
+    XmlParser p2parser;
+    auto res2 = p2parser.parse(R"(<screen id="s2">
+  <grid id="g" x="0" y="0" w="800" h="100" cols="120 1fr 25%" gap="0" rowheight="30">
+    <panel id="a" bg="#111111"/>
+    <panel id="b" w="100%" bg="#222222"/>
+    <panel id="c" bg="#333333"/>
+  </grid>
+</screen>)");
+    assert(res2.root);
+    auto s2 = std::make_shared<Screen>("s2");
+    s2->widgets.push_back(res2.root);
+    s2->width = 800;
+    s2->height = 100;
+    Kernel k2;
+    k2.init();
+    k2.pushScreen(s2);
+    InputState st2 = makeInput();
+    idle(k2, st2);
+    Widget* g2 = res2.root->children()[0].get();
+    Widget* b2 = findIn(g2, "b");
+    CHECK(b2);
+    if (b2) {
+        r = b2->bounds();
+        // leftover = 800 - 120 - 200 = 480 for the single fr track.
+        CHECK(r.x == 120.0f && r.w == 480.0f && r.h == 30.0f);
+    }
+}
+
 static void testLabelWrapAndColumnAutoHeight() {
     if (!FontManager::instance().get("sans", 14)) {
         std::cout << "  (no system font; skipping wrap checks)\n";
@@ -1892,6 +1980,7 @@ int main() {
     testTextInputWordSelection();
     testTextInputSelectionDraw();
     testAnchors();
+    testGrid();
     testLabelWrapAndColumnAutoHeight();
     testNewWidgets();
     testRadioButtonGroup();

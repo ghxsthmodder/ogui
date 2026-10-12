@@ -275,6 +275,7 @@ theme default.
 | `window` | bordered panel with a title bar (children are offset by it) | `title`, `title_visible` |
 | `column` | stacks children vertically (gap 4, honours `padding`/`margin`) | — |
 | `row` | lays children out horizontally, tiling authored widths with a gap | — |
+| `grid` | row-major tiling over column tracks; children fill each cell origin (child `x`/`y` are ignored, percent/fill resolve against the cell) | `cols` (`"3"` = 3 equal tracks, or a list like `"120 1fr 25%"`: px, fractional, percent), `gap` (px, default 4), `rowheight` (px; default is auto = tallest child of the row) |
 | `label` | text | `text`, `wrap`, `align="left\|center\|right"` |
 | `button` | clickable button, press/release feedback | `text` |
 | `textinput` | single-line UTF-8 editor: caret, click-drag / Shift+arrows / Shift+click selection, double-click selects the word, triple-click selects all, Ctrl+Left/Right jump words, Ctrl+A/C/X/V | `text`, `placeholder` |

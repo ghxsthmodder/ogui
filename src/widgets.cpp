@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cctype>
 
 namespace ogui {
@@ -1155,6 +1156,126 @@ void Row::layout(float parentWidth, float parentHeight) {
                     x > pad ? x - gap : pad,
                     std::max(maxH, 0.0f)};
     (void)parentWidth;
+}
+
+// ------------------------------------------------------------------
+// Grid
+// ------------------------------------------------------------------
+Grid::Grid() = default;
+Grid::~Grid() = default;
+
+void Grid::setCols(const std::string& spec) {
+    m_tracks.clear();
+    std::vector<std::string> toks;
+    std::string tok;
+    auto flush = [&]() {
+        if (!tok.empty()) toks.push_back(tok);
+        tok.clear();
+    };
+    for (char c : spec) {
+        if (c == ',' || c == ' ' || c == ';' || c == '|') flush();
+        else if (c >= 'A' && c <= 'Z') tok.push_back(char(c - 'A' + 'a'));
+        else tok.push_back(c);
+    }
+    flush();
+    if (toks.empty()) return;
+
+    auto parseTrack = [](const std::string& t) {
+        Track tr;
+        if (!t.empty() && t.back() == '%') {
+            tr.kind = Track::Percent;
+            tr.value = std::strtof(t.substr(0, t.size() - 1).c_str(), nullptr);
+        } else if (t.size() > 2 && t.back() == 'r' && t[t.size() - 2] == 'f') {
+            tr.kind = Track::Fr;
+            tr.value = std::strtof(t.substr(0, t.size() - 2).c_str(), nullptr);
+            if (tr.value <= 0.0f) tr.value = 1.0f;
+        } else if (t == "fr") {
+            tr.kind = Track::Fr;
+            tr.value = 1.0f;
+        } else {
+            tr.kind = Track::Px;
+            tr.value = std::strtof(t.c_str(), nullptr);
+        }
+        return tr;
+    };
+
+    // "3" (one bare integer) means three equal fractional tracks.
+    if (toks.size() == 1 && toks[0].find_first_not_of("0123456789") == std::string::npos) {
+        const int n = std::atoi(toks[0].c_str());
+        for (int i = 0; i < n; ++i) m_tracks.push_back(Track{});
+        return;
+    }
+    for (const auto& t : toks) m_tracks.push_back(parseTrack(t));
+}
+
+void Grid::layout(float parentWidth, float parentHeight) {
+    const Rect b = bounds();
+    const float pw = b.w > 0.0f ? b.w : parentWidth;
+    const float ph = b.h > 0.0f ? b.h : parentHeight;
+
+    if (m_tracks.empty()) { Widget::layout(pw, ph); return; }
+
+    const float pad = m_style.padding;
+    const float cw = std::max(pw - 2.0f * pad, 0.0f);
+    const size_t nCols = m_tracks.size();
+
+    // Track widths: fixed (px/%) first, fr shares the leftover.
+    std::vector<float> trackW(nCols, 0.0f);
+    float fixedSum = 0.0f, frSum = 0.0f;
+    size_t frCount = 0;
+    for (size_t t = 0; t < nCols; ++t) {
+        const Track& tr = m_tracks[t];
+        if (tr.kind == Track::Px) trackW[t] = tr.value;
+        else if (tr.kind == Track::Percent) trackW[t] = cw * tr.value * 0.01f;
+        if (tr.kind != Track::Fr) {
+            fixedSum += trackW[t];
+        } else {
+            frSum += tr.value;
+            ++frCount;
+        }
+    }
+    const float gapTotal = nCols > 1 ? static_cast<float>(nCols - 1) * m_gap : 0.0f;
+    float leftover = std::max(cw - gapTotal - fixedSum, 0.0f);
+    for (size_t t = 0; t < nCols; ++t) {
+        if (m_tracks[t].kind != Track::Fr) continue;
+        trackW[t] = frSum > 0.0f ? leftover * m_tracks[t].value / frSum
+                                 : leftover / static_cast<float>(frCount);
+    }
+
+    const auto& kids = children();
+    float y = pad;
+    size_t i = 0;
+    while (i < kids.size()) {
+        const size_t rowEnd = std::min(i + nCols, kids.size());
+        const size_t rowCount = rowEnd - i;
+
+        // Resolve this row's children against their cell size first, so an
+        // auto row height sees the final widths.
+        float autoH = 0.0f;
+        for (size_t j = 0; j < rowCount; ++j) {
+            const auto& c = kids[i + j];
+            if (!c) continue;
+            const size_t col = (i + j) % nCols;
+            c->resolveGeometry(trackW[col], ph);
+            autoH = std::max(autoH, c->bounds().h);
+        }
+        const float rowH = m_rowH > 0.0f ? m_rowH : autoH;
+
+        float x = pad;
+        for (size_t j = 0; j < rowCount; ++j) {
+            const auto& c = kids[i + j];
+            if (c) {
+                const size_t col = (i + j) % nCols;
+                Rect cb = c->bounds();
+                if (cb.h <= 0.0f && m_rowH > 0.0f) cb.h = m_rowH;
+                c->setBounds(Rect{x, y, cb.w, cb.h});
+                c->layout(cb.w, cb.h);
+            }
+            x += trackW[j] + m_gap;
+        }
+        y += std::max(rowH, 0.0f) + m_gap;
+        i = rowEnd;
+    }
 }
 
 // ------------------------------------------------------------------
@@ -3295,6 +3416,7 @@ std::map<std::string, WidgetFactory>& widgetRegistry() {
         reg["optionspin"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<OptionSpin>(); };
         reg["rangeslider"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<RangeSlider>(); };
         reg["splitter"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Splitter>(); };
+        reg["grid"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Grid>(); };
     }
     return reg;
 }
