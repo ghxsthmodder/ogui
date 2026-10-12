@@ -1,13 +1,32 @@
 <screen id="widgets">
   <panel id="bg" x="0" y="0" w="100%" h="100%" bg="#161616"/>
-  <label id="lbl_title" x="1.25%" y="52" w="97.5%" h="20"
+  <menubar id="mb" x="0" y="44" w="100%" h="24">
+    <menu label="Arquivo">
+      <menuitem label="Nova cena" command="file_new"/>
+      <menuitem label="Abrir cena..." command="file_open"/>
+      <menuseparator/>
+      <menuitem label="Exportar" command="file_export"/>
+    </menu>
+    <menu label="Render">
+      <menuitem label="Qualidade" command="render_quality"/>
+      <menuitem label="Sombras">
+        <menuitem label="Shadow maps" command="shadow_sm"/>
+        <menuitem label="Ray-traced" command="shadow_rt"/>
+      </menuitem>
+    </menu>
+    <menu label="Ajuda">
+      <menuitem label="Sobre ogui" command="help_about"/>
+    </menu>
+  </menubar>
+  <label id="lbl_title" x="1.25%" y="78" w="97.5%" h="20"
          text="Novos widgets em um grid 2 colunas (1fr 1fr)"
          font sans 16 color="#66ee66"/>
 
-  <grid id="gd_main" x="1.25%" y="84" w="97.5%" h="70%" cols="1fr 1fr" gap="10">
+  <grid id="gd_main" x="1.25%" y="104" w="97.5%" h="70%" cols="1fr 1fr" gap="10">
 
     <!-- celula 1: form -->
-    <panel x="0" y="0" w="100%" h="220" bg="#1c1d22" border="#3a3b44" radius="6">
+    <panel x="0" y="0" w="100%" h="220" bg="#1c1d22" border="#3a3b44" radius="6"
+           contextmenu="cm_form">
       <label x="10" y="8" w="90%" h="18" text="Formulario" font sans 14 color="#aaaaaa"/>
       <searchinput id="se_busca" x="10" y="32" w="62%" h="30"
                    placeholder="Buscar..." bg="#111111"/>
@@ -63,7 +82,27 @@
       <button id="btn_toast" x="170" y="96" w="150" h="30" text="Toast info"
               bg="#2f3340" color="#dddddd" radius="6"/>
     </panel>
+
+    <!-- celula 5: cor e arquivo -->
+    <panel x="0" y="0" w="100%" h="120" bg="#1c1d22" border="#3a3b44" radius="6">
+      <label x="10" y="8" w="90%" h="18" text="Cor / Arquivo" font sans 14 color="#aaaaaa"/>
+      <colorpicker id="cp_tint" x="10" y="36" w="110" h="28" color="#4488ff"
+                   bind="cp_change"/>
+      <pathpicker id="pp_mesh" x="130" y="34" w="240" h="30"
+                  placeholder="Selecionar malha..." path="assets" filter=".png"
+                  bind="pp_change"/>
+      <label id="lbl_cp" x="10" y="76" w="95%" h="18" text="Clique no swatch ou em ..."
+             font sans 12 color="#888888"/>
+    </panel>
   </grid>
+
+  <!-- menu de contexto do painel Formulario (botao direito) -->
+  <contextmenu id="cm_form">
+    <menuitem label="Limpar busca" command="cm_clear"/>
+    <menuitem label="Adicionar badge" command="cm_add"/>
+    <menuseparator/>
+    <menuitem label="Propriedades..." command="cm_props"/>
+  </contextmenu>
 
   <!-- modal de confirmacao (por ultimo: cobre a tela quando aberto) -->
   <modal id="md_confirm" x="0" y="0" w="100%" h="100%" title="Confirmação"

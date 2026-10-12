@@ -41,6 +41,10 @@ public:
     const std::string& binding() const { return m_binding; }
     void setBinding(const std::string& b) { m_binding = b; }
 
+    // Id of the <contextmenu> opened on right-click over this widget.
+    const std::string& contextMenuName() const { return m_contextMenu; }
+    void setContextMenuName(const std::string& n) { m_contextMenu = n; }
+
     // Every attribute the XML parser saw on this element (keys lowercased).
     // Lets data-only tags (e.g. <manifest><screen path="..."/></manifest>)
     // carry information that no built-in widget consumes.
@@ -202,6 +206,7 @@ public:
 protected:
     std::string m_id;
     std::string m_binding;
+    std::string m_contextMenu;
     std::map<std::string, std::string> m_rawAttrs;
     Callback m_onClick;
     Widget* m_parent = nullptr;

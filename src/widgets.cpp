@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cctype>
+#include <filesystem>
 
 namespace ogui {
 
@@ -3438,6 +3439,13 @@ std::map<std::string, WidgetFactory>& widgetRegistry() {
         reg["section"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<AccordionSection>(); };
         reg["modal"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Modal>(); };
         reg["sparkline"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Sparkline>(); };
+        reg["menubar"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<MenuBar>(); };
+        reg["menu"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Menu>(); };
+        reg["menuitem"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<MenuItem>(); };
+        reg["menuseparator"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { auto m = std::make_shared<MenuItem>(); m->setSeparator(true); return m; };
+        reg["contextmenu"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<ContextMenu>(); };
+        reg["colorpicker"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<ColorPicker>(); };
+        reg["pathpicker"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<PathPicker>(); };
     }
     return reg;
 }
@@ -3839,6 +3847,643 @@ void Sparkline::onDraw(Rasterizer& r) const {
     Color ink = m_lineColor;
     r.drawText(info.c_str(), b.x + 6.0f, b.y + 6.0f, m_fontSize, "sans", ink,
                Align::Left, VertAlign::Top);
+}
+
+// ------------------------------------------------------------------
+// MenuPopup: floating menu list with submenu levels
+// ------------------------------------------------------------------
+MenuPopup::MenuPopup() = default;
+MenuPopup::~MenuPopup() = default;
+
+void MenuPopup::fadeIn() {
+    m_fade.start(0.0f, 1.0f, 0.12f, TweenEase::EaseOutCubic);
+}
+
+void MenuPopup::onTick(float dt) {
+    Widget::onTick(dt);
+    if (m_fade.running()) m_fade.update(dt);
+}
+
+void MenuPopup::rebuildRows() {
+    m_rows.clear();
+    const Level& top = m_stack.back();
+    if (m_stack.size() > 1) {
+        Row back;
+        back.back = true;
+        m_rows.push_back(back);
+    }
+    for (const auto& e : top.entries) {
+        Row row;
+        if (e.separator) row.separator = true;
+        else row.entry = &e;
+        m_rows.push_back(row);
+    }
+}
+
+void MenuPopup::setEntries(const std::vector<MenuEntry>& items) {
+    m_stack.clear();
+    m_stack.push_back(Level{{}, items});
+    m_hover = -1;
+    rebuildRows();
+}
+
+void MenuPopup::pushLevel(const MenuEntry& e) {
+    m_stack.push_back(Level{e.label, e.sub});
+    m_hover = -1;
+    rebuildRows();
+    Rect b = bounds();
+    b.h = contentHeight();
+    setBounds(b);
+}
+
+void MenuPopup::popLevel() {
+    if (m_stack.size() <= 1) return;
+    m_stack.pop_back();
+    m_hover = -1;
+    rebuildRows();
+    Rect b = bounds();
+    b.h = contentHeight();
+    setBounds(b);
+}
+
+int MenuPopup::rowAt(float localY) const {
+    if (m_rowH <= 0.0f || m_rows.empty()) return -1;
+    const int row = static_cast<int>(localY / m_rowH);
+    return (row >= 0 && row < static_cast<int>(m_rows.size())) ? row : -1;
+}
+
+void MenuPopup::onPointerMove(const Offset2D& p) {
+    const Offset2D local{p.x - bounds().x, p.y - bounds().y};
+    const int row = rowAt(local.y);
+    m_hover = (row >= 0 && !m_rows[static_cast<size_t>(row)].separator) ? row : -1;
+}
+
+void MenuPopup::onPointerDown(MouseButton btn, const Offset2D& p) {
+    if (btn != Mouse_Left) return;
+    const Offset2D local{p.x - bounds().x, p.y - bounds().y};
+    const int row = rowAt(local.y);
+    if (row < 0) return;
+    const Row& r = m_rows[static_cast<size_t>(row)];
+    if (r.separator) return;
+    if (r.back) { popLevel(); return; }
+    const MenuEntry* e = r.entry;
+    if (!e) return;
+    if (!e->sub.empty()) { pushLevel(*e); return; }
+    if (m_onSelect) m_onSelect(e->command);
+}
+
+void MenuPopup::onDraw(Rasterizer& r) const {
+    if (!m_style.isVisible) return;
+    const Rect b = bounds();
+    if (b.w <= 0.0f || b.h <= 0.0f) return;
+    const float fade = m_fade.value();
+    if (fade <= 0.0f) return;
+
+    auto tint = [&](Color c) {
+        c.a = static_cast<uint8_t>(static_cast<float>(c.a) * fade);
+        return c;
+    };
+    r.drawRect(b, tint(m_panel));
+    r.drawRectBorder(b, tint(m_border), 1.0f, 4.0f);
+
+    const Font* f = r.resolveFont("sans", m_fontSize);
+    for (size_t i = 0; i < m_rows.size(); ++i) {
+        const float y = b.y + static_cast<float>(i) * m_rowH;
+        const Rect row{b.x, y, b.w, m_rowH};
+        const Row& rw = m_rows[i];
+        if (rw.separator) {
+            r.drawLine({b.x + 6.0f, y + m_rowH * 0.5f},
+                       {b.x + b.w - 6.0f, y + m_rowH * 0.5f},
+                       tint(m_sepColor), 1.0f);
+            continue;
+        }
+        const bool hi = static_cast<int>(i) == m_hover;
+        if (hi) r.drawRect(row, tint(m_highlight));
+        std::string label;
+        if (rw.back)
+            label = std::string("\xe2\x80\xb9 ") + m_stack[m_stack.size() - 2].title;
+        else if (rw.entry)
+            label = rw.entry->label;
+        if (f && !label.empty())
+            r.drawTextShifted(label.c_str(), b.x + 10.0f,
+                              y + (m_rowH - static_cast<float>(m_fontSize)) * 0.5f,
+                              m_fontSize, *f, tint(m_text));
+        // ▶ marker for submenu rows, on the right edge.
+        if (rw.entry && !rw.entry->sub.empty()) {
+            const float cy = y + m_rowH * 0.5f;
+            const float cx = b.x + b.w - 12.0f;
+            r.drawTriangle({cx - 3.0f, cy - 4.0f}, {cx - 3.0f, cy + 4.0f},
+                           {cx + 4.0f, cy}, tint(m_text));
+        }
+    }
+}
+
+// ------------------------------------------------------------------
+// MenuItem / Menu / MenuBar / ContextMenu
+// ------------------------------------------------------------------
+MenuItem::MenuItem() = default;
+MenuItem::~MenuItem() = default;
+
+MenuEntry MenuItem::buildEntry(const Widget& w) {
+    MenuEntry e;
+    if (const auto* mi = dynamic_cast<const MenuItem*>(&w)) {
+        e.label = mi->label();
+        e.command = mi->command();
+        e.separator = mi->separator();
+    }
+    for (const auto& c : w.children()) {
+        if (dynamic_cast<MenuItem*>(c.get()))
+            e.sub.push_back(buildEntry(*c));
+    }
+    return e;
+}
+
+Menu::Menu() = default;
+Menu::~Menu() = default;
+
+MenuBar::MenuBar() = default;
+MenuBar::~MenuBar() = default;
+
+void MenuBar::layout(float parentWidth, float parentHeight) {
+    const Rect b = bounds();
+    const float pw = b.w > 0.0f ? b.w : parentWidth;
+    const float ph = b.h > 0.0f ? b.h : parentHeight;
+    const Font* f = FontManager::instance().get("sans", m_fontSize);
+    m_widths.clear();
+    for (const auto& c : children()) {
+        auto* menu = dynamic_cast<Menu*>(c.get());
+        if (!menu) { m_widths.push_back(0.0f); continue; }
+        const float tw = f ? static_cast<float>(
+            f->measureRange(menu->label().c_str(), menu->label().size())) : 60.0f;
+        m_widths.push_back(tw + 2.0f * m_pad);
+        menu->setBounds(Rect{0.0f, 0.0f, 0.0f, ph});   // hit-transparent
+        menu->layout(pw, ph);
+    }
+}
+
+void MenuBar::openMenu(size_t index) {
+    const auto& kids = children();
+    if (index >= kids.size()) return;
+    auto* menu = dynamic_cast<Menu*>(kids[index].get());
+    if (!menu) return;
+
+    std::vector<MenuEntry> entries;
+    for (const auto& c : menu->children()) {
+        if (auto* item = dynamic_cast<MenuItem*>(c.get()))
+            entries.push_back(MenuItem::buildEntry(*item));
+    }
+    if (entries.empty()) return;
+
+    if (!m_popup) m_popup = std::make_shared<MenuPopup>();
+    m_popup->setEntries(entries);
+    m_popup->fadeIn();
+    m_popup->setVisible(true);
+
+    // Float just under the clicked label, in absolute screen space.
+    const Offset2D o = absoluteOrigin();
+    const Rect b = bounds();
+    float mx = 0.0f;
+    for (size_t i = 0; i < index && i < m_widths.size(); ++i) mx += m_widths[i];
+    float w = 150.0f;
+    const Font* f = FontManager::instance().get("sans", 13);
+    if (f) {
+        for (const auto& e : entries) {
+            const float tw = static_cast<float>(
+                f->measureRange(e.label.c_str(), e.label.size()));
+            if (tw + 44.0f > w) w = tw + 44.0f;
+        }
+    }
+    m_popup->setBounds(Rect{o.x + mx, o.y + b.h, w, m_popup->contentHeight()});
+    m_popup->setOnSelect([this](const std::string& cmd) {
+        if (Kernel* k = kernel()) k->closePopup();
+        if (m_popup) m_popup->setVisible(false);
+        if (m_onCommand && !cmd.empty()) m_onCommand(cmd);
+        if (Kernel* k = kernel()) k->invokeBinding(cmd);
+    });
+    if (Kernel* k = kernel()) k->openPopup(m_popup);
+}
+
+void MenuBar::onPointerDown(MouseButton btn, const Offset2D& p) {
+    if (btn != Mouse_Left) return;
+    const Offset2D o = absoluteOrigin();
+    const Rect b = bounds();
+    const float lx = static_cast<float>(p.x) - o.x;
+    const float ly = static_cast<float>(p.y) - o.y;
+    if (ly < 0.0f || ly > b.h) return;
+    float x = 0.0f;
+    size_t i = 0;
+    for (const auto& c : children()) {
+        const float w = i < m_widths.size() ? m_widths[i] : 0.0f;
+        if (dynamic_cast<Menu*>(c.get()) && lx >= x && lx <= x + w) {
+            openMenu(i);
+            return;
+        }
+        x += w;
+        ++i;
+    }
+}
+
+void MenuBar::onDraw(Rasterizer& r) const {
+    if (!m_style.isVisible) return;
+    const Rect b = bounds();
+    r.drawRect(b, m_bgColor);
+    r.drawLine({b.x, b.y + b.h - 1.0f}, {b.x + b.w, b.y + b.h - 1.0f},
+               hexColor("#3a3b44"), 1.0f);
+    const Font* f = r.resolveFont("sans", m_fontSize);
+    if (!f) return;
+    float x = 0.0f;
+    size_t i = 0;
+    for (const auto& c : children()) {
+        const auto* menu = dynamic_cast<const Menu*>(c.get());
+        const float w = i < m_widths.size() ? m_widths[i] : 0.0f;
+        if (menu && w > 0.0f) {
+            r.drawTextShifted(menu->label().c_str(), b.x + x + m_pad,
+                              b.y + (b.h - static_cast<float>(m_fontSize)) * 0.5f,
+                              m_fontSize, *f, m_fgColor);
+        }
+        x += w;
+        ++i;
+    }
+}
+
+ContextMenu::ContextMenu() = default;
+ContextMenu::~ContextMenu() = default;
+
+void ContextMenu::openAt(float x, float y) {
+    std::vector<MenuEntry> entries;
+    for (const auto& c : children()) {
+        if (auto* item = dynamic_cast<MenuItem*>(c.get()))
+            entries.push_back(MenuItem::buildEntry(*item));
+    }
+    if (entries.empty()) return;
+
+    if (!m_popup) m_popup = std::make_shared<MenuPopup>();
+    m_popup->setEntries(entries);
+    m_popup->fadeIn();
+    m_popup->setVisible(true);
+
+    float w = 150.0f;
+    const Font* f = FontManager::instance().get("sans", 13);
+    if (f) {
+        for (const auto& e : entries) {
+            const float tw = static_cast<float>(
+                f->measureRange(e.label.c_str(), e.label.size()));
+            if (tw + 44.0f > w) w = tw + 44.0f;
+        }
+    }
+    m_popup->setBounds(Rect{x, y, w, m_popup->contentHeight()});
+    m_popup->setOnSelect([this](const std::string& cmd) {
+        if (Kernel* k = kernel()) k->closePopup();
+        if (m_popup) m_popup->setVisible(false);
+        if (m_onCommand && !cmd.empty()) m_onCommand(cmd);
+        if (Kernel* k = kernel()) k->invokeBinding(cmd);
+    });
+    if (Kernel* k = kernel()) k->openPopup(m_popup);
+}
+
+// ------------------------------------------------------------------
+// ColorPopup / ColorPicker
+// ------------------------------------------------------------------
+ColorPopup::ColorPopup() = default;
+ColorPopup::~ColorPopup() = default;
+
+void ColorPopup::setHSV(float h, float s, float v) {
+    m_h = h; m_s = s; m_v = v;
+}
+
+void ColorPopup::hsvToRgb(float h, float s, float v,
+                          float& r, float& g, float& b) {
+    const float c = v * s;
+    const float hp = h * 6.0f;
+    const float xx = c * (1.0f - std::fabs(std::fmod(hp, 2.0f) - 1.0f));
+    const float m = v - c;
+    float rr = 0.0f, gg = 0.0f, bb = 0.0f;
+    if (hp < 1.0f) { rr = c; gg = xx; }
+    else if (hp < 2.0f) { rr = xx; gg = c; }
+    else if (hp < 3.0f) { gg = c; bb = xx; }
+    else if (hp < 4.0f) { gg = xx; bb = c; }
+    else if (hp < 5.0f) { rr = xx; bb = c; }
+    else { rr = c; bb = xx; }
+    r = rr + m; g = gg + m; b = bb + m;
+}
+
+Rect ColorPopup::svRect() const {
+    const Rect b = bounds();
+    return Rect{b.x + 8.0f, b.y + 8.0f, b.w - 16.0f, b.h - 60.0f};
+}
+
+Rect ColorPopup::hueRect() const {
+    const Rect b = bounds();
+    return Rect{b.x + 8.0f, b.y + b.h - 44.0f, b.w - 16.0f, 12.0f};
+}
+
+void ColorPopup::pick(const Offset2D& p, bool fromHue) {
+    if (fromHue) {
+        const Rect q = hueRect();
+        float t = q.w > 0.0f ? (static_cast<float>(p.x) - q.x) / q.w : 0.0f;
+        t = std::clamp(t, 0.0f, 0.9999f);
+        m_h = t;
+    } else {
+        const Rect q = svRect();
+        float sx = q.w > 0.0f ? (static_cast<float>(p.x) - q.x) / q.w : 0.0f;
+        float sy = q.h > 0.0f ? (static_cast<float>(p.y) - q.y) / q.h : 0.0f;
+        m_s = std::clamp(sx, 0.0f, 1.0f);
+        m_v = std::clamp(1.0f - sy, 0.0f, 1.0f);
+    }
+    if (m_onChanged) m_onChanged(m_h, m_s, m_v);
+}
+
+void ColorPopup::onPointerDown(MouseButton btn, const Offset2D& p) {
+    if (btn != Mouse_Left) return;
+    const Rect sv = svRect(), hue = hueRect();
+    const float px = static_cast<float>(p.x), py = static_cast<float>(p.y);
+    if (px >= hue.x && px <= hue.x + hue.w && py >= hue.y && py <= hue.y + hue.h) {
+        m_drag = 2;
+        pick(p, true);
+    } else if (px >= sv.x && px <= sv.x + sv.w && py >= sv.y && py <= sv.y + sv.h) {
+        m_drag = 1;
+        pick(p, false);
+    }
+}
+
+void ColorPopup::onPointerMove(const Offset2D& p) {
+    if (m_drag == 2) pick(p, true);
+    else if (m_drag == 1) pick(p, false);
+}
+
+void ColorPopup::onPointerUp(MouseButton) {
+    m_drag = 0;
+}
+
+void ColorPopup::onDraw(Rasterizer& r) const {
+    if (!m_style.isVisible) return;
+    const Rect b = bounds();
+    r.drawRect(b, m_panel);
+    r.drawRectBorder(b, m_border, 1.0f, 4.0f);
+
+    // SV square as a coarse grid of flat cells (cheap, no shader).
+    const Rect sv = svRect();
+    constexpr int kCols = 12, kRows = 9;
+    const float cw = sv.w / kCols, ch = sv.h / kRows;
+    for (int j = 0; j < kRows; ++j) {
+        for (int i = 0; i < kCols; ++i) {
+            float rr, gg, bb;
+            hsvToRgb(m_h, static_cast<float>(i) / (kCols - 1),
+                     1.0f - static_cast<float>(j) / (kRows - 1), rr, gg, bb);
+            Color c;
+            c.r = static_cast<uint8_t>(rr * 255.0f);
+            c.g = static_cast<uint8_t>(gg * 255.0f);
+            c.b = static_cast<uint8_t>(bb * 255.0f);
+            r.drawRect({sv.x + static_cast<float>(i) * cw,
+                        sv.y + static_cast<float>(j) * ch, cw + 1.0f, ch + 1.0f}, c);
+        }
+    }
+    r.drawRectBorder(sv, m_border, 1.0f, 0.0f);
+    {
+        const float px = sv.x + m_s * sv.w;
+        const float py = sv.y + (1.0f - m_v) * sv.h;
+        r.drawRectBorder({px - 4.0f, py - 4.0f, 8.0f, 8.0f},
+                         hexColor("#ffffff"), 1.5f, 4.0f);
+    }
+
+    // Hue strip.
+    const Rect hue = hueRect();
+    constexpr int kSeg = 12;
+    for (int i = 0; i < kSeg; ++i) {
+        float rr, gg, bb;
+        hsvToRgb(static_cast<float>(i) / kSeg, 1.0f, 1.0f, rr, gg, bb);
+        Color c;
+        c.r = static_cast<uint8_t>(rr * 255.0f);
+        c.g = static_cast<uint8_t>(gg * 255.0f);
+        c.b = static_cast<uint8_t>(bb * 255.0f);
+        r.drawRect({hue.x + static_cast<float>(i) * hue.w / kSeg, hue.y,
+                    hue.w / kSeg + 1.0f, hue.h}, c);
+    }
+    r.drawRectBorder(hue, m_border, 1.0f, 2.0f);
+    {
+        const float px = hue.x + m_h * hue.w;
+        r.drawRect({px - 2.0f, hue.y - 2.0f, 4.0f, hue.h + 4.0f},
+                   hexColor("#ffffff"));
+    }
+
+    // Current colour + hex label.
+    float rr, gg, bb;
+    hsvToRgb(m_h, m_s, m_v, rr, gg, bb);
+    Color cur;
+    cur.r = static_cast<uint8_t>(rr * 255.0f);
+    cur.g = static_cast<uint8_t>(gg * 255.0f);
+    cur.b = static_cast<uint8_t>(bb * 255.0f);
+    const Rect chip{b.x + 8.0f, b.y + b.h - 24.0f, 16.0f, 16.0f};
+    r.drawRect(chip, cur);
+    r.drawRectBorder(chip, m_border, 1.0f, 2.0f);
+    char hex[8];
+    std::snprintf(hex, sizeof(hex), "#%02x%02x%02x", cur.r, cur.g, cur.b);
+    const Font* f = r.resolveFont("sans", m_fontSize);
+    if (f)
+        r.drawTextShifted(hex, chip.x + 22.0f, b.y + b.h - 22.0f,
+                          m_fontSize, *f, hexColor("#cccccc"));
+}
+
+ColorPicker::ColorPicker() = default;
+ColorPicker::~ColorPicker() = default;
+
+void ColorPicker::setColorHex(const std::string& hex) {
+    m_color = hexColor(hex);
+    // rgb -> hsv so the popup opens on the right spot.
+    const float r = m_color.r / 255.0f, g = m_color.g / 255.0f,
+                b = m_color.b / 255.0f;
+    const float mx = std::max({r, g, b}), mn = std::min({r, g, b});
+    const float d = mx - mn;
+    float h = 0.0f;
+    if (d > 0.0f) {
+        if (mx == r) h = std::fmod((g - b) / d, 6.0f);
+        else if (mx == g) h = (b - r) / d + 2.0f;
+        else h = (r - g) / d + 4.0f;
+        h /= 6.0f;
+        if (h < 0.0f) h += 1.0f;
+    }
+    m_h = h;
+    m_s = mx > 0.0f ? d / mx : 0.0f;
+    m_v = mx;
+}
+
+std::string ColorPicker::colorHex() const {
+    char buf[8];
+    std::snprintf(buf, sizeof(buf), "#%02x%02x%02x", m_color.r, m_color.g,
+                  m_color.b);
+    return buf;
+}
+
+void ColorPicker::applyHsv() {
+    float rr, gg, bb;
+    ColorPopup::hsvToRgb(m_h, m_s, m_v, rr, gg, bb);
+    m_color.r = static_cast<uint8_t>(rr * 255.0f);
+    m_color.g = static_cast<uint8_t>(gg * 255.0f);
+    m_color.b = static_cast<uint8_t>(bb * 255.0f);
+}
+
+void ColorPicker::onPointerDown(MouseButton btn, const Offset2D&) {
+    if (btn != Mouse_Left) return;
+    if (!m_popup) m_popup = std::make_shared<ColorPopup>();
+    m_popup->setHSV(m_h, m_s, m_v);
+    m_popup->setVisible(true);
+    m_popup->setOnChanged([this](float h, float s, float v) {
+        m_h = h; m_s = s; m_v = v;
+        applyHsv();
+        if (m_onChanged) m_onChanged(colorHex());
+        if (Kernel* k = kernel()) k->invokeBinding(binding());
+    });
+    const Offset2D o = absoluteOrigin();
+    const Rect b = bounds();
+    m_popup->setBounds(Rect{o.x, o.y + b.h + 2.0f, 180.0f, 170.0f});
+    if (Kernel* k = kernel()) k->openPopup(m_popup);
+}
+
+void ColorPicker::onDraw(Rasterizer& r) const {
+    if (!m_style.isVisible) return;
+    const Rect b = bounds();
+    const Rect chip{b.x + 4.0f, b.y + (b.h - 18.0f) * 0.5f, 18.0f, 18.0f};
+    r.drawRect(chip, m_color);
+    r.drawRectBorder(chip, hexColor("#666666"), 1.0f, 3.0f);
+    const Font* f = r.resolveFont("sans", m_fontSize);
+    if (f) {
+        const std::string hex = colorHex();
+        r.drawTextShifted(hex.c_str(), chip.x + 26.0f,
+                          b.y + (b.h - static_cast<float>(m_fontSize)) * 0.5f,
+                          m_fontSize, *f, hexColor("#cccccc"));
+    }
+}
+
+// ------------------------------------------------------------------
+// PathPicker
+// ------------------------------------------------------------------
+PathPicker::PathPicker() = default;
+PathPicker::~PathPicker() = default;
+
+void PathPicker::listDir(const std::string& dir) {
+    std::vector<MenuEntry> entries;
+    if (!m_popup) m_popup = std::make_shared<MenuPopup>();
+
+    if (dir != "/" && !dir.empty()) {
+        MenuEntry up;
+        up.label = "..";
+        up.command = "d:..";
+        entries.push_back(up);
+    }
+
+    std::error_code ec;
+    std::vector<std::string> dirs, files;
+    for (const auto& e : std::filesystem::directory_iterator(dir, ec)) {
+        const std::string name = e.path().filename().string();
+        if (e.is_directory(ec)) dirs.push_back(name);
+        else if (e.is_regular_file(ec)) {
+            if (!m_filter.empty() &&
+                e.path().extension().string() != m_filter)
+                continue;
+            files.push_back(name);
+        }
+        if (dirs.size() + files.size() >= 40) break;   // keep the menu sane
+    }
+    std::sort(dirs.begin(), dirs.end());
+    std::sort(files.begin(), files.end());
+    for (const auto& d : dirs) {
+        if (entries.size() >= 40) break;
+        MenuEntry e;
+        e.label = d + "/";
+        e.command = "d:" + d;
+        entries.push_back(e);
+    }
+    for (const auto& fl : files) {
+        if (entries.size() >= 40) break;
+        MenuEntry e;
+        e.label = fl;
+        e.command = "f:" + fl;
+        entries.push_back(e);
+    }
+
+    m_popup->setEntries(entries);
+    m_popup->fadeIn();
+    m_popup->setVisible(true);
+    const Offset2D o = absoluteOrigin();
+    const Rect b = bounds();
+    const float h = std::min(m_popup->contentHeight(), 340.0f);
+    m_popup->setBounds(Rect{o.x, o.y + b.h + 2.0f,
+                            std::max(b.w, 220.0f), h});
+    m_popup->setOnSelect([this, dir](const std::string& cmd) {
+        if (!cmd.empty() && cmd[0] == 'd' && cmd.size() > 1 && cmd[1] == ':') {
+            std::string next;
+            if (cmd.substr(2) == "..") {
+                next = dir;
+                while (next.size() > 1 && next.back() != '/') next.pop_back();
+                if (next.size() > 1) next.pop_back();
+            } else {
+                next = dir;
+                if (!next.empty() && next.back() != '/') next += '/';
+                next += cmd.substr(2);
+            }
+            listDir(next);   // stay open, show the new folder
+            return;
+        }
+        if (!cmd.empty() && cmd[0] == 'f' && cmd.size() > 1 && cmd[1] == ':') {
+            std::string path = dir;
+            if (!path.empty() && path.back() != '/') path += '/';
+            path += cmd.substr(2);
+            m_value = path;
+            if (Kernel* k = kernel()) k->closePopup();
+            if (m_popup) m_popup->setVisible(false);
+            if (m_onChanged) m_onChanged(m_value);
+            if (Kernel* k = kernel()) k->invokeBinding(binding());
+        }
+    });
+    if (Kernel* k = kernel()) k->openPopup(m_popup);
+}
+
+void PathPicker::openBrowser() {
+    std::string dir = m_start;
+    if (!m_value.empty()) {
+        std::filesystem::path p(m_value);
+        if (p.has_parent_path()) dir = p.parent_path().string();
+    }
+    std::error_code ec;
+    if (dir.empty() || !std::filesystem::is_directory(dir, ec)) dir = ".";
+    listDir(dir);
+}
+
+void PathPicker::onPointerDown(MouseButton btn, const Offset2D& p) {
+    if (btn != Mouse_Left) return;
+    const Offset2D o = absoluteOrigin();
+    const Rect b = bounds();
+    const float lx = static_cast<float>(p.x) - o.x + b.x;
+    const Rect button{b.x + b.w - 30.0f, b.y + 2.0f, 28.0f, b.h - 4.0f};
+    if (lx >= button.x && lx <= button.x + button.w) {
+        openBrowser();
+        return;
+    }
+    (void)p;
+}
+
+void PathPicker::onDraw(Rasterizer& r) const {
+    if (!m_style.isVisible) return;
+    const Rect b = bounds();
+    r.drawRect(b, m_bgColor);
+    r.drawRectBorder(b, m_borderColor, 1.0f, 4.0f);
+    const Font* f = r.resolveFont("sans", m_fontSize);
+    if (!f) return;
+    const float ty = b.y + (b.h - static_cast<float>(m_fontSize)) * 0.5f;
+    if (!m_value.empty()) {
+        r.drawTextShifted(m_value.c_str(), b.x + 8.0f, ty, m_fontSize, *f,
+                          m_fgColor);
+    } else if (!m_placeholder.empty()) {
+        Color dim = m_fgColor;
+        dim.a = 120;
+        r.drawTextShifted(m_placeholder.c_str(), b.x + 8.0f, ty, m_fontSize,
+                          *f, dim);
+    }
+    const Rect button{b.x + b.w - 30.0f, b.y + 2.0f, 28.0f, b.h - 4.0f};
+    r.drawRect(button, hexColor("#2f3340"));
+    r.drawText("...", button.x + button.w * 0.5f,
+               button.y + button.h * 0.5f, m_fontSize, "sans",
+               hexColor("#dddddd"), Align::Center, VertAlign::Middle);
 }
 
 } // namespace ogui

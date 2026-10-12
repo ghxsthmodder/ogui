@@ -357,6 +357,16 @@ void Kernel::update() {
             setFocus(m_focus, m_hovered);
             if (m_captured) m_captured->onPointerDown(static_cast<MouseButton>(btn), p);
         }
+        // Right-click: open the nearest ancestor's <contextmenu>, if any.
+        if (btn == Mouse_Right && !swallowed) {
+            for (Widget* t = m_hovered; t != nullptr; t = t->parent()) {
+                if (t->contextMenuName().empty()) continue;
+                if (auto* cm = dynamic_cast<ContextMenu*>(
+                        findWidget(t->contextMenuName())))
+                    cm->openAt(p.x, p.y);
+                break;
+            }
+        }
     }
 
     // While a button is down the capture owns the moves: dragging a slider
@@ -380,8 +390,9 @@ void Kernel::update() {
             m_captured->onPointerUp(static_cast<MouseButton>(
                 m_pressButton >= 0 ? m_pressButton : 0));
         }
-        // Click = press and release happened on the same widget.
-        if (m_pressed && m_pressed == m_hovered) {
+        // Click = press and release happened on the same widget, with the
+        // left button (a right-click belongs to the context menu).
+        if (m_pressed && m_pressed == m_hovered && m_pressButton != Mouse_Right) {
             // Resolve by binding name first (onclick=), then by id.
             auto lookup = [&](const std::string& key) -> std::function<void()> {
                 auto it = m_bindings.find(key);

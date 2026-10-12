@@ -1681,6 +1681,250 @@ private:
 };
 
 // ------------------------------------------------------------------
+// Menu system: MenuPopup is the floating list (owned by whoever opens
+// it); MenuBar/Menu/MenuItem describe the XML tree; ContextMenu is an
+// invisible holder opened by the Kernel on right-click.
+// ------------------------------------------------------------------
+struct MenuEntry {
+    std::string label;
+    std::string command;
+    bool separator = false;
+    std::vector<MenuEntry> sub;
+};
+
+class MenuPopup : public Widget {
+public:
+    MenuPopup();
+    virtual ~MenuPopup() override;
+
+    void setEntries(const std::vector<MenuEntry>& items);
+    void setOnSelect(std::function<void(const std::string&)> cb) {
+        m_onSelect = std::move(cb);
+    }
+    void setOnDismiss(std::function<void()> cb) { m_onDismiss = std::move(cb); }
+    void fadeIn();
+
+    void setRowHeight(float px) { m_rowH = px; }
+    int rowCount() const { return static_cast<int>(m_rows.size()); }
+    float contentHeight() const {
+        return static_cast<float>(m_rows.size()) * m_rowH;
+    }
+
+    virtual void onTick(float dt) override;
+    virtual void onPointerMove(const Offset2D& p) override;
+    virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
+    virtual void onDraw(Rasterizer& r) const override;
+    virtual void onPopupDismissed() override { if (m_onDismiss) m_onDismiss(); }
+
+private:
+    int rowAt(float localY) const;      // index into the visible rows
+    void rebuildRows();                 // flatten current level into rows
+    void pushLevel(const MenuEntry& e);
+    void popLevel();
+
+    struct Level { std::string title; std::vector<MenuEntry> entries; };
+
+    std::vector<Level> m_stack;
+    // Visible rows: separators are inert rows; sub entries map to their item.
+    struct Row { const MenuEntry* entry = nullptr; bool separator = false;
+                 bool back = false; };
+    std::vector<Row> m_rows;
+    int m_hover = -1;
+    float m_rowH = 24.0f;
+    int m_fontSize = 13;
+    Tween m_fade;                        // open-in fade, like ComboPopup
+    std::function<void(const std::string&)> m_onSelect;
+    std::function<void()> m_onDismiss;
+    Color m_panel{ogui::hexColor("#1e1f24")};
+    Color m_border{ogui::hexColor("#4a4b56")};
+    Color m_text{ogui::hexColor("#dddddd")};
+    Color m_highlight{ogui::hexColor("#2b3a55")};
+    Color m_sepColor{ogui::hexColor("#3a3b44")};
+};
+
+// One <menuitem label command> (may nest more for a submenu) or <menuseparator/>.
+class MenuItem : public Widget {
+public:
+    MenuItem();
+    virtual ~MenuItem() override;
+
+    void setLabel(const std::string& l) { m_label = l; }
+    const std::string& label() const { return m_label; }
+    void setCommand(const std::string& c) { m_command = c; }
+    const std::string& command() const { return m_command; }
+    void setSeparator(bool s) { m_separator = s; }
+    bool separator() const { return m_separator; }
+
+    static MenuEntry buildEntry(const Widget& w);   // recurse children
+
+private:
+    std::string m_label;
+    std::string m_command;
+    bool m_separator = false;
+};
+
+// A top-level <menu label="Arquivo"> inside a MenuBar: holds MenuItem kids.
+class Menu : public Widget {
+public:
+    Menu();
+    virtual ~Menu() override;
+
+    void setLabel(const std::string& l) { m_label = l; }
+    const std::string& label() const { return m_label; }
+
+private:
+    std::string m_label;
+};
+
+class MenuBar : public Widget {
+public:
+    MenuBar();
+    virtual ~MenuBar() override;
+
+    void setOnCommand(std::function<void(const std::string&)> cb) {
+        m_onCommand = std::move(cb);
+    }
+
+    virtual void layout(float parentWidth, float parentHeight) override;
+    virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
+    virtual void onDraw(Rasterizer& r) const override;
+
+private:
+    void openMenu(size_t index);
+
+    std::shared_ptr<MenuPopup> m_popup;
+    std::function<void(const std::string&)> m_onCommand;
+    float m_pad = 10.0f;
+    int m_fontSize = 13;
+    Color m_bgColor{ogui::hexColor("#1a1b20")};
+    Color m_fgColor{ogui::hexColor("#cccccc")};
+
+    // Label widths from the last layout; <menu> children stay zero-sized so
+    // they never steal the hit-test from the bar.
+    std::vector<float> m_widths;
+};
+
+// <contextmenu id="..."> holder: invisible in the tree, opened by the
+// Kernel when a widget with contextmenu="<id>" is right-clicked.
+class ContextMenu : public Widget {
+public:
+    ContextMenu();
+    virtual ~ContextMenu() override;
+
+    void setOnCommand(std::function<void(const std::string&)> cb) {
+        m_onCommand = std::move(cb);
+    }
+    void openAt(float x, float y);
+
+    virtual void onDraw(Rasterizer&) const override {}   // never drawn inline
+
+private:
+    std::shared_ptr<MenuPopup> m_popup;
+    std::function<void(const std::string&)> m_onCommand;
+};
+
+// ------------------------------------------------------------------
+// ColorPicker: swatch + hex; click opens an SV square / hue strip popup.
+// ------------------------------------------------------------------
+class ColorPopup : public Widget {
+public:
+    ColorPopup();
+    virtual ~ColorPopup() override;
+
+    void setHSV(float h, float s, float v);
+    void getHSV(float& h, float& s, float& v) const {
+        h = m_h; s = m_s; v = m_v;
+    }
+    void setOnChanged(std::function<void(float, float, float)> cb) {
+        m_onChanged = std::move(cb);
+    }
+    void setOnDismiss(std::function<void()> cb) { m_onDismiss = std::move(cb); }
+
+    virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
+    virtual void onPointerMove(const Offset2D& p) override;
+    virtual void onPointerUp(MouseButton btn) override;
+    virtual void onDraw(Rasterizer& r) const override;
+    virtual void onPopupDismissed() override { if (m_onDismiss) m_onDismiss(); }
+
+    static void hsvToRgb(float h, float s, float v, float& r, float& g, float& b);
+
+private:
+    Rect svRect() const;    // absolute-space regions (bounds are absolute)
+    Rect hueRect() const;
+    void pick(const Offset2D& p, bool fromHue);
+
+    float m_h = 0.6f, m_s = 0.6f, m_v = 1.0f;
+    int m_drag = 0;              // 1 = SV square, 2 = hue strip
+    std::function<void(float, float, float)> m_onChanged;
+    std::function<void()> m_onDismiss;
+    int m_fontSize = 12;
+    Color m_panel{ogui::hexColor("#1e1f24")};
+    Color m_border{ogui::hexColor("#4a4b56")};
+};
+
+class ColorPicker : public Widget {
+public:
+    ColorPicker();
+    virtual ~ColorPicker() override;
+
+    void setColorHex(const std::string& hex);
+    std::string colorHex() const;
+    Color color() const { return m_color; }
+    void setOnChanged(std::function<void(const std::string&)> cb) {
+        m_onChanged = std::move(cb);
+    }
+
+    virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
+    virtual void onDraw(Rasterizer& r) const override;
+
+private:
+    void applyHsv();
+
+    float m_h = 0.0f, m_s = 0.0f, m_v = 0.0f;
+    Color m_color{ogui::hexColor("#4488ff")};
+    std::shared_ptr<ColorPopup> m_popup;
+    std::function<void(const std::string&)> m_onChanged;
+    int m_fontSize = 12;
+};
+
+// ------------------------------------------------------------------
+// PathPicker: read-only path field + "..." button that opens a file
+// browser popup (directories first, ".." to go up).
+// ------------------------------------------------------------------
+class PathPicker : public Widget {
+public:
+    PathPicker();
+    virtual ~PathPicker() override;
+
+    void setValue(const std::string& v) { m_value = v; }
+    const std::string& value() const { return m_value; }
+    void setPlaceholder(const std::string& p) { m_placeholder = p; }
+    void setStartPath(const std::string& p) { m_start = p; }
+    void setFilter(const std::string& ext) { m_filter = ext; }
+    void setOnChanged(std::function<void(const std::string&)> cb) {
+        m_onChanged = std::move(cb);
+    }
+
+    virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
+    virtual void onDraw(Rasterizer& r) const override;
+
+private:
+    void openBrowser();
+    void listDir(const std::string& dir);
+
+    std::string m_value;
+    std::string m_placeholder;
+    std::string m_start = ".";
+    std::string m_filter;          // e.g. ".png"; empty = everything
+    std::shared_ptr<MenuPopup> m_popup;
+    std::function<void(const std::string&)> m_onChanged;
+    int m_fontSize = 13;
+    Color m_bgColor{ogui::hexColor("#111111")};
+    Color m_fgColor{ogui::hexColor("#dddddd")};
+    Color m_borderColor{ogui::hexColor("#3a3b44")};
+};
+
+// ------------------------------------------------------------------
 // XML widgets *ebay registry* (tag -> creator)
 // ------------------------------------------------------------------
 using WidgetFactory = std::shared_ptr<Widget> (*)(const Style&, const std::map<std::string, std::string>&);

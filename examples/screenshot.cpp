@@ -232,6 +232,22 @@ int main(int argc, char** argv) {
         }
     }
 
+    // Widgets screen: freeze the menu bar open with the first item hovered.
+    if (auto* mb = dynamic_cast<ogui::MenuBar*>(kernel.findWidget("mb"))) {
+        (void)mb;
+        ogui::Rect mbr;
+        if (absBounds(screen->widgets, 0.0f, 0.0f, "mb", mbr)) {
+            const float mx = mbr.x + 30.0f;
+            sim.click(mx, mbr.y + mbr.h * 0.5f);              // open "Arquivo"
+            sim.hover(mbr.x + 60.0f, mbr.y + mbr.h + 12.0f);  // first row
+            sim.frame();
+            for (int i = 0; i < 6; ++i) {                     // finish the fade
+                sim.st.time += 0.03f;
+                sim.frame();
+            }
+        }
+    }
+
     // ---- 3. build the draw list ------------------------------------------
     // Fonts resolve lazily during the first draw; every atlas then carries a
     // stable slot id. Register those slots the way GlBackend::syncFonts()

@@ -101,6 +101,13 @@ public:
     // ---- events ----
     // Bind a handler to a widget id; fired on click (press+release on it).
     void bind(const std::string& id, std::function<void()> fn);
+    // Fire a bound handler by name (menu commands route through this).
+    bool invokeBinding(const std::string& name) {
+        auto it = m_bindings.find(name);
+        if (it == m_bindings.end() || !it->second) return false;
+        it->second();
+        return true;
+    }
     // Set text on a widget by id (Label/Button/TextInput).
     bool setText(const std::string& id, const std::string& text);
     // Read text from a widget by id (TextInput/Label/Button).

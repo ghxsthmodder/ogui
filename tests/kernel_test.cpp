@@ -764,6 +764,125 @@ static void testBatchAWidgets() {
     }
 }
 
+// Batch B: menu bar with submenu, right-click context menu, color picker.
+static void testBatchBWidgets() {
+    Kernel k;
+    k.init();
+
+    XmlParser p;
+    auto res = p.parse(R"(<screen id="s">
+  <panel id="bg" x="0" y="0" w="800" h="600" bg="#101010"/>
+  <menubar id="mb" x="0" y="0" w="400" h="24">
+    <menu label="Arquivo">
+      <menuitem label="Novo" command="cmd_new"/>
+      <menuitem label="Sombras">
+        <menuitem label="SM" command="cmd_sm"/>
+      </menuitem>
+    </menu>
+  </menubar>
+  <panel id="tgt" x="50" y="100" w="200" h="100" bg="#1c1d22" contextmenu="cm"/>
+  <contextmenu id="cm">
+    <menuitem label="Copiar" command="cmd_copy"/>
+  </contextmenu>
+  <colorpicker id="cp" x="50" y="300" w="110" h="28" color="#ff0000"/>
+  <button id="bt" x="400" y="300" w="100" h="30" text="B"/>
+</screen>)");
+    assert(res.root);
+    auto s = std::make_shared<Screen>("s");
+    s->widgets.push_back(res.root);
+    s->width = 800;
+    s->height = 600;
+    k.pushScreen(s);
+
+    int news = 0, sms = 0, copies = 0, btns = 0;
+    k.bind("cmd_new", [&] { ++news; });
+    k.bind("cmd_sm", [&] { ++sms; });
+    k.bind("cmd_copy", [&] { ++copies; });
+    k.bind("bt", [&] { ++btns; });
+
+    InputState st = makeInput();
+    idle(k, st);
+
+    auto* mb = dynamic_cast<MenuBar*>(k.findWidget("mb"));
+    CHECK(mb);
+    if (!mb) return;
+
+    // Open "Arquivo": the popup lists Novo + Sombras.
+    pressAt(k, st, 20.0f, 12.0f);
+    releaseAt(k, st);
+    CHECK(k.popupOpen());
+    auto pop = std::dynamic_pointer_cast<MenuPopup>(k.popup());
+    CHECK(pop && pop->rowCount() == 2);
+
+    // Click "Novo" (first row under the bar): command fires, popup closes.
+    pressAt(k, st, 60.0f, 24.0f + 12.0f);
+    releaseAt(k, st);
+    CHECK(news == 1);
+    CHECK(!k.popupOpen());
+
+    // Click "Sombras" (second row): submenu pushes, still open.
+    pressAt(k, st, 20.0f, 12.0f);
+    releaseAt(k, st);
+    pop = std::dynamic_pointer_cast<MenuPopup>(k.popup());
+    CHECK(pop && pop->rowCount() == 2);
+    pressAt(k, st, 60.0f, 24.0f + 24.0f + 12.0f);
+    releaseAt(k, st);
+    CHECK(news == 1);
+    pop = std::dynamic_pointer_cast<MenuPopup>(k.popup());
+    CHECK(pop && pop->rowCount() == 2);   // back row + SM
+    // "SM" is now the second row.
+    pressAt(k, st, 60.0f, 24.0f + 24.0f + 12.0f);
+    releaseAt(k, st);
+    CHECK(sms == 1);
+    CHECK(!k.popupOpen());
+
+    // Right-click on the target panel opens the context menu.
+    st.mouseX = 100.0f; st.mouseY = 150.0f;
+    st.mouseButton = 1; st.mouseDown[1] = true;
+    k.frame(st);
+    st.mouseDown[1] = false; st.mouseButton = -1;
+    k.frame(st);
+    st.mouseButton = 0;
+    CHECK(k.popupOpen());
+
+    // Right-clicking a bound button must not fire its click binding.
+    k.closePopup();
+    st.mouseX = 450.0f; st.mouseY = 315.0f;
+    st.mouseButton = 1; st.mouseDown[1] = true;
+    k.frame(st);
+    st.mouseDown[1] = false; st.mouseButton = -1;
+    k.frame(st);
+    st.mouseButton = 0;
+    CHECK(btns == 0);
+
+    // Context menu item click fires the command.
+    st.mouseX = 100.0f; st.mouseY = 150.0f;
+    st.mouseButton = 1; st.mouseDown[1] = true;
+    k.frame(st);
+    st.mouseDown[1] = false; st.mouseButton = -1;
+    k.frame(st);
+    st.mouseButton = 0;
+    pressAt(k, st, 120.0f, 150.0f + 12.0f);   // "Copiar" row
+    releaseAt(k, st);
+    CHECK(copies == 1);
+    CHECK(!k.popupOpen());
+
+    // ColorPicker: open the popup and drag inside the SV square.
+    auto* cp = dynamic_cast<ColorPicker*>(k.findWidget("cp"));
+    CHECK(cp);
+    if (cp) {
+        CHECK(cp->colorHex() == "#ff0000");
+        pressAt(k, st, 60.0f, 314.0f);
+        releaseAt(k, st);
+        CHECK(k.popupOpen());
+        // Popup sits at (50, 330); SV square starts at (58, 338), 164x110.
+        pressAt(k, st, 58.0f + 150.0f, 338.0f + 5.0f);   // high sat, high val
+        releaseAt(k, st);
+        CHECK(cp->colorHex() != "#ff0000");
+        k.closePopup();
+    }
+}
+
 static void testLabelWrapAndColumnAutoHeight() {
     if (!FontManager::instance().get("sans", 14)) {
         std::cout << "  (no system font; skipping wrap checks)\n";
@@ -2099,6 +2218,7 @@ int main() {
     testAnchors();
     testGrid();
     testBatchAWidgets();
+    testBatchBWidgets();
     testLabelWrapAndColumnAutoHeight();
     testNewWidgets();
     testRadioButtonGroup();

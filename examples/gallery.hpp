@@ -178,6 +178,50 @@ inline void install(ogui::Kernel& k, Gallery& g, int& index, int start = 0) {
         k.showToast("Texturas carregadas (12).", ogui::Kernel::ToastKind::Warn);
     });
 
+    // Widgets screen: menu commands and context menu.
+    k.bind("file_new", [&k] {
+        k.showToast("Cena nova criada.", ogui::Kernel::ToastKind::Info);
+    });
+    k.bind("file_open", [&k] {
+        k.showToast("Abrir cena: use o seletor de arquivo.",
+                    ogui::Kernel::ToastKind::Info);
+    });
+    k.bind("file_export", [&k] {
+        k.showToast("Cena exportada.", ogui::Kernel::ToastKind::Info);
+    });
+    k.bind("render_quality", [&k] {
+        k.showToast("Qualidade: Alta.", ogui::Kernel::ToastKind::Info);
+    });
+    k.bind("shadow_sm", [&k] {
+        k.showToast("Sombras: shadow maps.", ogui::Kernel::ToastKind::Info);
+    });
+    k.bind("shadow_rt", [&k] {
+        k.showToast("Sombras: ray tracing.", ogui::Kernel::ToastKind::Warn);
+    });
+    k.bind("help_about", [&k] {
+        k.showToast("ogui: XML + OpenGL 3.3.", ogui::Kernel::ToastKind::Info);
+    });
+    k.bind("cm_clear", [&k] {
+        k.setText("se_busca", "");
+    });
+    k.bind("cm_add", [&k] {
+        if (auto* b = dynamic_cast<ogui::Badge*>(k.findWidget("bg_inst"))) {
+            b->setVisible(true);
+            b->setCount(b->count() + 1);
+        }
+    });
+    k.bind("cm_props", [&k] {
+        k.showToast("Propriedades do formulario.", ogui::Kernel::ToastKind::Info);
+    });
+    k.bind("cp_change", [&k] {
+        if (auto* cp = dynamic_cast<ogui::ColorPicker*>(k.findWidget("cp_tint")))
+            k.setText("lbl_cp", "Cor: " + cp->colorHex());
+    });
+    k.bind("pp_change", [&k] {
+        if (auto* pp = dynamic_cast<ogui::PathPicker*>(k.findWidget("pp_mesh")))
+            k.setText("lbl_cp", "Arquivo: " + pp->value());
+    });
+
     k.pushScreen(g.screens[static_cast<size_t>(index)]);
     show();
 }

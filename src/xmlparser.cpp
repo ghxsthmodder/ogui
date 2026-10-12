@@ -497,6 +497,7 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
     if (const std::string* v = get("id")) w->setId(*v);
     if (const std::string* v = get("onclick")) w->setBinding(*v);
     if (const std::string* v = get("bind")) w->setBinding(*v);
+    if (const std::string* v = get("contextmenu")) w->setContextMenuName(*v);
     if (const std::string* v = get("tooltip")) w->setTooltip(*v);
 
     // ---- geometry (layout happens later; bounds seed the widget) ----
@@ -796,6 +797,20 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         if (const std::string* v = get("max")) { int n = 60; toInt(*v, n); sl->setMaxSamples(n); }
         if (const std::string* v = get("color")) sl->setLineColor(hexColor(*v));
         if (const std::string* v = get("bg")) sl->setBgColor(hexColor(*v));
+    } else if (auto* mn = dynamic_cast<Menu*>(w.get())) {
+        if (const std::string* v = get("label")) mn->setLabel(*v);
+        if (const std::string* v = get("text")) mn->setLabel(*v);
+    } else if (auto* mi = dynamic_cast<MenuItem*>(w.get())) {
+        if (const std::string* v = get("label")) mi->setLabel(*v);
+        if (const std::string* v = get("text")) mi->setLabel(*v);
+        if (const std::string* v = get("command")) mi->setCommand(*v);
+    } else if (auto* cp = dynamic_cast<ColorPicker*>(w.get())) {
+        if (const std::string* v = get("color")) cp->setColorHex(*v);
+    } else if (auto* pp = dynamic_cast<PathPicker*>(w.get())) {
+        if (const std::string* v = get("value")) pp->setValue(*v);
+        if (const std::string* v = get("placeholder")) pp->setPlaceholder(*v);
+        if (const std::string* v = get("path")) pp->setStartPath(*v);
+        if (const std::string* v = get("filter")) pp->setFilter(*v);
     } else if (auto* tb = dynamic_cast<Tabs*>(w.get())) {
         if (const std::string* v = get("active")) {
             int idx = 0;

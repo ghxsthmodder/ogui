@@ -303,6 +303,12 @@ theme default.
 | `accordion` / `section` | stack of collapsible sections: clicking a section header toggles it; with `exclusive` (default) opening one closes its siblings; collapsed sections hide their children | `exclusive`, `gap` / `header`, `expanded`, `headerheight` |
 | `modal` | full-screen dim + centred panel that blocks all input below while open; children are laid out relative to the panel origin | `title`, `open`, `panelw`, `panelh` (toggle with `Modal::setOpen`) |
 | `sparkline` | mini line plot of a value history (scaled to min/max); `addSample(v)` from C++ pushes a point and trims to `max` samples | `values` (`;`-separated), `label`, `max`, `color`, `bg` |
+| `menubar` / `menu` | menu bar strip; each top-level `menu` opens a floating popup under its label, commands route to `Kernel::bind()` | — / `label` |
+| `menuitem` | a menu entry (nest more `menuitem`s inside it for a ▶ submenu) | `label` / `text`, `command` (a `bind()` name) |
+| `menuseparator` | divider line inside a menu | — |
+| `contextmenu` | right-click menu holder (invisible in the tree); any widget points at it with `contextmenu="<id>"` and right-clicking it opens the menu at the pointer (right-click never fires click bindings) | `id`; children are `menuitem`/`menuseparator` |
+| `colorpicker` | swatch + hex label; click opens a popup with a saturation/value grid, a hue strip and a live hex readout; drags update the color and fire the widget's `bind()` | `color` (`#rrggbb`) |
+| `pathpicker` | read-only path field with a `...` button that opens a file-browser popup (folders first with a trailing `/`, `..` to go up, capped at 40 entries); picking a file fires the widget's `bind()` | `value`, `placeholder`, `path` (start folder), `filter` (extension, e.g. `.png`) |
 | `separator` | rule, horizontal or vertical | `thickness`, `color` |
 | `tabs` / `tab` | header strip over stacked pages (inactive pages take no input) | `active`, `theight`, `headercolor`, `tabcolor`, `activecolor`, `accent` / `label` |
 | `group` | titled grouping box | `name` |
