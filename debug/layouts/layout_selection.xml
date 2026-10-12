@@ -3,8 +3,8 @@
   <label id="lbl_group" x="1.25%" y="52" w="97.5%" h="20" text="Selecao: listas, arvore e combo"
          font sans 16 color="#66ee66"/>
 
-  <label x="10" y="84" w="360" h="18" text="ListBox"/>
-  <listbox id="lb_items" x="10" y="106" w="360" h="120" rowheight="22"
+  <label x="1.25%" y="84" w="45%" h="18" text="ListBox"/>
+  <listbox id="lb_items" x="1.25%" y="106" w="45%" h="20%" rowheight="22"
            selected="0" bg="#111" color="#ccc" border="#4488ff">
     <item label="Alpha"/>
     <item label="Beta"/>
@@ -12,16 +12,17 @@
     <item label="Delta"/>
   </listbox>
 
-  <label x="390" y="84" w="400" h="18" text="ComboBox"/>
-  <combobox id="cmb_fps" x="390" y="106" w="240" h="28" selected="1" rowheight="22"
+  <label x="48.75%" y="84" w="50%" h="18" text="ComboBox"/>
+  <combobox id="cmb_fps" x="48.75%" y="106" w="30%" h="28" selected="1" rowheight="22"
             bg="#111" color="#ccc" border="#4488ff">
     <option label="Fps: 30"/>
     <option label="Fps: 60"/>
     <option label="Fps: 120"/>
   </combobox>
 
-  <label x="390" y="150" w="400" h="18" text="TreeView (encolhe ao recolher)"/>
-  <tree id="tr_scene" x="390" y="172" w="400" h="180" rowheight="22"
+  <label x="48.75%" y="150" w="50%" h="18" text="TreeView (encolhe ao recolher)"/>
+  <tree id="tr_scene" x="48.75%" y="172" w="50%" h="30%"
+        rowheight="22"
         bg="#111" color="#ccc" border="#4488ff" accent="#66ee66">
     <treeitem label="Cena" expanded="true">
       <treeitem label="Luz"/>

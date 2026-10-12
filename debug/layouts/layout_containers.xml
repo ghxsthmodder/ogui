@@ -3,47 +3,47 @@
   <label id="lbl_group" x="1.25%" y="52" w="97.5%" h="20" text="Containers: janela, grupo, splitter, scroll e abas"
          font sans 16 color="#66ee66"/>
 
-  <window id="win_demo" x="10" y="84" w="360" h="150" title="Janela"
+  <window id="win_demo" x="1.25%" y="84" w="45%" h="25%" title="Janela"
           bg="#202020" border="#4488ff" color="#ccc">
-    <label x="10" y="34" w="320" h="20" text="Filhos dentro de uma Window."/>
+    <label x="10" y="34" w="90%" h="20" text="Filhos dentro de uma Window."/>
     <button x="10" y="62" w="120" h="28" text="Ok" bg="#4488ff" color="#fff" radius="6"/>
     <checkbox x="150" y="64" w="120" h="22" text="Opcao" checked="true"/>
   </window>
 
-  <group id="gp_demo" name="Grupo" x="390" y="84" w="400" h="150"
+  <group id="gp_demo" name="Grupo" x="48.75%" y="84" w="50%" h="25%"
          bg="#141414" border="#4488ff">
-    <label x="12" y="26" w="360" h="20" text="Um Group com borda e titulo."/>
-    <row x="12" y="56" w="360" h="24">
+    <label x="12" y="26" w="90%" h="20" text="Um Group com borda e titulo."/>
+    <row x="12" y="56" w="90%" h="24">
       <radiobutton text="1" x="0" y="0" w="40" h="24" group="g2" checked="true"/>
       <radiobutton text="2" x="0" y="0" w="40" h="24" group="g2"/>
       <radiobutton text="3" x="0" y="0" w="40" h="24" group="g2"/>
     </row>
   </group>
 
-  <label x="10" y="248" w="360" h="18" text="RangeSlider (arraste as duas alcas)"/>
-  <rangeslider id="rs_demo" x="10" y="270" w="360" h="22"
+  <label x="1.25%" y="41.3%" w="45%" h="18" text="RangeSlider (arraste as duas alcas)"/>
+  <rangeslider id="rs_demo" x="1.25%" y="45%" w="45%" h="22"
                min="0" max="100" low="20" high="80" color="#66ee66"/>
 
-  <label x="390" y="248" w="400" h="18" text="Splitter (arraste a barra azul)"/>
-  <splitter id="sp_split" x="390" y="270" w="400" h="150" split="0.5" handlecolor="#4488ff">
+  <label x="48.75%" y="41.3%" w="50%" h="18" text="Splitter (arraste a barra azul)"/>
+  <splitter id="sp_split" x="48.75%" y="45%" w="50%" h="25%" split="0.5" handlecolor="#4488ff">
     <panel x="0" y="0" w="200" h="150" bg="#22344a" border="#4a6c96"/>
     <panel x="0" y="0" w="200" h="150" bg="#3d2246" border="#7a4a96"/>
   </splitter>
 
-  <label x="10" y="300" w="360" h="18" text="ScrollView (role a roda)"/>
-  <scrollview id="sv_demo" x="10" y="322" w="360" h="150" scrollstep="30"
+  <label x="1.25%" y="50%" w="45%" h="18" text="ScrollView (role a roda)"/>
+  <scrollview id="sv_demo" x="1.25%" y="53.7%" w="45%" h="25%" scrollstep="30"
               bg="#111" border="#4488ff">
-    <label x="8" y="8" w="330" h="360" wrap="true" color="#ccc"
+    <label x="8" y="8" w="91%" h="360" wrap="true" color="#ccc"
            text="Um paragrafo comprido que ultrapassa a altura da viewport, por isso mora dentro de um ScrollView. Continue rolando para ver o resto do texto aparecer linha a linha conforme o conteudo se desloca para cima."/>
   </scrollview>
 
-  <tabs id="tb_demo" x="1.25%" y="486" w="97.5%" h="16%" theight="24" active="0"
+  <tabs id="tb_demo" x="1.25%" y="81%" w="97.5%" h="16%" theight="24" active="0"
         headercolor="#222" tabcolor="#1a1a1a" activecolor="#2a2a2a" accent="#4488ff">
     <tab label="Aba 1">
-      <label x="12" y="8" w="740" h="20" text="Conteudo da primeira aba."/>
+      <label x="12" y="8" w="95%" h="20" text="Conteudo da primeira aba."/>
     </tab>
     <tab label="Aba 2">
-      <label x="12" y="8" w="740" h="20" text="Conteudo da segunda aba."/>
+      <label x="12" y="8" w="95%" h="20" text="Conteudo da segunda aba."/>
       <button x="12" y="34" w="120" h="26" text="Botao" bg="#555" color="#fff" radius="6"/>
     </tab>
   </tabs>

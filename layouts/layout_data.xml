@@ -2,7 +2,7 @@
   <panel id="bg" x="0" y="0" w="100%" h="100%" bg="#161616"/>
   <label id="lbl_group" x="1.25%" y="52" w="97.5%" h="20" text="Dados: tabela ordenavel, editavel e com marquee"
          font sans 16 color="#66ee66"/>
-  <label x="10" y="78" w="780" h="18"
+  <label x="1.25%" y="78" w="97.5%" h="18"
          text="Ordene clicando no cabecalho; arraste a borda de uma coluna para redimensionar; clique numa celula editavel (ou F2) para editar."/>
 
   <table id="tb_people" x="1.25%" y="104" w="97.5%" h="60%" rowheight="22" headerheight="24"
