@@ -1365,11 +1365,19 @@ public:
     const std::string& value() const { return m_value; }
     void setExpanded(bool e) { m_expanded = e; }
     bool expanded() const { return m_expanded; }
+    // Folder vs file icon (folders default to expanded).
+    void setFolder(bool f) { m_folder = f; }
+    bool folder() const { return m_folder; }
+    // Checkbox state, shown when the parent tree enables checks.
+    void setChecked(bool c) { m_checked = c; }
+    bool checked() const { return m_checked; }
 
 private:
     std::string m_label;
     std::string m_value;
     bool m_expanded = true;
+    bool m_folder = false;
+    bool m_checked = false;
 };
 
 // ------------------------------------------------------------------
@@ -1409,6 +1417,16 @@ public:
     void setTextColor(const Color& c) { m_text = c; }
     void setHighlightColor(const Color& c) { m_highlight = c; }
     void setAccentColor(const Color& c) { m_accent = c; }
+    // File-tree presentation extras (all off by default so plain trees are
+    // unchanged): folder/file icons, a per-node checkbox, and dotted guide
+    // lines connecting each node to its parent.
+    void setShowIcons(bool on) { m_showIcons = on; }
+    void setShowChecks(bool on) { m_showChecks = on; }
+    void setShowGuides(bool on) { m_showGuides = on; }
+    bool showChecks() const { return m_showChecks; }
+    int checkedCount() const;
+    // Comma-joined labels of the checked nodes (empty when none).
+    std::string checkedLabels() const;
 
     virtual void layout(float parentWidth, float parentHeight) override;
     virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
@@ -1432,6 +1450,11 @@ private:
     // pre-toggle layout (the caller clears m_rows right after snapshotting).
     void rebuildAnimated();
     void commit(int row);
+    // Offset from the tree's left edge to the first content column (icon or
+    // checkbox) for a node at the given depth; the label follows these columns.
+    float contentX(int depth) const;
+    Rect checkRect(float baseX, float rowY) const;   // absolute-space box
+    void drawGuides(Rasterizer& r, const Rect& b) const;
 
     std::vector<Row> m_rows;
     std::string m_fontFam = "sans";
@@ -1451,6 +1474,16 @@ private:
     Color m_highlight{ogui::hexColor("#334455")};
     Color m_accent{ogui::hexColor("#4488ff")};
     ChangedCallback m_onChanged;
+
+    bool m_showIcons = false;
+    bool m_showChecks = false;
+    bool m_showGuides = false;
+    float m_iconSize = 14.0f;
+    float m_checkSize = 13.0f;
+    Color m_folderColor{ogui::hexColor("#e6b455")};
+    Color m_fileColor{ogui::hexColor("#9fb4d8")};
+    Color m_checkBorder{ogui::hexColor("#8a8f9c")};
+    Color m_checkFill{ogui::hexColor("#4488ff")};
 
     // Compression animation. On a toggle we snapshot the pre-toggle rows
     // (node -> pixel y) and the row that was toggled; during the tween the
@@ -1475,16 +1508,31 @@ public:
 
     void setState(bool state);
     bool state() const { return m_checked; }
+    // Toggle and, when the value actually changed, notify + fire binding.
+    void toggle();
+
+    void setText(const std::string& t) { m_text = t; }
+    const std::string& text() const { return m_text; }
+    void setOnLabel(const std::string& s) { m_onLabel = s; }
+    void setOffLabel(const std::string& s) { m_offLabel = s; }
 
     using ChangedCallback = std::function<void(bool)>;
     void setOnChanged(ChangedCallback cb) { m_onChanged = std::move(cb); }
+
+    virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
+    virtual void onDraw(Rasterizer& r) const override;
 
     // Layout/spacing
     float m_gap = 6.0f;
 
 private:
+    // Widget-local rect of the pill track (label sits to its right).
+    Rect trackRect() const;
+
     bool m_checked = false;
     std::string m_text;
+    std::string m_onLabel = "ON";
+    std::string m_offLabel = "OFF";
     int m_fontSize = 13;
     std::string m_fontFamily = "sans";
     Color m_textColor{ogui::hexColor("#cccccc")};

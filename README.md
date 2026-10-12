@@ -286,8 +286,9 @@ theme default.
 | `th` | a `table` column | `label` / `text`, `w` (0 = share leftover width), `resizable`, `editable`, `scrollingtext` (`automatic` / `onmouseenter`) |
 | `tr` | a `table` row: cells from `cells="a;b"` or nested `<cell>` children | `cells` (`;`-separated), `value`, `editablecells` (`;`-separated column labels), `resizable`, `scrollingtext` |
 | `cell` | a `tr` cell written as an element (`<cell>text</cell>`) | text content; `editable`, `resizable`, `scrollingtext` (override the column) |
-| `tree` | hierarchical tree: triangle toggles expansion (rows compress/slide instead of blinking away), click selects, Left/Right collapse/expand; auto-shrinks to its visible rows when collapsed | `selected`, `rowheight`, `indent`, `autoheight` (default true), `accent`, `highlight` + nested `<treeitem>` children |
-| `treeitem` | a `tree` node (may nest further `<treeitem>`s) | `label` / `text`, `value`, `expanded` |
+| `tree` | hierarchical tree: triangle toggles expansion (rows compress/slide instead of blinking away), click selects, Left/Right collapse/expand; auto-shrinks to its visible rows when collapsed. `icons`/`checks`/`guides` turn it into a file-tree view (folder/file glyphs, a per-node checkbox that fires the widget `bind()`, and dotted parent connectors) | `selected`, `rowheight`, `indent`, `autoheight` (default true), `accent`, `highlight`, `icons`, `checks`, `guides` + nested `<treeitem>` children |
+| `treeitem` | a `tree` node (may nest further `<treeitem>`s) | `label` / `text`, `value`, `expanded`, `folder`/`file`, `checked` |
+| `toggleswitch` / `toggle` | compact ON/OFF pill for a binary mode: click slides the knob and flips the highlighted half, firing `onChanged(bool)` and the widget `bind()` | `checked`/`on`, `text` (trailing label), `onlabel`/`offlabel` |
 | `checkbox` | toggle + label | `text`, `checked` |
 | `radiobutton` | radio toggle in group | `text`, `checked`, `group` |
 | `combobox` | dropdown: current value shown, popup lists `<option>` children (keyboard Up/Down/Enter, autoclose on outside press) | `selected` (index or `label=`), `rowheight`, `panel` (popup bg), `highlight`, `highlighttext`, `arrow` |

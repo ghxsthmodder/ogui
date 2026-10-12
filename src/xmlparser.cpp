@@ -964,12 +964,24 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         else if (const std::string* v = get("border")) tv->setBorderColor(hexColor(*v));
         if (const std::string* v = get("highlight")) tv->setHighlightColor(hexColor(*v));
         if (const std::string* v = get("accent")) tv->setAccentColor(hexColor(*v));
+        if (const std::string* v = get("icons")) tv->setShowIcons(toBool(*v));
+        if (const std::string* v = get("checks")) tv->setShowChecks(toBool(*v));
+        if (const std::string* v = get("guides")) tv->setShowGuides(toBool(*v));
         if (hasStyle) { tv->setFontFamily(st.fontFamily); tv->setFontSize(st.fontSize); }
     } else if (auto* ti = dynamic_cast<TreeItem*>(w.get())) {
         if (const std::string* v = get("label")) ti->setLabel(*v);
         else if (const std::string* v = get("text")) ti->setLabel(*v);
         if (const std::string* v = get("value")) ti->setValue(*v);
         if (const std::string* v = get("expanded")) ti->setExpanded(toBool(*v));
+        if (const std::string* v = get("folder")) ti->setFolder(toBool(*v));
+        else if (const std::string* v = get("file")) ti->setFolder(!toBool(*v));
+        if (const std::string* v = get("checked")) ti->setChecked(toBool(*v));
+    } else if (auto* ts = dynamic_cast<ToggleSwitch*>(w.get())) {
+        if (const std::string* v = get("checked")) ts->setState(toBool(*v));
+        else if (const std::string* v = get("on")) ts->setState(toBool(*v));
+        if (const std::string* v = get("text")) ts->setText(*v);
+        if (const std::string* v = get("onlabel")) ts->setOnLabel(*v);
+        if (const std::string* v = get("offlabel")) ts->setOffLabel(*v);
     } else if (auto* col = dynamic_cast<Column*>(w.get())) {
         (void)col;
         // Column layout knobs are handled by Style (padding/margin) above.

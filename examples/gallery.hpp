@@ -232,6 +232,16 @@ inline void install(ogui::Kernel& k, Gallery& g, int& index, int start = 0) {
                             static_cast<int>(ce->evaluate(0.5f) * 100.0f)) + "%",
                         ogui::Kernel::ToastKind::Info);
     });
+    k.bind("ts_change", [&k] {
+        if (auto* ts = dynamic_cast<ogui::ToggleSwitch*>(k.findWidget("ts_vsync")))
+            k.showToast(std::string("VSync: ") + (ts->state() ? "ligado" : "desligado"),
+                        ogui::Kernel::ToastKind::Info);
+    });
+    k.bind("tree_change", [&k] {
+        if (auto* tr = dynamic_cast<ogui::TreeView*>(k.findWidget("tr_files")))
+            k.setText("lbl_tree", std::to_string(tr->checkedCount()) +
+                                  " itens marcados");
+    });
 
     k.pushScreen(g.screens[static_cast<size_t>(index)]);
     show();

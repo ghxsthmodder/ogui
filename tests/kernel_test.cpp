@@ -2196,6 +2196,88 @@ static void testTreeView() {
     CHECK(!k.buildDrawList().empty());
 }
 
+static void testToggleAndFileTree() {
+    Kernel k;
+    k.init();
+    XmlParser p;
+    auto res = p.parse(R"XML(<screen id="s">
+  <panel id="bg" x="0" y="0" w="800" h="600"/>
+  <toggleswitch id="ts" x="40" y="40" w="150" h="24" checked="true"
+                text="VSync" bind="ts_test"/>
+  <tree id="tr" x="360" y="120" w="240" h="120" rowheight="22" indent="14"
+        autoheight="false" icons="true" checks="true" guides="true"
+        bind="tree_test">
+    <treeitem label="Pasta" folder="true" expanded="true" checked="true">
+      <treeitem label="a.txt" file="true"/>
+      <treeitem label="b.txt" file="true" checked="true"/>
+    </treeitem>
+  </tree>
+</screen>)XML");
+    CHECK(res.root != nullptr);
+    if (!res.root) return;
+    auto s = std::make_shared<Screen>("s");
+    s->widgets.push_back(res.root);
+    s->width = 800;
+    s->height = 600;
+    k.pushScreen(s);
+
+    int tsHits = 0, treeHits = 0;
+    bool lastState = true;
+    k.bind("ts_test", [&] { ++tsHits; });
+    k.bind("tree_test", [&] { ++treeHits; });
+
+    InputState st = makeInput();
+    idle(k, st);
+
+    // --- ToggleSwitch ---
+    auto* ts = dynamic_cast<ToggleSwitch*>(k.findWidget("ts"));
+    CHECK(ts != nullptr);
+    if (ts) {
+        CHECK(ts->state() == true);          // parsed checked="true"
+        pressAt(k, st, 60.0f, 52.0f);        // click the pill
+        releaseAt(k, st);
+        CHECK(ts->state() == false);         // toggled
+        CHECK(tsHits == 1);                  // binding fired once
+        lastState = ts->state();
+        pressAt(k, st, 60.0f, 52.0f);
+        releaseAt(k, st);
+        CHECK(ts->state() == true);
+        CHECK(tsHits == 2);
+    }
+    (void)lastState;
+
+    // --- File tree: parsed checks + checkbox click toggles + fires binding ---
+    auto* tr = dynamic_cast<TreeView*>(k.findWidget("tr"));
+    CHECK(tr != nullptr);
+    if (!tr) return;
+    CHECK(tr->rowCount() == 3);              // Pasta, a.txt, b.txt
+    CHECK(tr->checkedCount() == 2);          // Pasta + b.txt from XML
+
+    // a.txt is row 1 (depth 1): its checkbox centre in absolute pixels.
+    // contentX(1) = 14 + 14 = 28 local; box 13px -> centre ~34.5; row y ~33.
+    pressAt(k, st, 360.0f + 34.5f, 120.0f + 33.0f);
+    releaseAt(k, st);
+    CHECK(tr->checkedCount() == 3);          // a.txt now checked
+    CHECK(treeHits == 1);
+
+    // Click it again to uncheck.
+    pressAt(k, st, 360.0f + 34.5f, 120.0f + 33.0f);
+    releaseAt(k, st);
+    CHECK(tr->checkedCount() == 2);
+    CHECK(treeHits == 2);
+
+    // A click on the row body (not the checkbox) selects it. The kernel fires
+    // the widget's binding on any click, so treeHits advances but the checked
+    // set is unchanged.
+    pressAt(k, st, 360.0f + 120.0f, 120.0f + 33.0f);
+    releaseAt(k, st);
+    CHECK(tr->selectedIndex() == 1);
+    CHECK(tr->checkedCount() == 2);          // unchanged
+    CHECK(treeHits == 3);                    // generic click fired the binding
+
+    CHECK(!k.buildDrawList().empty());
+}
+
 void testHost() {
     // ogui::Host is a buildable, movable-free RAII type on every platform.
     Host::Settings s;
@@ -2364,6 +2446,7 @@ int main() {
     testTextArea();
     testListBox();
     testTreeView();
+    testToggleAndFileTree();
     testTable();
     testTableFeatures();
     testSimplePorts();

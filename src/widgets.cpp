@@ -3314,11 +3314,75 @@ void TreeView::onPointerDown(MouseButton, const Offset2D& p) {
     const int row = rowAt(ly);
     if (row < 0) return;
     const Row& r = m_rows[static_cast<size_t>(row)];
+    if (m_showChecks) {
+        const float rowY = static_cast<float>(row) * m_rowH - m_scroll;
+        const Rect box = checkRect(contentX(r.depth), rowY);
+        if (lx >= box.x && lx <= box.x + box.w && ly >= box.y && ly <= box.y + box.h) {
+            r.node->setChecked(!r.node->checked());
+            return;
+        }
+    }
     if (toggleAt(lx, r) && !r.node->children().empty()) {
         toggleRow(row);
         return;
     }
     commit(row);
+}
+
+float TreeView::contentX(int depth) const {
+    return static_cast<float>(depth) * m_indent + m_indent;
+}
+
+Rect TreeView::checkRect(float baseX, float rowY) const {
+    return Rect{baseX, rowY + (m_rowH - m_checkSize) * 0.5f, m_checkSize, m_checkSize};
+}
+
+void TreeView::drawGuides(Rasterizer& r, const Rect& b) const {
+    const Color gc = hexColor("#4a4f5a");
+    for (int i = 0; i < static_cast<int>(m_rows.size()); ++i) {
+        const int d = m_rows[static_cast<size_t>(i)].depth;
+        if (d <= 0) continue;
+        int pi = -1;
+        for (int j = i - 1; j >= 0; --j)
+            if (m_rows[static_cast<size_t>(j)].depth == d - 1) { pi = j; break; }
+        if (pi < 0) continue;
+        const float gx = b.x + static_cast<float>(d - 1) * m_indent + m_indent * 0.5f;
+        const float pcy = b.y + static_cast<float>(pi) * m_rowH + m_rowH * 0.5f - m_scroll;
+        const float ccy = b.y + static_cast<float>(i) * m_rowH + m_rowH * 0.5f - m_scroll;
+        r.drawLine({gx, pcy}, {gx, ccy}, gc, 1.0f);
+        r.drawLine({gx, ccy}, {b.x + contentX(d), ccy}, gc, 1.0f);
+    }
+}
+
+int TreeView::checkedCount() const {
+    int n = 0;
+    std::function<void(Widget*)> walk = [&](Widget* w) {
+        for (const auto& c : w->children()) {
+            if (auto* it = dynamic_cast<TreeItem*>(c.get())) {
+                if (it->checked()) ++n;
+                walk(c.get());
+            }
+        }
+    };
+    walk(const_cast<TreeView*>(this));
+    return n;
+}
+
+std::string TreeView::checkedLabels() const {
+    std::string out;
+    std::function<void(Widget*)> walk = [&](Widget* w) {
+        for (const auto& c : w->children()) {
+            if (auto* it = dynamic_cast<TreeItem*>(c.get())) {
+                if (it->checked()) {
+                    if (!out.empty()) out += ", ";
+                    out += it->label();
+                }
+                walk(c.get());
+            }
+        }
+    };
+    walk(const_cast<TreeView*>(this));
+    return out;
 }
 
 void TreeView::onPointerMove(const Offset2D& p) {
@@ -3379,11 +3443,12 @@ void TreeView::onDraw(Rasterizer& r) const {
 
     r.beginFrame(b);
     const Font* f = r.resolveFont(m_fontFam, m_fontSize);
-    const float textPad = m_indent + 8.0f;
 
     const bool anim = m_anim.running();
     const float t = anim ? m_anim.value() : 1.0f;
     auto lerp = [](float a, float c, float k) { return a + (c - a) * k; };
+
+    if (m_showGuides && !anim) drawGuides(r, b);
 
     // One row at an interpolated vertical slot; `fade` scales its alpha so
     // appearing/vanishing rows blend instead of blinking.
@@ -3398,12 +3463,45 @@ void TreeView::onDraw(Rasterizer& r) const {
             soft.a = 120;
             r.drawRect({b.x, y, b.w, m_rowH}, scale(soft));
         }
+        // Content columns start after the triangle slice: [checkbox][icon].
+        float cx = b.x + contentX(depth);
+        if (m_showChecks) {
+            const Rect box = checkRect(cx, y);
+            r.drawRect(box, scale(hexColor("#0d0e12")));
+            r.drawRectBorder(box, scale(m_checkBorder), 1.0f, 2.0f);
+            if (node->checked()) {
+                r.drawRoundedRect(Rect{box.x + 2.0f, box.y + 2.0f,
+                                       box.w - 4.0f, box.h - 4.0f},
+                                  scale(m_checkFill), 1.5f);
+                const Color tick = scale(hexColor("#ffffff"));
+                r.drawLine({box.x + 3.0f, box.y + box.h * 0.55f},
+                           {box.x + box.w * 0.42f, box.y + box.h - 3.0f}, tick, 1.5f);
+                r.drawLine({box.x + box.w * 0.42f, box.y + box.h - 3.0f},
+                           {box.x + box.w - 2.0f, box.y + 2.5f}, tick, 1.5f);
+            }
+            cx += m_checkSize + 4.0f;
+        }
+        if (m_showIcons) {
+            const float iy = y + (m_rowH - m_iconSize) * 0.5f;
+            const float s = m_iconSize;
+            if (node->folder()) {
+                r.drawRect(Rect{cx, iy + s * 0.28f, s, s * 0.72f}, scale(m_folderColor));
+                r.drawRect(Rect{cx, iy + s * 0.05f, s * 0.5f, s * 0.3f}, scale(m_folderColor));
+            } else {
+                r.drawRect(Rect{cx + s * 0.12f, iy, s * 0.76f, s}, scale(m_fileColor));
+                r.drawTriangle({cx + s * 0.62f, iy},
+                               {cx + s * 0.88f, iy + s * 0.28f},
+                               {cx + s * 0.62f, iy + s * 0.28f},
+                               scale(hexColor("#e8eef7")));
+            }
+            cx += m_iconSize + 4.0f;
+        }
+        cx += 8.0f;
         if (f) {
             const Color tc = sel
                 ? scale(ogui::hexColor("#ffffff"))
                 : scale(m_text);
-            r.drawTextShifted(node->label().c_str(),
-                              b.x + textPad + static_cast<float>(depth) * m_indent,
+            r.drawTextShifted(node->label().c_str(), cx,
                               y + (m_rowH - m_fontSize) * 0.5f, m_fontSize, *f, tc);
         }
         if (!node->children().empty()) {
@@ -3528,8 +3626,58 @@ ToggleSwitch::ToggleSwitch() = default;
 ToggleSwitch::~ToggleSwitch() = default;
 
 void ToggleSwitch::setState(bool state) {
+    if (m_checked == state) return;
     m_checked = state;
-    if (m_onChanged) m_onChanged(state);
+    if (m_onChanged) m_onChanged(m_checked);
+}
+
+void ToggleSwitch::toggle() { setState(!m_checked); }
+
+Rect ToggleSwitch::trackRect() const {
+    const Rect b = bounds();
+    const float h = std::min(b.h, 24.0f);
+    return Rect{b.x, b.y + (b.h - h) * 0.5f, h * 2.0f, h};
+}
+
+void ToggleSwitch::onPointerDown(MouseButton btn, const Offset2D& p) {
+    if (btn != Mouse_Left) return;
+    (void)p;
+    toggle();
+}
+
+void ToggleSwitch::onDraw(Rasterizer& r) const {
+    if (!m_style.isVisible) return;
+    const Rect b = bounds();
+    const Rect tr = trackRect();
+    const float radius = tr.h * 0.5f;
+
+    // Track: dark when off, accent-tinted when on.
+    r.drawRoundedRect(tr, m_checked ? m_dotColor : m_bgColor, radius);
+    r.drawRectBorder(tr, m_checked ? m_dotColor : hexColor("#3a3b44"), 1.0f, radius);
+
+    // ON / OFF segment labels inside the pill.
+    const Font* f = r.resolveFont(m_fontFamily, m_fontSize - 1);
+    const float half = tr.w * 0.5f;
+    if (f) {
+        const Color on = m_checked ? hexColor("#ffffff") : hexColor("#777777");
+        const Color off = m_checked ? hexColor("#777777") : hexColor("#bbbbbb");
+        r.drawText(m_onLabel.c_str(), tr.x + half * 0.5f, tr.y + tr.h * 0.5f,
+                   m_fontSize - 1, m_fontFamily, on, Align::Center, VertAlign::Middle);
+        r.drawText(m_offLabel.c_str(), tr.x + half * 1.5f, tr.y + tr.h * 0.5f,
+                   m_fontSize - 1, m_fontFamily, off, Align::Center, VertAlign::Middle);
+    }
+
+    // Knob slides to the active side.
+    const float kr = tr.h - 6.0f;
+    const float kx = m_checked ? (tr.x + tr.w - kr - 3.0f) : (tr.x + 3.0f);
+    r.drawRoundedRect(Rect{kx, tr.y + 3.0f, kr, kr}, hexColor("#f2f2f2"), kr * 0.5f);
+
+    // Trailing text label.
+    if (!m_text.empty() && f) {
+        r.drawText(m_text.c_str(), tr.x + tr.w + m_gap, b.y + b.h * 0.5f,
+                   m_fontSize, m_fontFamily, m_textColor,
+                   Align::Left, VertAlign::Middle);
+    }
 }
 
 // ------------------------------------------------------------------
