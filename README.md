@@ -218,6 +218,7 @@ borders accent and the arrow flips while open, and text inputs/spinboxes get a
 | `onclick` / `bind` | binding name resolved on click against `Kernel::bind` |
 | `tooltip` | text shown by the hover tooltip after ~0.5 s |
 | `x` `y` `w` `h` | bounds, **relative to the parent**; each accepts pixels (`20`), percent (`"50%"`) or — for `w`/`h` — `"fill"` (see below) |
+| `anchor` | pin edges across parent resizes: `anchor="right"`, `"l,r"`, `"top,bottom"` etc. (`left/right/top/bottom`, short forms `l/r/t/b`, space/comma-separated) |
 | `visible` | `true/false` — an invisible widget (and its subtree) is skipped by drawing *and* input |
 | `style` | name of a `<style>` declared earlier in the document |
 | `bg` `color` `border` `bordercolor` `borderwidth` `radius` | colors/metrics |
@@ -239,6 +240,26 @@ area below the title bar inside a `<window>`, the content width inside a
 Absolute components keep whatever the bounds currently hold, so runtime
 moves (window dragging, splitter panes) survive untouched. A widget with
 no percent/fill components behaves exactly as before.
+
+### Anchors
+
+`anchor` pins the distance between a widget edge and the parent's
+matching edge. The margins are captured on the first layout pass (after
+percent/fill resolution, so the authored units don't matter) and held for
+the rest of the session:
+
+```xml
+<!-- stays 20px from the navbar's right edge, 120px wide -->
+<button id="exit" x="700" y="6" w="120" h="20" anchor="top,right"/>
+<!-- stretches with the parent, keeping a 10px gap on each side -->
+<panel id="band" x="10" y="100" w="620" h="40" anchor="l,r"/>
+```
+
+Anchoring both edges of an axis keeps both margins and stretches the
+widget between them (the anchored size replaces any percent/`fill`
+component on that axis). Anchoring a single edge moves the widget so that
+edge's margin is preserved, while its size keeps following its own spec.
+Axes without anchor bits behave exactly as plain relative geometry.
 
 Element-specific attributes win over the named style, which wins over the
 theme default.

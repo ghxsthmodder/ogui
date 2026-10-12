@@ -524,6 +524,26 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
     if (xm || ym || wm || hm) {
         w->setGeometrySpec(Rect{x, y, wd, ht}, xm, ym, wm, hm);
     }
+    // anchor="left,right,top,bottom" (l/r/t/b accepted, space or comma
+    // separated): pin the described edges' margins across parent resizes.
+    if (const std::string* v = get("anchor")) {
+        uint8_t bits = 0;
+        std::string tok;
+        auto flush = [&tok, &bits]() {
+            if (tok == "l" || tok == "left") bits |= Widget::AnchorLeft;
+            else if (tok == "r" || tok == "right") bits |= Widget::AnchorRight;
+            else if (tok == "t" || tok == "top") bits |= Widget::AnchorTop;
+            else if (tok == "b" || tok == "bottom") bits |= Widget::AnchorBottom;
+            tok.clear();
+        };
+        for (char c : *v) {
+            if (c == ',' || c == ' ' || c == ';' || c == '|') flush();
+            else if (c >= 'A' && c <= 'Z') tok.push_back(char(c - 'A' + 'a'));
+            else tok.push_back(c);
+        }
+        flush();
+        if (bits) w->setAnchor(bits);
+    }
     // Seed the bounds with the numeric values; relative components are
     // corrected by the first layout pass.
     if (hasW || hasH) {

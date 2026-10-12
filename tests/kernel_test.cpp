@@ -504,6 +504,61 @@ static void testTextInputSelectionDraw() {
     }
 }
 
+static void testAnchors() {
+    XmlParser p;
+    auto res = p.parse(R"(<screen id="s">
+  <panel id="bg" x="0" y="0" w="800" h="600" bg="#101010"/>
+  <button id="tr" text="t" x="660" y="20" w="120" h="30" anchor="top,right"/>
+  <panel id="all" x="100" y="100" w="400" h="100" bg="#202020" anchor="l,r,t,b"/>
+  <panel id="fixed" x="30" y="40" w="50" h="50" bg="#303030"/>
+</screen>)");
+    assert(res.root);
+    auto s = std::make_shared<Screen>("s");
+    s->widgets.push_back(res.root);
+    s->width = 800;
+    s->height = 600;
+
+    Kernel k;
+    k.init();
+    k.pushScreen(s);
+
+    InputState st = makeInput();
+    idle(k, st);
+
+    // Find the anchored widgets by walking the root's children.
+    Widget* tr = nullptr;
+    Widget* all = nullptr;
+    Widget* fixed = nullptr;
+    for (const auto& c : res.root->children()) {
+        if (c->id() == "tr") tr = c.get();
+        if (c->id() == "all") all = c.get();
+        if (c->id() == "fixed") fixed = c.get();
+    }
+    CHECK(tr && all && fixed);
+    if (!tr || !all || !fixed) return;
+    CHECK(tr->anchor() == (uint8_t)(Widget::AnchorTop | Widget::AnchorRight));
+
+    // At the authored size the anchor is a no-op.
+    Rect r = tr->bounds();
+    CHECK(r.x == 660 && r.y == 20 && r.w == 120 && r.h == 30);
+
+    s->width = 1000;
+    s->height = 700;
+    idle(k, st);
+
+    // Margins captured at 800x600: right=20, top=20.
+    r = tr->bounds();
+    CHECK(r.x == 860 && r.y == 20 && r.w == 120 && r.h == 30);
+
+    // Both edges of both axes: margins l=100 r=300 t=100 b=400 stretch.
+    r = all->bounds();
+    CHECK(r.x == 100 && r.y == 100 && r.w == 600 && r.h == 200);
+
+    // Unanchored absolute widgets are untouched.
+    r = fixed->bounds();
+    CHECK(r.x == 30 && r.y == 40 && r.w == 50 && r.h == 50);
+}
+
 static void testLabelWrapAndColumnAutoHeight() {
     if (!FontManager::instance().get("sans", 14)) {
         std::cout << "  (no system font; skipping wrap checks)\n";
@@ -1836,6 +1891,7 @@ int main() {
     testTextInputClickAndDrag();
     testTextInputWordSelection();
     testTextInputSelectionDraw();
+    testAnchors();
     testLabelWrapAndColumnAutoHeight();
     testNewWidgets();
     testRadioButtonGroup();

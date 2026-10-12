@@ -104,6 +104,22 @@ public:
     // reposition children call it themselves before reading their bounds.
     void resolveGeometry(float parentW, float parentH);
 
+    // Edge anchors. `left`/`top` pin the authored distance to that edge,
+    // `right`/`bottom` pin the distance to the opposite edge; combining both
+    // edges of an axis (`"left,right"`) keeps both margins and stretches the
+    // widget between them. Margins are captured on the first layout pass
+    // (from the resolved geometry, whatever the x/y/w/h units were) and the
+    // anchored edges then hold that distance while the parent resizes.
+    // Unanchored edges keep the normal per-unit behaviour.
+    enum AnchorBits : uint8_t {
+        AnchorLeft = 1, AnchorRight = 2, AnchorTop = 4, AnchorBottom = 8,
+    };
+    void setAnchor(uint8_t bits) {
+        m_anchor = bits;
+        m_anchorCaptured = false;
+    }
+    uint8_t anchor() const { return m_anchor; }
+
     virtual void layout(float parentWidth, float parentHeight);
 
     // Per-frame tick (dt in seconds). The Kernel advances every widget once
@@ -194,6 +210,9 @@ protected:
     Rect m_bounds{};            // local bounds
     Rect m_geomSpec{};          // authored x/y/w/h (see m_geomModes)
     uint8_t m_geomModes = 0;    // 2 bits per component: GeomMode
+    uint8_t m_anchor = 0;       // AnchorBits
+    bool m_anchorCaptured = false;
+    float m_anchorMargins[4]{};  // left, right, top, bottom (px)
     Matrix4x4 m_transform{};    // parent-space transform
     Style m_style;
     std::string m_tooltip;

@@ -52,7 +52,7 @@ void Widget::removeChild(Ptr child) {
 }
 
 void Widget::resolveGeometry(float parentW, float parentH) {
-    if (m_geomModes == 0) return;
+    if (m_geomModes == 0 && m_anchor == 0) return;
     auto mode = [this](int shift) {
         return static_cast<GeomMode>((m_geomModes >> shift) & 3u);
     };
@@ -64,6 +64,29 @@ void Widget::resolveGeometry(float parentW, float parentH) {
     else if (wm == GeomFill)    b.w = parentW;
     if (hm == GeomPercent)      b.h = m_geomSpec.h * 0.01f * parentH;
     else if (hm == GeomFill)    b.h = parentH;
+
+    if (m_anchor != 0) {
+        if (parentW > 0.0f && parentH > 0.0f) {
+            if (!m_anchorCaptured) {
+                m_anchorMargins[0] = b.x;
+                m_anchorMargins[1] = parentW - (b.x + b.w);
+                m_anchorMargins[2] = b.y;
+                m_anchorMargins[3] = parentH - (b.y + b.h);
+                m_anchorCaptured = true;
+            } else {
+                const float dL = m_anchorMargins[0], dR = m_anchorMargins[1];
+                const float dT = m_anchorMargins[2], dB = m_anchorMargins[3];
+                const bool L = m_anchor & AnchorLeft, R = m_anchor & AnchorRight;
+                const bool T = m_anchor & AnchorTop, B = m_anchor & AnchorBottom;
+                if (L && R)      { b.x = dL; b.w = parentW - dL - dR; }
+                else if (R)       b.x = parentW - dR - b.w;
+                else if (L)       b.x = dL;
+                if (T && B)      { b.y = dT; b.h = parentH - dT - dB; }
+                else if (B)       b.y = parentH - dB - b.h;
+                else if (T)       b.y = dT;
+            }
+        }
+    }
     m_bounds = b;
 }
 
