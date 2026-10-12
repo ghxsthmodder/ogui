@@ -113,9 +113,6 @@ struct Host::Native {
     PFNGLVIEWPORT glViewport = nullptr;
 
     ULONGLONG startTick = 0;
-    int newW = 0, newH = 0;
-    bool hasNewSize = false;
-
     std::vector<uint32_t> pendingChars;   // full Unicode code points
     CharAssembler chars;
 
@@ -143,12 +140,6 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     Host::Native* self = g_windowProcSelf;
     if (!self) return DefWindowProc(hwnd, msg, wp, lp);
     switch (msg) {
-        case WM_SIZE:
-            self->newW = LOWORD(lp);
-            self->newH = HIWORD(lp);
-            self->hasNewSize = true;
-            return 0;
-
         case WM_MOUSEMOVE:
             self->input.mouseX = static_cast<float>(static_cast<short>(LOWORD(lp)));
             self->input.mouseY = static_cast<float>(static_cast<short>(HIWORD(lp)));
@@ -204,15 +195,12 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         }
 
         case WM_DPICHANGED: {
-            // Per-monitor DPI aware: reposition/resize into the suggested RECT
-            // and let the normal WM_SIZE path propagate the new client size.
+            // Per-monitor DPI aware: move/resize into the suggested RECT; the
+            // run loop picks the new client size up on its own.
             const RECT* sugg = reinterpret_cast<const RECT*>(lp);
             SetWindowPos(hwnd, nullptr, sugg->left, sugg->top,
                          sugg->right - sugg->left, sugg->bottom - sugg->top,
                          SWP_NOACTIVATE | SWP_NOZORDER);
-            self->newW = sugg->right - sugg->left;
-            self->newH = sugg->bottom - sugg->top;
-            self->hasNewSize = true;
             return 0;
         }
 
@@ -496,14 +484,23 @@ void Host::run(Kernel& kernel) {
         }
         if (!running || kernel.quitRequested()) break;
 
-        // Size changes.
-        if (n.hasNewSize) {
-            n.hasNewSize = false;
-            if (auto screen = kernel.currentScreen()) {
-                screen->width = static_cast<float>(n.newW);
-                screen->height = static_cast<float>(n.newH);
+        // Size changes: poll the client rect every frame instead of trusting
+        // WM_SIZE. Maximize, snap-tiling and DPI transitions can coalesce or
+        // reorder size messages, so the flag-based path went stale.
+        {
+            RECT rc{};
+            if (GetClientRect(n.hwnd, &rc)) {
+                const int cw = rc.right - rc.left;
+                const int ch = rc.bottom - rc.top;
+                if (auto screen = kernel.currentScreen()) {
+                    if (screen->width != static_cast<float>(cw) ||
+                        screen->height != static_cast<float>(ch)) {
+                        screen->width = static_cast<float>(cw);
+                        screen->height = static_cast<float>(ch);
+                    }
+                }
+                if (n.glViewport) n.glViewport(0, 0, cw, ch);
             }
-            if (n.glViewport) n.glViewport(0, 0, n.newW, n.newH);
         }
 
         // Flush one frame of text events into the input state.

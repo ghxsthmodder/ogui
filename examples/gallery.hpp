@@ -63,6 +63,10 @@ inline ogui::Label* addNavBar(const ogui::Widget::Ptr& root, float width) {
     auto bar = std::make_shared<ogui::Row>();
     bar->setId("navbar");
     bar->setBounds(ogui::Rect{10.0f, 10.0f, width - 20.0f, 32.0f});
+    // x/y/h stay absolute (top-anchored); width tracks the window.
+    bar->setGeometrySpec(ogui::Rect{1.25f, 10.0f, 97.5f, 32.0f},
+                         ogui::Widget::GeomPercent, ogui::Widget::GeomAbsolute,
+                         ogui::Widget::GeomPercent, ogui::Widget::GeomAbsolute);
 
     auto prev = std::make_shared<ogui::Button>();
     prev->setId("nav_prev");

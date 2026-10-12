@@ -154,6 +154,12 @@ void Kernel::switchScreen(std::shared_ptr<Screen> screen) {
     if (!screen) return;
     if (m_screenStack.empty()) pushScreen(screen);
     else {
+        // Screens share one window: the incoming screen adopts the size the
+        // host keeps on the active one, so it never shows up stale.
+        if (auto cur = m_screenStack.back()) {
+            screen->width = cur->width;
+            screen->height = cur->height;
+        }
         m_screenStack.back() = screen;
         setFocus(m_focus, nullptr);
     }
