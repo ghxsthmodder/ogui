@@ -6,6 +6,7 @@
 #include "ogui/font.hpp"
 #include "ogui/host.hpp"
 #include "ogui/imagemanager.hpp"
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <iostream>
@@ -456,6 +457,51 @@ static void testTextInputWordSelection() {
     pressAt(k, st, 120 + 190, wy);
     releaseAt(k, st);
     CHECK(inp->selectedText() == "preto");
+}
+
+static void testTextInputSelectionDraw() {
+    const Font* f = FontManager::instance().get("sans", 14);
+    if (!f) {
+        std::cout << "  (no system font; skipping selection draw checks)\n";
+        return;
+    }
+
+    Kernel k;
+    k.init();
+    k.pushScreen(makeScreen());
+
+    InputState st = makeInput();
+    idle(k, st);
+    TextInput* inp = focusInput(k, st);
+    CHECK(inp != nullptr);
+    if (!inp) return;
+
+    // Selection in the middle of the text: the highlight must span exactly
+    // the selected glyphs (it once measured the substring width from the
+    // text origin, so it only appeared past the middle of the widget).
+    inp->setText("abcdefghijklmnopqrstuvwxyz");
+    inp->setSelection(10, 15);
+
+    const DrawList& dl = k.buildDrawList();
+    float x0 = 1e9f, x1 = -1e9f;
+    int matched = 0;
+    for (const Vertex& v : dl.vertices) {
+        if (std::fabs(v.r - 68.0f / 255.0f) > 0.02f ||
+            std::fabs(v.g - 136.0f / 255.0f) > 0.02f ||
+            std::fabs(v.b - 1.0f) > 0.02f ||
+            std::fabs(v.a - 90.0f / 255.0f) > 0.02f)
+            continue;
+        x0 = std::min(x0, v.x);
+        x1 = std::max(x1, v.x);
+        ++matched;
+    }
+    CHECK(matched == 4);
+    if (matched == 4) {
+        const char* t = "abcdefghijklmnopqrstuvwxyz";
+        const float expectW = f->measureRange(t, 15) - f->measureRange(t, 10);
+        CHECK(std::fabs((x1 - x0) - expectW) < 1.0f);
+        CHECK(x0 >= 120.0f && x1 <= 320.0f + 1.0f);
+    }
 }
 
 static void testLabelWrapAndColumnAutoHeight() {
@@ -1789,6 +1835,7 @@ int main() {
     testTextInputSelection();
     testTextInputClickAndDrag();
     testTextInputWordSelection();
+    testTextInputSelectionDraw();
     testLabelWrapAndColumnAutoHeight();
     testNewWidgets();
     testRadioButtonGroup();

@@ -650,9 +650,7 @@ void TextInput::onDraw(Rasterizer& r) const {
     // Selection highlight goes under the text.
     if (f && hasSelection()) {
         const float x0 = textX + f->measureRange(m_text.c_str(), m_selectionStart);
-        const float x1 = textX +
-                         f->measureRange(m_text.c_str() + m_selectionStart,
-                                         m_selectionEnd - m_selectionStart);
+        const float x1 = textX + f->measureRange(m_text.c_str(), m_selectionEnd);
         Color sel = m_borderColor;
         sel.a = 90;
         r.drawRect({x0, b.y + 3.0f, x1 - x0, b.h - 6.0f}, sel);
