@@ -145,14 +145,14 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             self->input.mouseY = static_cast<float>(static_cast<short>(HIWORD(lp)));
             return 0;
 
-        case WM_LBUTTONDOWN: self->input.mouseDown[0] = true; self->input.mouseButton = 0; SetCapture(hwnd); return 0;
-        case WM_RBUTTONDOWN: self->input.mouseDown[1] = true; self->input.mouseButton = 1; SetCapture(hwnd); return 0;
-        case WM_MBUTTONDOWN: self->input.mouseDown[2] = true; self->input.mouseButton = 2; SetCapture(hwnd); return 0;
+        case WM_LBUTTONDOWN: self->input.mouseX = static_cast<float>(static_cast<short>(LOWORD(lp))); self->input.mouseY = static_cast<float>(static_cast<short>(HIWORD(lp))); self->input.mouseDown[0] = true; self->input.mouseButton = 0; SetCapture(hwnd); return 0;
+        case WM_RBUTTONDOWN: self->input.mouseX = static_cast<float>(static_cast<short>(LOWORD(lp))); self->input.mouseY = static_cast<float>(static_cast<short>(HIWORD(lp))); self->input.mouseDown[1] = true; self->input.mouseButton = 1; SetCapture(hwnd); return 0;
+        case WM_MBUTTONDOWN: self->input.mouseX = static_cast<float>(static_cast<short>(LOWORD(lp))); self->input.mouseY = static_cast<float>(static_cast<short>(HIWORD(lp))); self->input.mouseDown[2] = true; self->input.mouseButton = 2; SetCapture(hwnd); return 0;
         // The second press of a double-click arrives as DBLCLK, not DOWN:
         // treat it as a fresh press so the kernel's click count reaches 2.
-        case WM_LBUTTONDBLCLK: self->input.mouseDown[0] = true; self->input.mouseButton = 0; SetCapture(hwnd); return 0;
-        case WM_RBUTTONDBLCLK: self->input.mouseDown[1] = true; self->input.mouseButton = 1; SetCapture(hwnd); return 0;
-        case WM_MBUTTONDBLCLK: self->input.mouseDown[2] = true; self->input.mouseButton = 2; SetCapture(hwnd); return 0;
+        case WM_LBUTTONDBLCLK: self->input.mouseX = static_cast<float>(static_cast<short>(LOWORD(lp))); self->input.mouseY = static_cast<float>(static_cast<short>(HIWORD(lp))); self->input.mouseDown[0] = true; self->input.mouseButton = 0; SetCapture(hwnd); return 0;
+        case WM_RBUTTONDBLCLK: self->input.mouseX = static_cast<float>(static_cast<short>(LOWORD(lp))); self->input.mouseY = static_cast<float>(static_cast<short>(HIWORD(lp))); self->input.mouseDown[1] = true; self->input.mouseButton = 1; SetCapture(hwnd); return 0;
+        case WM_MBUTTONDBLCLK: self->input.mouseX = static_cast<float>(static_cast<short>(LOWORD(lp))); self->input.mouseY = static_cast<float>(static_cast<short>(HIWORD(lp))); self->input.mouseDown[2] = true; self->input.mouseButton = 2; SetCapture(hwnd); return 0;
         case WM_LBUTTONUP:   self->input.mouseDown[0] = false; self->input.mouseButton = -1; ReleaseCapture(); return 0;
         case WM_RBUTTONUP:   self->input.mouseDown[1] = false; self->input.mouseButton = -1; ReleaseCapture(); return 0;
         case WM_MBUTTONUP:   self->input.mouseDown[2] = false; self->input.mouseButton = -1; ReleaseCapture(); return 0;
@@ -486,6 +486,19 @@ void Host::run(Kernel& kernel) {
             if (msg.message == WM_QUIT) { running = false; break; }
             TranslateMessage(&msg);
             DispatchMessage(&msg);
+            // Feed button edges to the kernel right away. Draining the whole
+            // queue first lets queued moves overwrite the pointer position
+            // before the press is seen, so drag-select started several
+            // characters late, at wherever the mouse had reached.
+            switch (msg.message) {
+                case WM_LBUTTONDOWN:  case WM_LBUTTONUP:   case WM_LBUTTONDBLCLK:
+                case WM_RBUTTONDOWN:  case WM_RBUTTONUP:   case WM_RBUTTONDBLCLK:
+                case WM_MBUTTONDOWN:  case WM_MBUTTONUP:   case WM_MBUTTONDBLCLK:
+                    kernel.frame(n.input);
+                    break;
+                default:
+                    break;
+            }
         }
         if (!running || kernel.quitRequested()) break;
 
