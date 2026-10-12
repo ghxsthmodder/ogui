@@ -500,11 +500,32 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
     if (const std::string* v = get("tooltip")) w->setTooltip(*v);
 
     // ---- geometry (layout happens later; bounds seed the widget) ----
+    // x/y/w/h accept pixels, "NN%" (relative to the parent's content size)
+    // or "fill" (w/h: take the whole parent content size). Percent and fill
+    // components are re-resolved on every layout pass, so resizing the
+    // screen/window reflows the tree.
     float x = 0, y = 0, wd = 0, ht = 0;
-    bool hasX = get("x") && toFloat(*get("x"), x);
-    bool hasY = get("y") && toFloat(*get("y"), y);
-    bool hasW = get("w") && toFloat(*get("w"), wd);
-    bool hasH = get("h") && toFloat(*get("h"), ht);
+    Widget::GeomMode xm = Widget::GeomAbsolute, ym = Widget::GeomAbsolute,
+                     wm = Widget::GeomAbsolute, hm = Widget::GeomAbsolute;
+    auto parseGeom = [&](const std::string* s, float& val,
+                         Widget::GeomMode& mode) -> bool {
+        if (!s) return false;
+        if (*s == "fill") { mode = Widget::GeomFill; return true; }
+        if (!s->empty() && s->back() == '%') {
+            mode = Widget::GeomPercent;
+            return toFloat(s->substr(0, s->size() - 1), val);
+        }
+        return toFloat(*s, val);
+    };
+    bool hasX = parseGeom(get("x"), x, xm);
+    bool hasY = parseGeom(get("y"), y, ym);
+    bool hasW = parseGeom(get("w"), wd, wm);
+    bool hasH = parseGeom(get("h"), ht, hm);
+    if (xm || ym || wm || hm) {
+        w->setGeometrySpec(Rect{x, y, wd, ht}, xm, ym, wm, hm);
+    }
+    // Seed the bounds with the numeric values; relative components are
+    // corrected by the first layout pass.
     if (hasW || hasH) {
         Rect b = w->bounds();
         w->setBounds(Rect{hasX ? x : b.x, hasY ? y : b.y,

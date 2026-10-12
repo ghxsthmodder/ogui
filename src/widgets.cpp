@@ -205,6 +205,7 @@ void Window::layout(float parentWidth, float parentHeight) {
         // Undo the offset applied on the previous frame before recomputing:
         // layout() runs every frame and these bounds are authoritative.
         c->setBounds(Rect{cb.x, cb.y - m_childrenOffsetY, cb.w, cb.h});
+        c->resolveGeometry(w, innerH);
         c->layout(w, innerH);
         Rect after = c->bounds();
         c->setBounds(Rect{after.x, after.y + th, after.w, after.h});
@@ -297,7 +298,10 @@ void ScrollView::layout(float parentWidth, float parentHeight) {
     // Children keep their authored bounds; they only lay themselves out
     // (a <column> page inside, ...).
     for (const auto& c : m_children) {
-        if (c) c->layout(m_viewport.w, m_viewport.h);
+        if (c) {
+            c->resolveGeometry(m_viewport.w, m_viewport.h);
+            c->layout(m_viewport.w, m_viewport.h);
+        }
     }
 
     // Scrollable area = bounding box of the visible children.
@@ -1004,8 +1008,9 @@ void Column::layout(float parentWidth, float parentHeight) {
 
     for (const auto& c : children()) {
         if (!c) continue;
+        // Percent/fill children resolve against the column's content width.
+        c->resolveGeometry(parentWidth - pad * 2.0f, parentHeight);
         Rect cb = c->bounds();
-
         // Stack vertically; keep an explicitly authored x (indentation) and
         // give zero-width children the full available width.
         float cx = cb.x;
@@ -1048,6 +1053,8 @@ void Row::layout(float parentWidth, float parentHeight) {
     float maxH = 0.0f;
     for (const auto& c : children()) {
         if (!c) continue;
+        // Percent/fill children resolve against the row's content area.
+        c->resolveGeometry(parentWidth, parentHeight);
         Rect cb = c->bounds();
         const float cw = cb.w > 0.0f ? cb.w : 100.0f;
         const float ch = cb.h > 0.0f ? cb.h : parentHeight;
@@ -2105,6 +2112,7 @@ void Tabs::layout(float parentWidth, float parentHeight) {
             t->setVisible(i == m_active);
             ++i;
         }
+        c->resolveGeometry(cw, ch);
         c->layout(cw, ch);
     }
 }

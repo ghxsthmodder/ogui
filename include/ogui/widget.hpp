@@ -86,6 +86,24 @@ public:
     void setSize(float w, float h) { m_bounds.w = w; m_bounds.h = h; }
     void setSize(const Rect& r) { m_bounds = r; }
 
+    // Relative geometry (authored by the XML parser).
+    // Percent scales against the parent's content size; Fill (w/h) takes it
+    // whole. Absolute components keep whatever the bounds currently hold, so
+    // runtime moves/resizes of non-relative widgets survive untouched.
+    enum GeomMode : uint8_t { GeomAbsolute = 0, GeomPercent = 1, GeomFill = 2 };
+
+    void setGeometrySpec(const Rect& spec, GeomMode xm, GeomMode ym,
+                         GeomMode wm, GeomMode hm) {
+        m_geomSpec = spec;
+        m_geomModes = static_cast<uint8_t>(xm | (ym << 2) | (wm << 4) | (hm << 6));
+    }
+    const Rect& geometrySpec() const { return m_geomSpec; }
+
+    // Re-resolve the percent/fill components of the spec against the parent
+    // content size. layout() passes call this on children; containers that
+    // reposition children call it themselves before reading their bounds.
+    void resolveGeometry(float parentW, float parentH);
+
     virtual void layout(float parentWidth, float parentHeight);
 
     // Per-frame tick (dt in seconds). The Kernel advances every widget once
@@ -174,6 +192,8 @@ protected:
     Kernel* m_kernel = nullptr;
     std::vector<Ptr> m_children;
     Rect m_bounds{};            // local bounds
+    Rect m_geomSpec{};          // authored x/y/w/h (see m_geomModes)
+    uint8_t m_geomModes = 0;    // 2 bits per component: GeomMode
     Matrix4x4 m_transform{};    // parent-space transform
     Style m_style;
     std::string m_tooltip;

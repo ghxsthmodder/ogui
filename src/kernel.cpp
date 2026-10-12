@@ -272,7 +272,9 @@ void Kernel::update() {
     // Every layout implementation is idempotent, so the second pass in
     // buildDrawList is harmless.
     for (const auto& w : screen->widgets) {
-        if (w) w->layout(screen->width, screen->height);
+        if (!w) continue;
+        w->resolveGeometry(screen->width, screen->height);
+        w->layout(screen->width, screen->height);
     }
 
     const Offset2D p{m_input.mouseX, m_input.mouseY};
@@ -406,6 +408,7 @@ const DrawList& Kernel::buildDrawList() {
     for (const auto& w : screen->widgets) {
         if (!w) continue;
         // Containers (Column/Row/ScrollView) position their children first.
+        w->resolveGeometry(screen->width, screen->height);
         w->layout(screen->width, screen->height);
         drawTree(r, w.get(), 0.0f, 0.0f);
     }

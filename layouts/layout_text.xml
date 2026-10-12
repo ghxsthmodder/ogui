@@ -1,6 +1,6 @@
 <screen id="text">
-  <panel id="bg" x="0" y="0" w="800" h="600" bg="#161616"/>
-  <label id="lbl_group" x="10" y="52" w="780" h="20" text="Texto: entrada de dados"
+  <panel id="bg" x="0" y="0" w="100%" h="100%" bg="#161616"/>
+  <label id="lbl_group" x="1.25%" y="52" w="97.5%" h="20" text="Texto: entrada de dados"
          font sans 16 color="#66ee66"/>
 
   <label x="10" y="84" w="740" h="18" text="TextInput (linha unica)"/>
@@ -8,7 +8,7 @@
              bg="#111" color="#ccc" border="#4488ff" radius="6"/>
 
   <label x="10" y="146" w="740" h="18" text="TextArea (varias linhas + barra de rolagem)"/>
-  <textarea id="ta_notes" x="10" y="168" w="740" h="120"
+  <textarea id="ta_notes" x="1.25%" y="168" w="92.5%" h="20%"
             placeholder="Notas (Enter quebra linha)..."
             bg="#111" color="#ccc" border="#4488ff" radius="6"/>
 

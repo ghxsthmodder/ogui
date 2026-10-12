@@ -1,6 +1,6 @@
 <screen id="selection">
-  <panel id="bg" x="0" y="0" w="800" h="600" bg="#161616"/>
-  <label id="lbl_group" x="10" y="52" w="780" h="20" text="Selecao: listas, arvore e combo"
+  <panel id="bg" x="0" y="0" w="100%" h="100%" bg="#161616"/>
+  <label id="lbl_group" x="1.25%" y="52" w="97.5%" h="20" text="Selecao: listas, arvore e combo"
          font sans 16 color="#66ee66"/>
 
   <label x="10" y="84" w="360" h="18" text="ListBox"/>

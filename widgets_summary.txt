@@ -28,6 +28,7 @@ Implemented widgets (tags):
 - table/th/tr/cell: data grid (header-click sorting, selection, wheel, keys, header-edge column resize, inline cell editing, marquee scrollingText)
 - spinbox: numeric value with -/+ buttons (step, decimals, wrap min<->max, prefix/suffix, keyboard); drawn as ONE unified widget (flat button regions + hairline separators)
 - optionspin: text-only spin [ < ][ option ][ > ] cycling options="A,B,C" (wrap default true, keyboard, on-changed callback)
+- relative geometry: x/y/w/h accept "NN%" or "fill" (w/h); re-resolved against the parent content area every layout pass, so window resize/maximize reflows the tree (absolute components keep runtime moves)
 - rangeslider: two-thumb [low,high] range slider (drag nearest thumb, filled band, keyboard nudge)
 - splitter: two panes with a draggable divider (split fraction, orientation="vertical|horizontal"); children are placed in the splitter's local space and resize live while dragging
 

@@ -51,14 +51,33 @@ void Widget::removeChild(Ptr child) {
     }
 }
 
+void Widget::resolveGeometry(float parentW, float parentH) {
+    if (m_geomModes == 0) return;
+    auto mode = [this](int shift) {
+        return static_cast<GeomMode>((m_geomModes >> shift) & 3u);
+    };
+    Rect b = m_bounds;
+    const GeomMode xm = mode(0), ym = mode(2), wm = mode(4), hm = mode(6);
+    if (xm == GeomPercent) b.x = m_geomSpec.x * 0.01f * parentW;
+    if (ym == GeomPercent) b.y = m_geomSpec.y * 0.01f * parentH;
+    if (wm == GeomPercent)      b.w = m_geomSpec.w * 0.01f * parentW;
+    else if (wm == GeomFill)    b.w = parentW;
+    if (hm == GeomPercent)      b.h = m_geomSpec.h * 0.01f * parentH;
+    else if (hm == GeomFill)    b.h = parentH;
+    m_bounds = b;
+}
+
 void Widget::layout(float parentWidth, float parentHeight) {
     // Base widgets have no opinion about their children's placement, but
     // containers nested below still need to run their own layout pass.
     // Subclasses that position children (Column/Row/ScrollView) override this
     // and do NOT call the base implementation.
+    const float pw = m_bounds.w > 0.0f ? m_bounds.w : parentWidth;
+    const float ph = m_bounds.h > 0.0f ? m_bounds.h : parentHeight;
     for (const auto& c : m_children) {
-        if (c) c->layout(m_bounds.w > 0.0f ? m_bounds.w : parentWidth,
-                         m_bounds.h > 0.0f ? m_bounds.h : parentHeight);
+        if (!c) continue;
+        c->resolveGeometry(pw, ph);
+        c->layout(pw, ph);
     }
 }
 

@@ -217,12 +217,28 @@ borders accent and the arrow flips while open, and text inputs/spinboxes get a
 | `id` | lookup key for `Kernel::findWidget/setText/getText` and `bind()` |
 | `onclick` / `bind` | binding name resolved on click against `Kernel::bind` |
 | `tooltip` | text shown by the hover tooltip after ~0.5 s |
-| `x` `y` `w` `h` | bounds, **relative to the parent** |
+| `x` `y` `w` `h` | bounds, **relative to the parent**; each accepts pixels (`20`), percent (`"50%"`) or — for `w`/`h` — `"fill"` (see below) |
 | `visible` | `true/false` — an invisible widget (and its subtree) is skipped by drawing *and* input |
 | `style` | name of a `<style>` declared earlier in the document |
 | `bg` `color` `border` `bordercolor` `borderwidth` `radius` | colors/metrics |
 | `padding` `margin` | layout knobs (`<column>` uses both) |
 | `font` `fontsize` | `font="sans 20"` or the legacy `font sans 20 color "#66ee66"` |
+
+### Relative geometry (resize / maximize)
+
+Percent and fill components are re-resolved on every layout pass against
+the parent's content area (the screen for top-level widgets, the inner
+area below the title bar inside a `<window>`, the content width inside a
+`<column>`), so resizing or maximizing the window reflows the tree:
+
+```xml
+<panel id="bg" x="0" y="0" w="100%" h="100%" bg="#161616"/>
+<slider  id="sl" x="1.25%" y="292" w="92.5%" h="20"/>
+```
+
+Absolute components keep whatever the bounds currently hold, so runtime
+moves (window dragging, splitter panes) survive untouched. A widget with
+no percent/fill components behaves exactly as before.
 
 Element-specific attributes win over the named style, which wins over the
 theme default.

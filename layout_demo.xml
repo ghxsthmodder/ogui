@@ -1,8 +1,8 @@
 <screen id="basics">
-  <panel id="bg" x="0" y="0" w="800" h="600" bg="#161616"/>
+  <panel id="bg" x="0" y="0" w="100%" h="100%" bg="#161616"/>
   <!-- The gallery injects a Prev/Title/Next nav bar across the top; content
        starts at y=52 so nothing hides behind it. -->
-  <label id="lbl_group" x="10" y="52" w="780" h="20" text="Basico: controles comuns"
+  <label id="lbl_group" x="1.25%" y="52" w="97.5%" h="20" text="Basico: controles comuns"
          font sans 16 color="#66ee66"/>
 
   <row id="r_btns" x="10" y="82" w="740" h="40">
@@ -12,10 +12,10 @@
             bg="#555" color="#fff" radius="6" tooltip="Dispara onLoad"/>
   </row>
 
-  <textinput id="txt_log" x="10" y="130" w="740" h="28"
+  <textinput id="txt_log" x="1.25%" y="130" w="92.5%" h="28"
              placeholder="Digite algo..."
              bg="#111" color="#ccc" border="#4488ff" radius="6"/>
-  <label id="lbl_status" x="10" y="166" w="740" h="20" text="Boas-vindas!"
+  <label id="lbl_status" x="1.25%" y="166" w="92.5%" h="20" text="Boas-vindas!"
          font sans 16 color="#66ee66"/>
 
   <row id="r_flags" x="10" y="196" w="740" h="22">
@@ -26,13 +26,13 @@
     <toggleswitch id="ts_demo" x="0" y="0" w="60" h="22" checked="true"/>
   </row>
 
-  <separator id="sep_demo" x="10" y="230" w="740" h="6" thickness="1"/>
+  <separator id="sep_demo" x="1.25%" y="230" w="92.5%" h="6" thickness="1"/>
 
-  <label id="lbl_pb" x="10" y="248" w="740" h="18" text="Progresso (o slider abaixo o controla)"/>
-  <progress id="pb_demo" x="10" y="270" w="740" h="12" value="0.5" color="#66ee66" radius="5"/>
-  <slider id="sl_demo" x="10" y="292" w="740" h="20" min="0" max="100" value="50"/>
+  <label id="lbl_pb" x="1.25%" y="248" w="92.5%" h="18" text="Progresso (o slider abaixo o controla)"/>
+  <progress id="pb_demo" x="1.25%" y="270" w="92.5%" h="12" value="0.5" color="#66ee66" radius="5"/>
+  <slider id="sl_demo" x="1.25%" y="292" w="92.5%" h="20" min="0" max="100" value="50"/>
 
-  <label id="lbl_img_t" x="10" y="316" w="740" h="16"
+  <label id="lbl_img_t" x="1.25%" y="316" w="92.5%" h="16"
          text="Image: ajustado (esq.), tileado (dir.)"/>
   <image id="img_demo" src="assets/checker.png" x="10" y="336" w="180" h="90"
          border="#4488ff"/>

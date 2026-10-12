@@ -1,6 +1,6 @@
 <screen id="containers">
-  <panel id="bg" x="0" y="0" w="800" h="600" bg="#161616"/>
-  <label id="lbl_group" x="10" y="52" w="780" h="20" text="Containers: janela, grupo, splitter, scroll e abas"
+  <panel id="bg" x="0" y="0" w="100%" h="100%" bg="#161616"/>
+  <label id="lbl_group" x="1.25%" y="52" w="97.5%" h="20" text="Containers: janela, grupo, splitter, scroll e abas"
          font sans 16 color="#66ee66"/>
 
   <window id="win_demo" x="10" y="84" w="360" h="150" title="Janela"
@@ -37,7 +37,7 @@
            text="Um paragrafo comprido que ultrapassa a altura da viewport, por isso mora dentro de um ScrollView. Continue rolando para ver o resto do texto aparecer linha a linha conforme o conteudo se desloca para cima."/>
   </scrollview>
 
-  <tabs id="tb_demo" x="10" y="486" w="780" h="100" theight="24" active="0"
+  <tabs id="tb_demo" x="1.25%" y="486" w="97.5%" h="16%" theight="24" active="0"
         headercolor="#222" tabcolor="#1a1a1a" activecolor="#2a2a2a" accent="#4488ff">
     <tab label="Aba 1">
       <label x="12" y="8" w="740" h="20" text="Conteudo da primeira aba."/>

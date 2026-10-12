@@ -1636,6 +1636,74 @@ static void testImage() {
     CHECK(dl.cmds.size() >= 1);
 }
 
+static void testRelativeGeometry() {
+    Kernel k;
+    k.init();
+    XmlParser p;
+    auto res = p.parse(R"XML(<screen id="s">
+  <panel id="bg" x="0" y="0" w="100%" h="100%" bg="#101010"/>
+  <panel id="rel" x="10%" y="20%" w="50%" h="fill" bg="#222"/>
+  <panel id="abs" x="12" y="150" w="64" h="32" bg="#333"/>
+</screen>)XML");
+    assert(res.root);
+    auto s = std::make_shared<Screen>("s");
+    s->widgets.push_back(res.root);
+    s->width = 800;
+    s->height = 600;
+    k.pushScreen(s);
+
+    InputState st = makeInput();
+    k.frame(st);
+
+    auto* bg = dynamic_cast<Panel*>(k.findWidget("bg"));
+    auto* rel = dynamic_cast<Panel*>(k.findWidget("rel"));
+    auto* ab = dynamic_cast<Panel*>(k.findWidget("abs"));
+    CHECK(bg && rel && ab);
+    CHECK(std::fabs(bg->bounds().w - 800.0f) < 0.01f);
+    CHECK(std::fabs(bg->bounds().h - 600.0f) < 0.01f);
+    CHECK(std::fabs(rel->bounds().x - 80.0f) < 0.01f);
+    CHECK(std::fabs(rel->bounds().y - 120.0f) < 0.01f);
+    CHECK(std::fabs(rel->bounds().w - 400.0f) < 0.01f);
+    CHECK(std::fabs(rel->bounds().h - 600.0f) < 0.01f);   // fill = parent h
+    CHECK(ab->bounds().x == 12.0f && ab->bounds().w == 64.0f);
+
+    // Resize (the maximize path): percent/fill reflow, absolute survives.
+    s->width = 1000;
+    s->height = 800;
+    k.frame(st);
+    CHECK(std::fabs(bg->bounds().w - 1000.0f) < 0.01f);
+    CHECK(std::fabs(rel->bounds().x - 100.0f) < 0.01f);
+    CHECK(std::fabs(rel->bounds().y - 160.0f) < 0.01f);
+    CHECK(std::fabs(rel->bounds().w - 500.0f) < 0.01f);
+    CHECK(std::fabs(rel->bounds().h - 800.0f) < 0.01f);
+    CHECK(ab->bounds().x == 12.0f && ab->bounds().w == 64.0f);
+
+    // Percent children inside a Window resolve against the inner area
+    // (below the title bar) and keep the title offset.
+    Kernel k2;
+    k2.init();
+    auto res2 = p.parse(R"XML(<screen id="s">
+  <window id="win" x="0" y="0" w="100%" h="100%" title="t">
+    <panel id="pw" x="0" y="0" w="100%" h="50%" bg="#222"/>
+  </window>
+</screen>)XML");
+    assert(res2.root);
+    auto s2 = std::make_shared<Screen>("s");
+    s2->widgets.push_back(res2.root);
+    s2->width = 800;
+    s2->height = 600;
+    k2.pushScreen(s2);
+    k2.frame(st);
+    auto* win = dynamic_cast<Window*>(k2.findWidget("win"));
+    auto* pw = dynamic_cast<Panel*>(k2.findWidget("pw"));
+    CHECK(win && pw);
+    CHECK(std::fabs(win->bounds().w - 800.0f) < 0.01f);
+    const float th = win->titleHeight();
+    CHECK(std::fabs(pw->bounds().w - 800.0f) < 0.01f);
+    CHECK(std::fabs(pw->bounds().h - (600.0f - th) * 0.5f) < 0.01f);
+    CHECK(std::fabs(pw->bounds().y - th) < 0.01f);
+}
+
 int main() {
     testDrawList();
     testHitTestAndFocus();
@@ -1661,6 +1729,7 @@ int main() {
     testTableFeatures();
     testSimplePorts();
     testImage();
+    testRelativeGeometry();
     testHost();
 
     if (g_failures) {
