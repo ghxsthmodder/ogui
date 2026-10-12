@@ -1,0 +1,43 @@
+<screen id="basics">
+  <panel id="bg" x="0" y="0" w="800" h="600" bg="#161616"/>
+  <!-- The gallery injects a Prev/Title/Next nav bar across the top; content
+       starts at y=52 so nothing hides behind it. -->
+  <label id="lbl_group" x="10" y="52" w="780" h="20" text="Basico: controles comuns"
+         font sans 16 color="#66ee66"/>
+
+  <row id="r_btns" x="10" y="82" w="740" h="40">
+    <button id="btn_start" onclick="onStart" text="Iniciar" x="0" y="0" w="200" h="40"
+            bg="#4488ff" color="#ffffff" radius="6" tooltip="Dispara onStart"/>
+    <button id="btn_load" onclick="onLoad" text="Carregar" x="0" y="0" w="200" h="40"
+            bg="#555" color="#fff" radius="6" tooltip="Dispara onLoad"/>
+  </row>
+
+  <textinput id="txt_log" x="10" y="130" w="740" h="28"
+             placeholder="Digite algo..."
+             bg="#111" color="#ccc" border="#4488ff" radius="6"/>
+  <label id="lbl_status" x="10" y="166" w="740" h="20" text="Boas-vindas!"
+         font sans 16 color="#66ee66"/>
+
+  <row id="r_flags" x="10" y="196" w="740" h="22">
+    <checkbox id="cb_demo" text="Ativado" x="0" y="0" w="120" h="22" checked="false"/>
+    <radiobutton id="rb_a" text="A" x="0" y="0" w="40" h="22" group="g1" checked="true"/>
+    <radiobutton id="rb_b" text="B" x="0" y="0" w="40" h="22" group="g1"/>
+    <radiobutton id="rb_c" text="C" x="0" y="0" w="40" h="22" group="g1"/>
+    <toggleswitch id="ts_demo" x="0" y="0" w="60" h="22" checked="true"/>
+  </row>
+
+  <separator id="sep_demo" x="10" y="230" w="740" h="6" thickness="1"/>
+
+  <label id="lbl_pb" x="10" y="248" w="740" h="18" text="Progresso (o slider abaixo o controla)"/>
+  <progress id="pb_demo" x="10" y="270" w="740" h="12" value="0.5" color="#66ee66" radius="5"/>
+  <slider id="sl_demo" x="10" y="292" w="740" h="20" min="0" max="100" value="50"/>
+
+  <label id="lbl_img_t" x="10" y="316" w="740" h="16"
+         text="Image: ajustado (esq.), tileado (dir.)"/>
+  <image id="img_demo" src="assets/checker.png" x="10" y="336" w="180" h="90"
+         border="#4488ff"/>
+  <image id="img_tile" src="assets/checker.png" x="200" y="336" w="300" h="90"
+         tile="true" border="#4488ff"/>
+  <label id="lbl_img" x="510" y="336" w="280" h="90" wrap="true"
+         text="src aponta para o arquivo RGBA (PNG via stb). tile repete a textura; sem tile ela e esticada ao bounds."/>
+</screen>

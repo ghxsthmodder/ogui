@@ -1,0 +1,36 @@
+<screen id="selection">
+  <panel id="bg" x="0" y="0" w="800" h="600" bg="#161616"/>
+  <label id="lbl_group" x="10" y="52" w="780" h="20" text="Selecao: listas, arvore e combo"
+         font sans 16 color="#66ee66"/>
+
+  <label x="10" y="84" w="360" h="18" text="ListBox"/>
+  <listbox id="lb_items" x="10" y="106" w="360" h="120" rowheight="22"
+           selected="0" bg="#111" color="#ccc" border="#4488ff">
+    <item label="Alpha"/>
+    <item label="Beta"/>
+    <item label="Gamma"/>
+    <item label="Delta"/>
+  </listbox>
+
+  <label x="390" y="84" w="400" h="18" text="ComboBox"/>
+  <combobox id="cmb_fps" x="390" y="106" w="240" h="28" selected="1" rowheight="22"
+            bg="#111" color="#ccc" border="#4488ff">
+    <option label="Fps: 30"/>
+    <option label="Fps: 60"/>
+    <option label="Fps: 120"/>
+  </combobox>
+
+  <label x="390" y="150" w="400" h="18" text="TreeView (encolhe ao recolher)"/>
+  <tree id="tr_scene" x="390" y="172" w="400" h="180" rowheight="22"
+        bg="#111" color="#ccc" border="#4488ff" accent="#66ee66">
+    <treeitem label="Cena" expanded="true">
+      <treeitem label="Luz"/>
+      <treeitem label="Camera"/>
+      <treeitem label="Sol" expanded="true">
+        <treeitem label="Hemi"/>
+        <treeitem label="Spot"/>
+      </treeitem>
+    </treeitem>
+    <treeitem label="Terreno"/>
+  </tree>
+</screen>

@@ -1,0 +1,1511 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Especificação Esquemática Completa de Widgets - OpenGL GUI</title>
+  <style>
+    /* Estilos estritamente esquemáticos e funcionais (wireframe técnico) */
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: monospace, monospace;
+      font-size: 13px;
+      line-height: 1.4;
+      background-color: #f4f4f4;
+      color: #111;
+      margin: 0;
+      padding: 16px;
+      padding-bottom: 50px; /* espaço para statusbar */
+    }
+
+    h1, h2, h3 {
+      font-family: monospace;
+      margin-top: 0;
+      border-bottom: 2px solid #000;
+      padding-bottom: 4px;
+    }
+
+    h1 { font-size: 18px; margin-bottom: 12px; }
+    h2 { font-size: 14px; margin-top: 20px; margin-bottom: 10px; background: #e5e5e5; padding: 4px 8px; border-bottom: 1px solid #000; }
+    h3 { font-size: 12px; margin-top: 10px; margin-bottom: 6px; border-bottom: 1px dashed #666; }
+
+    .section-card {
+      background: #fff;
+      border: 1px solid #000;
+      padding: 14px;
+      margin-bottom: 18px;
+    }
+
+    .widget-group {
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px dotted #ccc;
+    }
+
+    .widget-group:last-child {
+      border-bottom: none;
+      margin-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    .hint {
+      color: #555;
+      font-size: 11px;
+      margin-top: 3px;
+      margin-bottom: 8px;
+    }
+
+    button {
+      font-family: monospace;
+      font-size: 12px;
+      background: #eee;
+      border: 1px solid #333;
+      color: #000;
+      padding: 3px 8px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #ddd;
+    }
+
+    button:active {
+      background: #ccc;
+    }
+
+    input[type="text"], input[type="number"], select {
+      font-family: monospace;
+      font-size: 12px;
+      border: 1px solid #333;
+      padding: 3px 6px;
+      background: #fff;
+    }
+
+    .row-flex {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    /* --- 1. ENTRADA DE DADOS & NUMÉRICOS --- */
+    .h-spinbox {
+      display: inline-flex;
+      align-items: stretch;
+      border: 1px solid #000;
+    }
+    .h-spinbox button {
+      border: none;
+      border-right: 1px solid #000;
+      padding: 3px 8px;
+      background: #e4e4e4;
+    }
+    .h-spinbox button:last-child {
+      border-right: none;
+      border-left: 1px solid #000;
+    }
+    .h-spinbox .spin-val {
+      min-width: 90px;
+      text-align: center;
+      padding: 3px 8px;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .v-spinbox {
+      display: inline-flex;
+      align-items: stretch;
+      border: 1px solid #000;
+    }
+    .v-spinbox .spin-val {
+      min-width: 80px;
+      padding: 3px 8px;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .v-spinbox .btn-col {
+      display: flex;
+      flex-direction: column;
+      border-left: 1px solid #000;
+    }
+    .v-spinbox .btn-col button {
+      border: none;
+      padding: 1px 6px;
+      font-size: 9px;
+      line-height: 10px;
+      background: #e4e4e4;
+    }
+    .v-spinbox .btn-col button:first-child {
+      border-bottom: 1px solid #000;
+    }
+
+    /* Color picker */
+    .color-swatch-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid #000;
+      padding: 3px 8px;
+      background: #fff;
+      cursor: pointer;
+    }
+    .color-box {
+      width: 14px;
+      height: 14px;
+      border: 1px solid #000;
+      display: inline-block;
+    }
+    .color-popup {
+      display: none;
+      position: absolute;
+      background: #fff;
+      border: 2px solid #000;
+      padding: 10px;
+      z-index: 100;
+      width: 240px;
+      box-shadow: 4px 4px 0 #999;
+    }
+
+    /* Range slider duplo */
+    .range-dual-container {
+      position: relative;
+      width: 240px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+    }
+    .range-dual-track {
+      position: absolute;
+      width: 100%;
+      height: 6px;
+      background: #eee;
+      border: 1px solid #000;
+    }
+    .range-dual-fill {
+      position: absolute;
+      height: 6px;
+      background: #555;
+    }
+    .range-dual-input {
+      position: absolute;
+      width: 100%;
+      pointer-events: none;
+      -webkit-appearance: none;
+      background: transparent;
+      margin: 0;
+    }
+    .range-dual-input::-webkit-slider-thumb {
+      pointer-events: auto;
+      -webkit-appearance: none;
+      width: 12px;
+      height: 18px;
+      background: #fff;
+      border: 2px solid #000;
+      cursor: pointer;
+    }
+    .range-dual-input::-moz-range-thumb {
+      pointer-events: auto;
+      width: 12px;
+      height: 18px;
+      background: #fff;
+      border: 2px solid #000;
+      cursor: pointer;
+    }
+
+    /* ToggleSwitch */
+    .toggle-switch {
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid #000;
+      cursor: pointer;
+      user-select: none;
+      background: #e4e4e4;
+    }
+    .toggle-switch-part {
+      padding: 3px 8px;
+      font-size: 11px;
+    }
+    .toggle-switch-part.active {
+      background: #000;
+      color: #fff;
+      font-weight: bold;
+    }
+
+    /* PathPicker */
+    .path-picker {
+      display: inline-flex;
+      align-items: stretch;
+      border: 1px solid #000;
+    }
+    .path-picker input {
+      border: none;
+      width: 260px;
+      outline: none;
+      padding: 4px 6px;
+    }
+    .path-picker button {
+      border: none;
+      border-left: 1px solid #000;
+      background: #e4e4e4;
+      padding: 4px 10px;
+    }
+
+    /* SearchInput */
+    .search-input-box {
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid #000;
+      padding: 0 4px;
+      background: #fff;
+    }
+    .search-input-box input {
+      border: none;
+      outline: none;
+      padding: 4px;
+      width: 180px;
+    }
+    .search-input-box .clear-btn {
+      cursor: pointer;
+      font-weight: bold;
+      padding: 0 4px;
+      color: #666;
+    }
+    .search-input-box .clear-btn:hover {
+      color: #000;
+    }
+
+    /* --- 2. NAVEGAÇÃO, CONTEXTO, MODAIS E LAYOUTS --- */
+    .menubar {
+      display: flex;
+      background: #e4e4e4;
+      border: 1px solid #000;
+      position: relative;
+    }
+    .menu-item {
+      position: relative;
+      padding: 4px 10px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .menu-item:hover, .menu-item.active {
+      background: #000;
+      color: #fff;
+    }
+    .menu-dropdown {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      background: #fff;
+      color: #000;
+      border: 1px solid #000;
+      min-width: 170px;
+      z-index: 50;
+      box-shadow: 2px 2px 0 #777;
+    }
+    .menu-dropdown-item {
+      padding: 4px 10px;
+      display: flex;
+      justify-content: space-between;
+      cursor: pointer;
+      position: relative;
+    }
+    .menu-dropdown-item:hover {
+      background: #222;
+      color: #fff;
+    }
+    .menu-submenu {
+      display: none;
+      position: absolute;
+      top: 0;
+      left: 100%;
+      background: #fff;
+      color: #000;
+      border: 1px solid #000;
+      min-width: 140px;
+      box-shadow: 2px 2px 0 #777;
+    }
+    .menu-dropdown-item:hover .menu-submenu {
+      display: block;
+    }
+    .menu-dropdown-separator {
+      border-bottom: 1px solid #000;
+      margin: 2px 0;
+    }
+
+    /* Context Menu */
+    .context-canvas {
+      height: 80px;
+      border: 2px dashed #666;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #fafafa;
+      cursor: context-menu;
+      user-select: none;
+    }
+    .context-menu {
+      display: none;
+      position: fixed;
+      background: #fff;
+      border: 1px solid #000;
+      min-width: 150px;
+      z-index: 200;
+      box-shadow: 3px 3px 0 #777;
+    }
+    .context-menu-item {
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+    .context-menu-item:hover {
+      background: #000;
+      color: #fff;
+    }
+
+    /* Tooltip */
+    .tooltip-host {
+      position: relative;
+      display: inline-block;
+      border: 1px dotted #000;
+      padding: 4px 8px;
+      background: #fff;
+      cursor: help;
+    }
+    .tooltip-bubble {
+      display: none;
+      position: absolute;
+      bottom: 125%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #000;
+      color: #fff;
+      font-size: 11px;
+      padding: 3px 6px;
+      white-space: nowrap;
+      z-index: 30;
+      border: 1px solid #000;
+    }
+
+    /* Modal Backdrop */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.45);
+      z-index: 300;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-dialog {
+      background: #fff;
+      border: 2px solid #000;
+      width: 320px;
+      box-shadow: 6px 6px 0 #000;
+    }
+    .modal-titlebar {
+      background: #000;
+      color: #fff;
+      padding: 4px 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .modal-content {
+      padding: 14px;
+    }
+    .modal-actions {
+      padding: 8px 14px;
+      background: #eee;
+      border-top: 1px solid #000;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    /* Splitter / SplitPane */
+    .split-container {
+      display: flex;
+      height: 120px;
+      border: 1px solid #000;
+      position: relative;
+      background: #fff;
+      user-select: none;
+    }
+    .split-pane {
+      padding: 8px;
+      overflow: auto;
+    }
+    .split-divider {
+      width: 6px;
+      background: #ccc;
+      border-left: 1px solid #000;
+      border-right: 1px solid #000;
+      cursor: col-resize;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .split-divider:hover {
+      background: #999;
+    }
+
+    /* Collapsible / Accordion */
+    .foldout {
+      border: 1px solid #000;
+      margin-bottom: 6px;
+    }
+    .foldout-header {
+      background: #e4e4e4;
+      padding: 4px 8px;
+      cursor: pointer;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: bold;
+    }
+    .foldout-header:hover {
+      background: #d8d8d8;
+    }
+    .foldout-content {
+      padding: 8px;
+      background: #fff;
+      border-top: 1px solid #000;
+    }
+
+    /* --- 3. EXIBIÇÃO, APRESENTAÇÃO E NOTIFICAÇÕES --- */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid #000;
+    }
+    .data-table th, .data-table td {
+      border: 1px solid #000;
+      padding: 4px 8px;
+      text-align: left;
+    }
+    .data-table th {
+      background: #e2e2e2;
+      cursor: pointer;
+      user-select: none;
+    }
+    .data-table th:hover {
+      background: #ccc;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid #000;
+      padding: 2px 6px;
+      background: #fff;
+      gap: 6px;
+    }
+    .chip-count {
+      background: #000;
+      color: #fff;
+      padding: 0 4px;
+      font-size: 10px;
+    }
+    .chip-close {
+      cursor: pointer;
+      font-weight: bold;
+      padding: 0 2px;
+    }
+    .chip-close:hover {
+      background: #000;
+      color: #fff;
+    }
+
+    .spinner-ascii {
+      display: inline-block;
+      width: 18px;
+      font-weight: bold;
+      text-align: center;
+    }
+
+    /* Toast Container */
+    .toast-container {
+      position: fixed;
+      bottom: 40px;
+      right: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 250;
+      pointer-events: none;
+    }
+    .toast {
+      pointer-events: auto;
+      border: 2px solid #000;
+      background: #fff;
+      padding: 6px 12px;
+      min-width: 200px;
+      box-shadow: 3px 3px 0 #000;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+    }
+    .toast.info { border-color: #000; }
+    .toast.warn { background: #fff8e1; border-color: #a06000; }
+    .toast.error { background: #ffebee; border-color: #c00000; }
+
+    /* StatusBar */
+    .statusbar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 26px;
+      background: #d8d8d8;
+      border-top: 1px solid #000;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      gap: 16px;
+      font-size: 11px;
+      z-index: 150;
+    }
+    .statusbar-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      border-right: 1px solid #888;
+      padding-right: 12px;
+    }
+
+    /* --- 4. GRÁFICOS, DEBUG E TÉCNICAS --- */
+    canvas.wire-canvas {
+      border: 1px solid #000;
+      background: #111;
+      display: block;
+    }
+
+    /* Ramp / Gradient Editor */
+    .ramp-editor-box {
+      border: 1px solid #000;
+      padding: 8px;
+      background: #fff;
+      display: inline-block;
+    }
+    .ramp-bar {
+      width: 320px;
+      height: 24px;
+      border: 1px solid #000;
+      position: relative;
+      cursor: crosshair;
+    }
+    .ramp-thumb-track {
+      position: relative;
+      width: 320px;
+      height: 16px;
+      margin-top: 2px;
+    }
+    .ramp-thumb {
+      position: absolute;
+      top: 0;
+      width: 10px;
+      height: 14px;
+      background: #fff;
+      border: 1px solid #000;
+      cursor: pointer;
+      transform: translateX(-50%);
+    }
+    .ramp-thumb.selected {
+      border: 2px solid #000;
+      background: #ff0;
+    }
+
+    /* Curve Editor */
+    .curve-container {
+      position: relative;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Especificação Esquemática Completa de Widgets (ogui)</h1>
+  <p class="hint">Catálogo técnico em formato wireframe funcional para orientar a implementação de nós, buffers e eventos em C++/OpenGL.</p>
+
+  <!-- 1. ENTRADA DE DADOS E AJUSTES NUMÉRICOS -->
+  <div class="section-card">
+    <h2>1. Entrada de Dados e Ajustes Numéricos</h2>
+
+    <div class="widget-group">
+      <h3>SpinBox / NumberInput & Toggle Text (Formatos Horizontais)</h3>
+      <p class="hint">Padrões: [ &lt; ][ label ][ &gt; ] e [ - ][ número ][ + ]</p>
+      
+      <div class="row-flex">
+        <div>
+          <div>Opção / Enum:</div>
+          <div class="h-spinbox">
+            <button onclick="changeToggleOption(-1)">&lt;</button>
+            <span class="spin-val" id="text-toggle-label">Low</span>
+            <button onclick="changeToggleOption(1)">&gt;</button>
+          </div>
+        </div>
+
+        <div>
+          <div>Numérico (step=1, min=0, max=100):</div>
+          <div class="h-spinbox">
+            <button onclick="stepNumVal(-1)">-</button>
+            <span class="spin-val" id="num-val-h">10</span>
+            <button onclick="stepNumVal(1)">+</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="widget-group">
+      <h3>SpinBox / NumberInput & Toggle Text (Formatos Verticais)</h3>
+      <p class="hint">Padrões: [ label ][ ▲/▼ ] e [ número ][ ▲/▼ ]</p>
+
+      <div class="row-flex">
+        <div>
+          <div>Modo Visual:</div>
+          <div class="v-spinbox">
+            <span class="spin-val" id="v-toggle-label">Wireframe</span>
+            <div class="btn-col">
+              <button onclick="changeVToggleOption(-1)">▲</button>
+              <button onclick="changeVToggleOption(1)">▼</button>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div>Flutuante (step=0.25):</div>
+          <div class="v-spinbox">
+            <span class="spin-val" id="num-val-v">1.50</span>
+            <div class="btn-col">
+              <button onclick="stepFloatVal(0.25)">▲</button>
+              <button onclick="stepFloatVal(-0.25)">▼</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="widget-group">
+      <h3>ColorPicker / ColorButton</h3>
+      <p class="hint">Botão com amostra que abre popup modal com sliders RGBA e conversão Hex.</p>
+      
+      <div style="position: relative; display: inline-block;">
+        <div class="color-swatch-btn" onclick="toggleColorPopup()">
+          <span class="color-box" id="swatch-preview" style="background-color: #2b78e4;"></span>
+          <span id="swatch-hex">#2B78E4</span>
+          <span>▼</span>
+        </div>
+
+        <div class="color-popup" id="color-popup">
+          <div style="font-weight: bold; margin-bottom: 6px;">Canais RGBA</div>
+          <div style="margin-bottom: 4px;">R: <input type="range" id="c-r" min="0" max="255" value="43" oninput="updateColor()" style="width: 170px;"></div>
+          <div style="margin-bottom: 4px;">G: <input type="range" id="c-g" min="0" max="255" value="120" oninput="updateColor()" style="width: 170px;"></div>
+          <div style="margin-bottom: 4px;">B: <input type="range" id="c-b" min="0" max="255" value="228" oninput="updateColor()" style="width: 170px;"></div>
+          <div style="margin-bottom: 6px;">A: <input type="range" id="c-a" min="0" max="100" value="100" oninput="updateColor()" style="width: 170px;"></div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="border: 1px solid #000; width: 30px; height: 18px;" id="popup-swatch"></div>
+            <button onclick="toggleColorPopup()">Confirmar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="widget-group">
+      <h3>RangeSlider (Dual Slider)</h3>
+      <p class="hint">Dois seletores coordenados sobre o mesmo track para intervalos fechados.</p>
+      
+      <div class="range-dual-container">
+        <div class="range-dual-track"></div>
+        <div class="range-dual-fill" id="dual-fill"></div>
+        <input type="range" id="slider-min" class="range-dual-input" min="0" max="100" value="20" oninput="handleDualSlider()">
+        <input type="range" id="slider-max" class="range-dual-input" min="0" max="100" value="75" oninput="handleDualSlider()">
+      </div>
+      <div style="margin-top: 4px;">Intervalo atual: <strong id="range-val-lbl">[20, 75]</strong></div>
+    </div>
+
+    <div class="widget-group">
+      <h3>ToggleSwitch (Chave Liga/Desliga)</h3>
+      <p class="hint">Alternativa visual compacta a checkboxes para modos binários globais.</p>
+
+      <div class="row-flex">
+        <div class="toggle-switch" onclick="toggleSwitchState('ts-vsync')">
+          <span class="toggle-switch-part active" id="ts-vsync-on">ON</span>
+          <span class="toggle-switch-part" id="ts-vsync-off">OFF</span>
+        </div>
+        <span>VSync: <strong id="ts-vsync-lbl">Ativado</strong></span>
+      </div>
+    </div>
+
+    <div class="widget-group">
+      <h3>PathPicker / FileBrowserField</h3>
+      <p class="hint">Campo de entrada acompanhado de disparador de seleção de caminho/arquivo.</p>
+
+      <div class="path-picker">
+        <input type="text" id="path-input" value="assets/shaders/standard.glsl" readonly>
+        <button onclick="browsePath()">[...]</button>
+      </div>
+      <span id="path-status" style="font-size: 11px; margin-left: 8px; color: #555;"></span>
+    </div>
+
+    <div class="widget-group">
+      <h3>SearchInput / FilterBar</h3>
+      <p class="hint">Campo de texto de busca com botão de limpeza rápida [✕] e evento com contador de filtragem.</p>
+
+      <div class="search-input-box">
+        <span>🔍</span>
+        <input type="text" id="search-input" placeholder="Buscar componente..." oninput="handleSearch(this.value)">
+        <span class="clear-btn" onclick="clearSearch()">✕</span>
+      </div>
+      <span id="search-feedback" style="font-size: 11px; margin-left: 8px; color: #444;"></span>
+    </div>
+  </div>
+
+  <!-- 2. NAVEGAÇÃO, CONTEXTO, MODAIS E LAYOUTS -->
+  <div class="section-card">
+    <h2>2. Navegação, Contexto, Modais e Layouts</h2>
+
+    <div class="widget-group">
+      <h3>MenuBar & Dropdowns com SubMenu</h3>
+      <p class="hint">Barra clássica horizontal com submenus suspensos e atalhos.</p>
+
+      <div class="menubar">
+        <div class="menu-item" onclick="toggleMenu('menu-file')">
+          File
+          <div class="menu-dropdown" id="menu-file">
+            <div class="menu-dropdown-item" onclick="menuAction('New File')"><span>New Scene</span><span>Ctrl+N</span></div>
+            <div class="menu-dropdown-item" onclick="menuAction('Open Scene')"><span>Open...</span><span>Ctrl+O</span></div>
+            <div class="menu-dropdown-item">
+              <span>Import &gt;</span>
+              <div class="menu-submenu">
+                <div class="menu-dropdown-item" onclick="menuAction('Import OBJ')">Wavefront .OBJ</div>
+                <div class="menu-dropdown-item" onclick="menuAction('Import GLTF')">GLTF 2.0</div>
+              </div>
+            </div>
+            <div class="menu-dropdown-separator"></div>
+            <div class="menu-dropdown-item" onclick="menuAction('Save')"><span>Save</span><span>Ctrl+S</span></div>
+          </div>
+        </div>
+        <div class="menu-item" onclick="toggleMenu('menu-edit')">
+          Edit
+          <div class="menu-dropdown" id="menu-edit">
+            <div class="menu-dropdown-item" onclick="menuAction('Undo')"><span>Undo</span><span>Ctrl+Z</span></div>
+            <div class="menu-dropdown-item" onclick="menuAction('Redo')"><span>Redo</span><span>Ctrl+Y</span></div>
+          </div>
+        </div>
+        <div class="menu-item" onclick="toggleMenu('menu-view')">
+          View
+          <div class="menu-dropdown" id="menu-view">
+            <div class="menu-dropdown-item" onclick="menuAction('Wireframe')"><span>Wireframe</span><span>F1</span></div>
+            <div class="menu-dropdown-item" onclick="menuAction('Grid')"><span>Grid</span><span>F2</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="widget-group">
+      <h3>ContextMenu (Menu de Botão Direito)</h3>
+      <p class="hint">Clique com o botão secundário na zona delimitada.</p>
+
+      <div class="context-canvas" id="context-zone">
+        [ Clique com o botão direito aqui para abrir o ContextMenu ]
+      </div>
+
+      <div class="context-menu" id="context-menu">
+        <div class="context-menu-item" onclick="contextAction('Inspecionar Nó')">Inspecionar Nó</div>
+        <div class="context-menu-item" onclick="contextAction('Duplicar Mesh')">Duplicar Mesh</div>
+        <div class="menu-dropdown-separator"></div>
+        <div class="context-menu-item" onclick="contextAction('Remover')">Remover</div>
+      </div>
+    </div>
+
+    <div class="widget-group">
+      <h3>Tooltip com Delay (500ms)</h3>
+      <p class="hint">Passe o cursor e aguarde para exibir a dica de contexto flutuante.</p>
+
+      <div class="tooltip-host" id="tt-target">
+        [ Hover com delay de 500ms ]
+        <div class="tooltip-bubble" id="tt-bubble">Dica: Configura uniform buffers no pipeline</div>
+      </div>
+    </div>
+
+    <div class="widget-group">
+      <h3>ModalDialog / MessageBox</h3>
+      <p class="hint">Painel modal de confirmação com backdrop escurecido bloqueando eventos.</p>
+
+      <button onclick="openModal()">Disparar Modal de Confirmação</button>
+    </div>
+
+    <div class="widget-group">
+      <h3>Splitter / SplitPane (Divisor Arrastável)</h3>
+      <p class="hint">Arraste a barra cinza central para redimensionar dinamicamente os dois painéis.</p>
+
+      <div class="split-container" id="split-box">
+        <div class="split-pane" id="pane-left" style="width: 50%;">
+          <strong>Painel Esquerdo (Árvore de Nós)</strong>
+          <div>- Raiz da Cena</div>
+          <div>&nbsp;&nbsp;+ Mesh_Camera</div>
+          <div>&nbsp;&nbsp;+ DirectionalLight</div>
+        </div>
+        <div class="split-divider" id="split-bar"></div>
+        <div class="split-pane" id="pane-right" style="width: 50%;">
+          <strong>Painel Direito (Inspetor de Atributos)</strong>
+          <div>Posição: [0.0, 1.2, -5.0]</div>
+          <div>Rotação: [0, 45, 0]</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="widget-group">
+      <h3>CollapsibleHeader / Foldout / Accordion</h3>
+      <p class="hint">Seções recolhíveis com alternância de glifo [▶] e [▼] para economia de tela.</p>
+
+      <div class="foldout">
+        <div class="foldout-header" onclick="toggleFoldout('fold-1', this)">
+          <span class="fold-icon">▼</span> Transformações de Cena
+        </div>
+        <div class="foldout-content" id="fold-1">
+          <div>Translation: X=0.0 Y=2.5 Z=0.0</div>
+          <div>Scale: 1.0, 1.0, 1.0</div>
+        </div>
+      </div>
+
+      <div class="foldout">
+        <div class="foldout-header" onclick="toggleFoldout('fold-2', this)">
+          <span class="fold-icon">▶</span> Rasterização e Shaders
+        </div>
+        <div class="foldout-content" id="fold-2" style="display: none;">
+          <div>Cull Face: GL_BACK</div>
+          <div>Depth Test: GL_LESS</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal markup -->
+  <div class="modal-backdrop" id="modal-container">
+    <div class="modal-dialog">
+      <div class="modal-titlebar">
+        <span>Confirmação de Exportação</span>
+        <button style="padding: 0 4px;" onclick="closeModal()">X</button>
+      </div>
+      <div class="modal-content">
+        Deseja regravar os shaders compilados antes de fechar o editor?
+      </div>
+      <div class="modal-actions">
+        <button onclick="closeModal()">Cancelar</button>
+        <button onclick="confirmModal()">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. EXIBIÇÃO, APRESENTAÇÃO E NOTIFICAÇÕES -->
+  <div class="section-card">
+    <h2>3. Exibição, Apresentação e Notificações</h2>
+
+    <div class="widget-group">
+      <h3>Table / DataGrid (com ordenação nas colunas)</h3>
+      <p class="hint">Clique nos cabeçalhos das colunas para alternar ordenação ascendente/descendente.</p>
+
+      <table class="data-table" id="grid-table">
+        <thead>
+          <tr>
+            <th onclick="sortTable(0)">ID <span id="sort-0">▲</span></th>
+            <th onclick="sortTable(1)">Buffer/Recurso <span id="sort-1"></span></th>
+            <th onclick="sortTable(2)">Tamanho (KB) <span id="sort-2"></span></th>
+            <th onclick="sortTable(3)">VBO Type <span id="sort-3"></span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>01</td><td>Vertex_VBO</td><td>256</td><td>GL_STATIC_DRAW</td></tr>
+          <tr><td>02</td><td>Index_EBO</td><td>64</td><td>GL_STATIC_DRAW</td></tr>
+          <tr><td>03</td><td>Uniform_UBO</td><td>16</td><td>GL_DYNAMIC_DRAW</td></tr>
+          <tr><td>04</td><td>Instance_SSBO</td><td>512</td><td>GL_STREAM_DRAW</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="widget-group">
+      <h3>Badge / Tag / Chip</h3>
+      <p class="hint">Rótulos para filtros e tags com botão [x] para remoção dinâmica.</p>
+
+      <div class="row-flex" id="chips-container">
+        <span class="chip"><span>Shader: PBR</span><span class="chip-count">12</span><span class="chip-close" onclick="removeChip(this)">x</span></span>
+        <span class="chip"><span>Instancing</span><span class="chip-count">4</span><span class="chip-close" onclick="removeChip(this)">x</span></span>
+        <span class="chip"><span>ShadowMaps</span><span class="chip-count">2</span><span class="chip-close" onclick="removeChip(this)">x</span></span>
+      </div>
+    </div>
+
+    <div class="widget-group">
+      <h3>Spinner / LoadingIndicator</h3>
+      <p class="hint">Indicador de execução assíncrona baseado em ASCII simples.</p>
+
+      <div class="row-flex">
+        <div>Spinner de pipeline: <span class="spinner-ascii" id="ascii-spinner">|</span></div>
+        <div>Carregamento de texturas: <span id="pulse-indicator">[###.......]</span></div>
+      </div>
+    </div>
+
+    <div class="widget-group">
+      <h3>Toast / Notification Banner</h3>
+      <p class="hint">Dispara alertas flutuantes no canto inferior que expiram automaticamente em 3.5 segundos.</p>
+
+      <div class="row-flex">
+        <button onclick="spawnToast('info', 'Shader compilado com sucesso!')">Toast Info</button>
+        <button onclick="spawnToast('warn', 'Aviso: Draw calls elevadas (> 1500)')">Toast Warn</button>
+        <button onclick="spawnToast('error', 'Erro de compilação no fragment shader!')">Toast Error</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. GRÁFICOS, DEBUG E FERRAMENTAS TÉCNICAS -->
+  <div class="section-card">
+    <h2>4. Gráficos, Debug e Ferramentas Técnicas</h2>
+
+    <div class="widget-group">
+      <h3>Plot / Sparkline em Tempo Real (FPS & Frametime)</h3>
+      <p class="hint">Renderizador 2D contínuo simulando buffer circular para debug de performance gráfica.</p>
+
+      <canvas id="sparkline-canvas" class="wire-canvas" width="460" height="90"></canvas>
+      <div style="font-size: 11px; margin-top: 4px;">
+        FPS Médio: <strong id="fps-stat">60.0</strong> | Frame Time: <strong id="frametime-stat">16.6ms</strong>
+      </div>
+    </div>
+
+    <div class="widget-group">
+      <h3>ColorGradient / RampEditor</h3>
+      <p class="hint">Barra horizontal com marcadores móveis (color stops) para gerar gradientes contínuos.</p>
+
+      <div class="ramp-editor-box">
+        <div class="ramp-bar" id="ramp-bar"></div>
+        <div class="ramp-thumb-track" id="ramp-track">
+          <!-- Thumbs geradas por script -->
+        </div>
+        <div style="margin-top: 8px; font-size: 11px; display: flex; justify-content: space-between; align-items: center;">
+          <span>Clique na barra para adicionar stop. Arraste para reposicionar.</span>
+          <button onclick="resetRamp()">Reset Ramp</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="widget-group">
+      <h3>CurveEditor / Timeline (Curvas de Bézier e Keyframes)</h3>
+      <p class="hint">Arraste os pontos de controle (P0, P1, P2, P3) para ajustar a curva de interpolação.</p>
+
+      <div class="curve-container">
+        <canvas id="curve-canvas" class="wire-canvas" width="460" height="150"></canvas>
+      </div>
+      <div style="font-size: 11px; margin-top: 4px;">
+        Curva cúbica Bézier interpolada entre 0.0 e 1.0 (ideal para easing de câmera e animações).
+      </div>
+    </div>
+  </div>
+
+  <!-- Toasts container -->
+  <div class="toast-container" id="toast-shelf"></div>
+
+  <!-- StatusBar esquemática fixa no rodapé -->
+  <div class="statusbar" id="main-statusbar">
+    <div class="statusbar-item">
+      <span>Status:</span> <strong id="sb-status">Pronto</strong>
+    </div>
+    <div class="statusbar-item">
+      <span>Cursor:</span> <span id="sb-cursor">X: 0, Y: 0</span>
+    </div>
+    <div class="statusbar-item">
+      <span>GL Driver:</span> <span>OpenGL 4.6 Core Profile</span>
+    </div>
+    <div class="statusbar-item">
+      <span>VBO Count:</span> <span>4</span>
+    </div>
+  </div>
+
+  <!-- SCRIPTS DE COMPORTAMENTO E INTERATIVIDADE -->
+  <script>
+    /* 1. SELEÇÃO, NUMÉRICOS E ENTRADA */
+    const toggleOptions = ["Low", "Medium", "High", "Ultra"];
+    let toggleIdx = 0;
+    function changeToggleOption(dir) {
+      toggleIdx = (toggleIdx + dir + toggleOptions.length) % toggleOptions.length;
+      document.getElementById('text-toggle-label').innerText = toggleOptions[toggleIdx];
+    }
+
+    let numValH = 10;
+    function stepNumVal(step) {
+      numValH = Math.max(0, Math.min(100, numValH + step));
+      document.getElementById('num-val-h').innerText = numValH;
+    }
+
+    const vToggleOptions = ["Wireframe", "Shaded", "Normals", "Depth"];
+    let vToggleIdx = 0;
+    function changeVToggleOption(dir) {
+      vToggleIdx = (vToggleIdx + dir + vToggleOptions.length) % vToggleOptions.length;
+      document.getElementById('v-toggle-label').innerText = vToggleOptions[vToggleIdx];
+    }
+
+    let numValV = 1.50;
+    function stepFloatVal(step) {
+      numValV = Math.max(0, parseFloat((numValV + step).toFixed(2)));
+      document.getElementById('num-val-v').innerText = numValV.toFixed(2);
+    }
+
+    function toggleColorPopup() {
+      const popup = document.getElementById('color-popup');
+      popup.style.display = (popup.style.display === 'block') ? 'none' : 'block';
+    }
+
+    function updateColor() {
+      const r = document.getElementById('c-r').value;
+      const g = document.getElementById('c-g').value;
+      const b = document.getElementById('c-b').value;
+      const a = (document.getElementById('c-a').value / 100).toFixed(2);
+
+      const hex = "#" + ((1 << 24) + (parseInt(r) << 16) + (parseInt(g) << 8) + parseInt(b)).toString(16).slice(1).toUpperCase();
+      const rgba = `rgba(${r}, ${g}, ${b}, ${a})`;
+
+      document.getElementById('swatch-preview').style.backgroundColor = rgba;
+      document.getElementById('popup-swatch').style.backgroundColor = rgba;
+      document.getElementById('swatch-hex').innerText = hex;
+    }
+    updateColor();
+
+    function handleDualSlider() {
+      const minInput = document.getElementById('slider-min');
+      const maxInput = document.getElementById('slider-max');
+      let minVal = parseInt(minInput.value);
+      let maxVal = parseInt(maxInput.value);
+
+      if (minVal > maxVal) {
+        const tmp = minVal;
+        minVal = maxVal;
+        maxVal = tmp;
+        minInput.value = minVal;
+        maxInput.value = maxVal;
+      }
+
+      const fill = document.getElementById('dual-fill');
+      fill.style.left = minVal + '%';
+      fill.style.width = (maxVal - minVal) + '%';
+      document.getElementById('range-val-lbl').innerText = `[${minVal}, ${maxVal}]`;
+    }
+    handleDualSlider();
+
+    let toggleSwitchActive = true;
+    function toggleSwitchState(id) {
+      toggleSwitchActive = !toggleSwitchActive;
+      const onPart = document.getElementById(id + '-on');
+      const offPart = document.getElementById(id + '-off');
+      const lbl = document.getElementById(id + '-lbl');
+
+      if (toggleSwitchActive) {
+        onPart.classList.add('active');
+        offPart.classList.remove('active');
+        lbl.innerText = "Ativado";
+      } else {
+        onPart.classList.remove('active');
+        offPart.classList.add('active');
+        lbl.innerText = "Desativado";
+      }
+    }
+
+    function browsePath() {
+      const mocks = [
+        "assets/shaders/standard.glsl",
+        "assets/models/character.obj",
+        "textures/albedo_map.png",
+        "scenes/main_level.scene"
+      ];
+      const cur = document.getElementById('path-input').value;
+      let nextIdx = (mocks.indexOf(cur) + 1) % mocks.length;
+      document.getElementById('path-input').value = mocks[nextIdx];
+      document.getElementById('path-status').innerText = "(caminho selecionado)";
+      setTimeout(() => document.getElementById('path-status').innerText = "", 2000);
+    }
+
+    function handleSearch(val) {
+      const fb = document.getElementById('search-feedback');
+      if (val.trim() === '') {
+        fb.innerText = '';
+      } else {
+        fb.innerText = `Buscando por: "${val}"`;
+      }
+    }
+
+    function clearSearch() {
+      const input = document.getElementById('search-input');
+      input.value = '';
+      handleSearch('');
+      input.focus();
+    }
+
+    /* 2. NAVEGAÇÃO, CONTEXTO E MODAIS */
+    function toggleMenu(menuId) {
+      const target = document.getElementById(menuId);
+      const isVisible = target.style.display === 'block';
+      closeAllMenus();
+      if (!isVisible) {
+        target.style.display = 'block';
+      }
+    }
+
+    function closeAllMenus() {
+      document.querySelectorAll('.menu-dropdown').forEach(m => m.style.display = 'none');
+    }
+
+    function menuAction(name) {
+      closeAllMenus();
+      spawnToast('info', `Comando: ${name}`);
+    }
+
+    const contextZone = document.getElementById('context-zone');
+    const contextMenu = document.getElementById('context-menu');
+
+    contextZone.addEventListener('contextmenu', function(e) {
+      e.preventDefault();
+      contextMenu.style.display = 'block';
+      contextMenu.style.left = e.clientX + 'px';
+      contextMenu.style.top = e.clientY + 'px';
+    });
+
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('.menu-item')) {
+        closeAllMenus();
+      }
+      if (!e.target.closest('.context-menu') && e.target !== contextZone) {
+        contextMenu.style.display = 'none';
+      }
+      if (!e.target.closest('.color-swatch-btn') && !e.target.closest('.color-popup')) {
+        document.getElementById('color-popup').style.display = 'none';
+      }
+    });
+
+    function contextAction(action) {
+      contextMenu.style.display = 'none';
+      spawnToast('info', `Contexto: ${action}`);
+    }
+
+    const ttTarget = document.getElementById('tt-target');
+    const ttBubble = document.getElementById('tt-bubble');
+    let ttTimer = null;
+    ttTarget.addEventListener('mouseenter', () => {
+      ttTimer = setTimeout(() => { ttBubble.style.display = 'block'; }, 500);
+    });
+    ttTarget.addEventListener('mouseleave', () => {
+      clearTimeout(ttTimer);
+      ttBubble.style.display = 'none';
+    });
+
+    function openModal() {
+      document.getElementById('modal-container').style.display = 'flex';
+    }
+    function closeModal() {
+      document.getElementById('modal-container').style.display = 'none';
+    }
+    function confirmModal() {
+      closeModal();
+      spawnToast('info', 'Alterações confirmadas com sucesso!');
+    }
+
+    /* Splitter Logic */
+    const splitBar = document.getElementById('split-bar');
+    const paneLeft = document.getElementById('pane-left');
+    const splitBox = document.getElementById('split-box');
+    let isDraggingSplitter = false;
+
+    splitBar.addEventListener('mousedown', (e) => {
+      isDraggingSplitter = true;
+      document.body.style.cursor = 'col-resize';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      // Atualiza coordenadas no StatusBar
+      document.getElementById('sb-cursor').innerText = `X: ${e.clientX}, Y: ${e.clientY}`;
+
+      if (!isDraggingSplitter) return;
+      const boxRect = splitBox.getBoundingClientRect();
+      let offsetX = e.clientX - boxRect.left;
+      let pct = (offsetX / boxRect.width) * 100;
+      pct = Math.max(15, Math.min(85, pct));
+      paneLeft.style.width = pct + '%';
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isDraggingSplitter) {
+        isDraggingSplitter = false;
+        document.body.style.cursor = 'default';
+      }
+    });
+
+    function toggleFoldout(contentId, header) {
+      const content = document.getElementById(contentId);
+      const icon = header.querySelector('.fold-icon');
+      if (content.style.display === 'none') {
+        content.style.display = 'block';
+        icon.innerText = '▼';
+      } else {
+        content.style.display = 'none';
+        icon.innerText = '▶';
+      }
+    }
+
+    /* 3. EXIBIÇÃO & NOTIFICAÇÕES */
+    let sortAsc = true;
+    function sortTable(colIndex) {
+      const table = document.getElementById('grid-table');
+      const tbody = table.querySelector('tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+
+      rows.sort((a, b) => {
+        let valA = a.children[colIndex].innerText.trim();
+        let valB = b.children[colIndex].innerText.trim();
+        let numA = parseFloat(valA);
+        let numB = parseFloat(valB);
+
+        if (!isNaN(numA) && !isNaN(numB)) {
+          return sortAsc ? numA - numB : numB - numA;
+        }
+        return sortAsc ? valA.localeCompare(valB) : valB.localeCompare(valA);
+      });
+
+      rows.forEach(r => tbody.appendChild(r));
+      sortAsc = !sortAsc;
+
+      for (let i = 0; i < 4; i++) {
+        document.getElementById('sort-' + i).innerText = (i === colIndex) ? (sortAsc ? '▲' : '▼') : '';
+      }
+    }
+
+    function removeChip(elem) {
+      elem.closest('.chip').remove();
+    }
+
+    function spawnToast(type, message) {
+      const shelf = document.getElementById('toast-shelf');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.innerHTML = `<span>[${type.toUpperCase()}] ${message}</span><span style="cursor:pointer;margin-left:8px;font-weight:bold;" onclick="this.parentElement.remove()">✕</span>`;
+      shelf.appendChild(toast);
+
+      setTimeout(() => {
+        if (toast.parentElement) toast.remove();
+      }, 3500);
+    }
+
+    /* Indicadores de carregamento contínuo */
+    const asciiFrames = ['|', '/', '-', '\\'];
+    let frameIdx = 0;
+    setInterval(() => {
+      frameIdx = (frameIdx + 1) % asciiFrames.length;
+      document.getElementById('ascii-spinner').innerText = asciiFrames[frameIdx];
+    }, 150);
+
+    const pulseFrames = ['[#.........]', '[###.......]', '[#####.....]', '[#######...]', '[#########.]', '[##########]'];
+    let pulseIdx = 0;
+    let pulseDir = 1;
+    setInterval(() => {
+      pulseIdx += pulseDir;
+      if (pulseIdx >= pulseFrames.length - 1 || pulseIdx <= 0) pulseDir *= -1;
+      document.getElementById('pulse-indicator').innerText = pulseFrames[pulseIdx];
+    }, 200);
+
+    /* 4. GRÁFICOS, DEBUG E FERRAMENTAS TÉCNICAS */
+    /* Sparkline FPS Canvas */
+    const sparkCanvas = document.getElementById('sparkline-canvas');
+    const sparkCtx = sparkCanvas.getContext('2d');
+    const bufferSize = 60;
+    const fpsHistory = new Array(bufferSize).fill(60);
+
+    function updateSparkline() {
+      // Simula flutuação realista em torno de 60fps
+      const jitter = (Math.random() - 0.5) * 4;
+      const currentFps = Math.max(30, Math.min(65, fpsHistory[fpsHistory.length - 1] + jitter));
+      fpsHistory.shift();
+      fpsHistory.push(currentFps);
+
+      sparkCtx.fillStyle = '#0f0f0f';
+      sparkCtx.fillRect(0, 0, sparkCanvas.width, sparkCanvas.height);
+
+      // Linhas de grade de fundo
+      sparkCtx.strokeStyle = '#222';
+      sparkCtx.lineWidth = 1;
+      sparkCtx.beginPath();
+      sparkCtx.moveTo(0, sparkCanvas.height / 2);
+      sparkCtx.lineTo(sparkCanvas.width, sparkCanvas.height / 2);
+      sparkCtx.stroke();
+
+      // Plot da linha
+      sparkCtx.strokeStyle = '#00ff66';
+      sparkCtx.lineWidth = 1.5;
+      sparkCtx.beginPath();
+
+      const stepX = sparkCanvas.width / (bufferSize - 1);
+      for (let i = 0; i < bufferSize; i++) {
+        // Normaliza de 0 a 80 FPS
+        const norm = (fpsHistory[i] - 20) / 60;
+        const y = sparkCanvas.height - (norm * sparkCanvas.height);
+        const x = i * stepX;
+        if (i === 0) sparkCtx.moveTo(x, y);
+        else sparkCtx.lineTo(x, y);
+      }
+      sparkCtx.stroke();
+
+      // Estatísticas
+      const last = fpsHistory[fpsHistory.length - 1];
+      document.getElementById('fps-stat').innerText = last.toFixed(1);
+      document.getElementById('frametime-stat').innerText = (1000 / last).toFixed(2) + 'ms';
+
+      requestAnimationFrame(updateSparkline);
+    }
+    requestAnimationFrame(updateSparkline);
+
+    /* Ramp / Color Gradient Editor */
+    let rampStops = [
+      { pos: 0.0, color: '#000000' },
+      { pos: 0.5, color: '#ff3300' },
+      { pos: 1.0, color: '#ffffaa' }
+    ];
+
+    function renderRamp() {
+      const bar = document.getElementById('ramp-bar');
+      const track = document.getElementById('ramp-track');
+
+      // Gera gradiente CSS com base nos stops
+      rampStops.sort((a, b) => a.pos - b.pos);
+      const gradientParts = rampStops.map(s => `${s.color} ${(s.pos * 100).toFixed(1)}%`);
+      bar.style.background = `linear-gradient(to right, ${gradientParts.join(', ')})`;
+
+      // Recria marcadores
+      track.innerHTML = '';
+      rampStops.forEach((stop, index) => {
+        const thumb = document.createElement('div');
+        thumb.className = 'ramp-thumb';
+        thumb.style.left = (stop.pos * 100) + '%';
+        thumb.title = `Stop ${index}: ${(stop.pos * 100).toFixed(0)}%`;
+
+        let isDraggingStop = false;
+        thumb.addEventListener('mousedown', (e) => {
+          e.stopPropagation();
+          isDraggingStop = true;
+
+          const onMove = (ev) => {
+            if (!isDraggingStop) return;
+            const rect = track.getBoundingClientRect();
+            let norm = (ev.clientX - rect.left) / rect.width;
+            stop.pos = Math.max(0, Math.min(1, norm));
+            renderRamp();
+          };
+
+          const onUp = () => {
+            isDraggingStop = false;
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+          };
+
+          window.addEventListener('mousemove', onMove);
+          window.addEventListener('mouseup', onUp);
+        });
+
+        track.appendChild(thumb);
+      });
+    }
+
+    document.getElementById('ramp-bar').addEventListener('click', (e) => {
+      const rect = e.target.getBoundingClientRect();
+      const pos = (e.clientX - rect.left) / rect.width;
+      rampStops.push({ pos: Math.max(0, Math.min(1, pos)), color: '#3388ff' });
+      renderRamp();
+    });
+
+    function resetRamp() {
+      rampStops = [
+        { pos: 0.0, color: '#000000' },
+        { pos: 0.5, color: '#ff3300' },
+        { pos: 1.0, color: '#ffffaa' }
+      ];
+      renderRamp();
+    }
+    renderRamp();
+
+    /* Curve Editor / Bezier Keyframes */
+    const curveCanvas = document.getElementById('curve-canvas');
+    const curveCtx = curveCanvas.getContext('2d');
+
+    const controlPoints = [
+      { x: 30, y: 120 },   // P0: Início
+      { x: 140, y: 30 },   // P1: Controle 1
+      { x: 300, y: 120 },  // P2: Controle 2
+      { x: 420, y: 30 }    // P3: Fim
+    ];
+
+    let draggedPoint = null;
+
+    curveCanvas.addEventListener('mousedown', (e) => {
+      const rect = curveCanvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      controlPoints.forEach(pt => {
+        const dist = Math.hypot(pt.x - mx, pt.y - my);
+        if (dist < 10) draggedPoint = pt;
+      });
+    });
+
+    curveCanvas.addEventListener('mousemove', (e) => {
+      if (!draggedPoint) return;
+      const rect = curveCanvas.getBoundingClientRect();
+      draggedPoint.x = Math.max(10, Math.min(curveCanvas.width - 10, e.clientX - rect.left));
+      draggedPoint.y = Math.max(10, Math.min(curveCanvas.height - 10, e.clientY - rect.top));
+      drawCurve();
+    });
+
+    window.addEventListener('mouseup', () => { draggedPoint = null; });
+
+    function drawCurve() {
+      curveCtx.fillStyle = '#111';
+      curveCtx.fillRect(0, 0, curveCanvas.width, curveCanvas.height);
+
+      // Linhas guia de controle
+      curveCtx.strokeStyle = '#444';
+      curveCtx.lineWidth = 1;
+      curveCtx.setLineDash([4, 4]);
+      curveCtx.beginPath();
+      curveCtx.moveTo(controlPoints[0].x, controlPoints[0].y);
+      curveCtx.lineTo(controlPoints[1].x, controlPoints[1].y);
+      curveCtx.moveTo(controlPoints[2].x, controlPoints[2].y);
+      curveCtx.lineTo(controlPoints[3].x, controlPoints[3].y);
+      curveCtx.stroke();
+      curveCtx.setLineDash([]);
+
+      // Curva Bézier cúbica
+      curveCtx.strokeStyle = '#ffffff';
+      curveCtx.lineWidth = 2;
+      curveCtx.beginPath();
+      curveCtx.moveTo(controlPoints[0].x, controlPoints[0].y);
+      curveCtx.bezierCurveTo(
+        controlPoints[1].x, controlPoints[1].y,
+        controlPoints[2].x, controlPoints[2].y,
+        controlPoints[3].x, controlPoints[3].y
+      );
+      curveCtx.stroke();
+
+      // Renderização dos nós arrastáveis
+      controlPoints.forEach((pt, idx) => {
+        curveCtx.fillStyle = (idx === 0 || idx === 3) ? '#00e5ff' : '#ffea00';
+        curveCtx.fillRect(pt.x - 4, pt.y - 4, 8, 8);
+      });
+    }
+    drawCurve();
+  </script>
+</body>
+</html>

@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Minimal MSVC project: builds examples/demo_win32.cpp together with the
+  ogui library sources. No ogui.lib is required, so a plain "Build" works.
+
+  CMake is the primary build system (see scripts/build.sh); this project is
+  here so Visual Studio users can hit F5 without configuring anything.
+-->
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{6F1B7A54-2C31-4E9D-9A77-5D0E2C8A9B41}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>ogui_demo</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+
+  <PropertyGroup Label="UserMacros" />
+
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'">
+    <OutDir>$(ProjectDir)build-msvc\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)build-msvc\$(Configuration)\obj\</IntDir>
+    <TargetName>ogui_demo_win32d</TargetName>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <OutDir>$(ProjectDir)build-msvc\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)build-msvc\$(Configuration)\obj\</IntDir>
+    <TargetName>ogui_demo_win32</TargetName>
+  </PropertyGroup>
+
+  <!-- Shared compile settings for both configurations. -->
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ConformanceMode>true</ConformanceMode>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <WarningLevel>Level4</WarningLevel>
+      <TreatWarningAsError>false</TreatWarningAsError>
+      <!-- Static build: expands OGUI_API to nothing (see ogui_export.hpp). -->
+      <PreprocessorDefinitions>OGUI_STATIC;_CRT_SECURE_NO_WARNINGS;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\include;$(ProjectDir)..\thirdparty\stb;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <DisableSpecificWarnings>4127;4503;4702;4706</DisableSpecificWarnings>
+    </ClCompile>
+    <!-- GlBackend resolves every GL entry point at runtime (GetProc), so the
+         only link dependencies are the Win32 system libraries. -->
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <!-- The demo defines int main(); mainCRTStartup calls it directly so we
+           get a windowed app without a console and without a WinMain shim. -->
+      <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>
+      <AdditionalDependencies>opengl32.lib;gdi32.lib;user32.lib;shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
+    <ClCompile>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
+    <ClCompile>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+    </ClCompile>
+    <Link>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+    </Link>
+  </ItemDefinitionGroup>
+
+  <ItemGroup>
+    <ClCompile Include="..\examples\demo_win32.cpp" />
+    <ClCompile Include="..\src\api.cpp" />
+    <ClCompile Include="..\src\clipboard.cpp" />
+    <ClCompile Include="..\src\drawlist.cpp" />
+    <ClCompile Include="..\src\font.cpp" />
+    <ClCompile Include="..\src\imagemanager.cpp" />
+    <ClCompile Include="..\src\glbackend.cpp" />
+    <ClCompile Include="..\src\tween.cpp" />
+    <ClCompile Include="..\src\kernel.cpp" />
+    <ClCompile Include="..\src\rasterizer.cpp" />
+    <ClCompile Include="..\src\software.cpp" />
+    <ClCompile Include="..\src\style.cpp" />
+    <ClCompile Include="..\src\widget.cpp" />
+    <ClCompile Include="..\src\widgets.cpp" />
+    <ClCompile Include="..\src\host.cpp" />
+    <ClCompile Include="..\src\xmlparser.cpp" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ClInclude Include="..\include\ogui\api.hpp" />
+    <ClInclude Include="..\include\ogui\clipboard.hpp" />
+    <ClInclude Include="..\include\ogui\drawlist.hpp" />
+    <ClInclude Include="..\include\ogui\font.hpp" />
+    <ClInclude Include="..\include\ogui\glbackend.hpp" />
+    <ClInclude Include="..\include\ogui\imagemanager.hpp" />
+    <ClInclude Include="..\include\ogui\kernel.hpp" />
+    <ClInclude Include="..\include\ogui\ogui_export.hpp" />
+    <ClInclude Include="..\include\ogui\rasterizer.hpp" />
+    <ClInclude Include="..\include\ogui\software.hpp" />
+    <ClInclude Include="..\include\ogui\style.hpp" />
+    <ClInclude Include="..\include\ogui\widget.hpp" />
+    <ClInclude Include="..\include\ogui\widgets.hpp" />
+    <ClInclude Include="..\include\ogui\host.hpp" />
+    <ClInclude Include="..\include\ogui\tween.hpp" />
+    <ClInclude Include="..\include\ogui\xmlparser.hpp" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="layout_demo.xml" />
+  </ItemGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+</Project>

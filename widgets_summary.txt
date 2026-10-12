@@ -1,0 +1,50 @@
+OGUI Widgets Summary
+====================
+
+Implemented widgets (tags):
+- screen: document root
+- style: named style definitions  
+- panel: rectangle container
+- window: bordered panel with title bar
+- column: vertical stack layout
+- row: horizontal layout
+- label: text display
+- button: clickable button with callbacks
+- textinput: single-line text input
+- checkbox: toggle with label
+- radiobutton: radio button in a group (implemented)
+- combobox/option: dropdown selection
+- slider: range slider
+- progress: progress bar
+- separator: visual divider
+- tabs/tab: tabbed interface
+- group: titled grouping box
+- image: RGBA image file (PNG/JPG via stb_image + ImageManager cache); stretched to bounds, tile="true" repeats at native size; border style frames it; missing file draws nothing
+- scrollview: scrollable container
+- toggleswitch: toggle switch (basic)
+- textarea: multiline UTF-8 editor (Enter newline, Up/Down lines, soft word-wrap of long lines, wheel scroll, vertical scrollbar)
+- listbox/item: scrollable single-selection list (click, wheel, keys)
+- tree/treeitem: hierarchical tree (animated expand/collapse that compresses rows, auto-shrinks to visible rows when collapsed, selection, keys)
+- table/th/tr/cell: data grid (header-click sorting, selection, wheel, keys, header-edge column resize, inline cell editing, marquee scrollingText)
+- spinbox: numeric value with -/+ buttons (step, decimals, wrap min<->max, prefix/suffix, keyboard); drawn as ONE unified widget (flat button regions + hairline separators)
+- optionspin: text-only spin [ < ][ option ][ > ] cycling options="A,B,C" (wrap default true, keyboard, on-changed callback)
+- rangeslider: two-thumb [low,high] range slider (drag nearest thumb, filled band, keyboard nudge)
+- splitter: two panes with a draggable divider (split fraction, orientation="vertical|horizontal"); children are placed in the splitter's local space and resize live while dragging
+
+XML layout files:
+- manifest.xml (project root) - gallery screen list: <manifest><screen title path/></manifest>;
+  edit it to add/remove screens without recompiling demo.exe (built-in list is the fallback)
+- layout_demo.xml (project root) - gallery screen 1 "Basico" (common controls)
+- layouts/layout_text.xml - screen 2 "Texto" (textinput, textarea, spinbox, optionspin)
+- layouts/layout_selection.xml - screen 3 "Selecao" (listbox, combobox, tree)
+- layouts/layout_data.xml - screen 4 "Dados" (table: sort/resize/edit/marquee)
+- layouts/layout_containers.xml - screen 5 "Containers" (window, group, rangeslider, splitter, scrollview, tabs)
+All five load into one demo.exe via examples/gallery.hpp (shared nav bar, Kernel::switchScreen).
+
+Build status:
+- Linux (host): all builds pass, 4/4 tests pass (kernel test covers spinbox/rangeslider/splitter)
+- Windows (cross-compile): gallery demo.exe built successfully
+- Test package: everything Windows-test related lives in debug/ (demo.exe,
+  manifest.xml + layout_demo.xml + layouts/ synced by `./scripts/build.sh win`,
+  ogui.sln/ogui_demo.vcxproj, build-win-objs/, screenshots/). Download debug/
+  via SFTP and run demo.exe from inside it.

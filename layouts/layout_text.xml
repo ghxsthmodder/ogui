@@ -1,0 +1,34 @@
+<screen id="text">
+  <panel id="bg" x="0" y="0" w="800" h="600" bg="#161616"/>
+  <label id="lbl_group" x="10" y="52" w="780" h="20" text="Texto: entrada de dados"
+         font sans 16 color="#66ee66"/>
+
+  <label x="10" y="84" w="740" h="18" text="TextInput (linha unica)"/>
+  <textinput id="txt_name" x="10" y="106" w="400" h="30" text="Edite este texto"
+             bg="#111" color="#ccc" border="#4488ff" radius="6"/>
+
+  <label x="10" y="146" w="740" h="18" text="TextArea (varias linhas + barra de rolagem)"/>
+  <textarea id="ta_notes" x="10" y="168" w="740" h="120"
+            placeholder="Notas (Enter quebra linha)..."
+            bg="#111" color="#ccc" border="#4488ff" radius="6"/>
+
+  <label x="10" y="300" w="740" h="18" text="SpinBox (inteiro)"/>
+  <spinbox id="sp_int" x="10" y="322" w="160" h="30"
+           min="0" max="10" value="3" step="1"
+           bg="#111" color="#ccc" border="#4488ff"/>
+
+  <label x="190" y="300" w="740" h="18" text="SpinBox (decimal com sufixo)"/>
+  <spinbox id="sp_dec" x="190" y="322" w="200" h="30"
+           min="0" max="100" value="12.5" step="0.5" decimals="1" suffix=" kg"
+           bg="#111" color="#ccc" border="#4488ff"/>
+
+  <label x="410" y="300" w="740" h="18" text="SpinBox (wrap)"/>
+  <spinbox id="sp_wrap" x="410" y="322" w="140" h="30"
+           min="1" max="12" value="12" step="1" wrap="true" prefix="Mes "
+           bg="#111" color="#ccc" border="#4488ff"/>
+
+  <label x="10" y="360" w="740" h="18" text="OptionSpin (opcoes de texto)"/>
+  <optionspin id="os_quality" x="10" y="382" w="220" h="30"
+              options="Baixo, Medio, Alto" value="Medio"
+              bg="#111" color="#ccc" border="#4488ff"/>
+</screen>

@@ -1,0 +1,84 @@
+<screen id="main">
+  <panel id="bg" x="0" y="0" w="800" h="600" bg="#161616"/>
+  <column id="col" x="10" y="10" w="780" h="580">
+    <row id="r_btns" x="0" y="0" w="740" h="40">
+      <button id="btn_start" onclick="onStart" text="Iniciar" x="0" y="0" w="200" h="40"
+              bg="#4488ff" color="#ffffff" radius="6" tooltip="Dispara onStart"/>
+      <button id="btn_load" onclick="onLoad" text="Carregar" x="0" y="0" w="200" h="40"
+              bg="#555" color="#fff" radius="6" tooltip="Dispara onLoad"/>
+    </row>
+    <textinput id="txt_log" x="0" y="0" w="740" h="28"
+               placeholder="Digite algo..."
+               bg="#111" color="#ccc" border="#4488ff" radius="6"/>
+    <label id="lbl_status" x="0" y="0" w="740" h="20" text="Boas-vindas!"
+           font sans 16 color="#66ee66"/>
+    <row id="r_flags" x="0" y="0" w="740" h="20">
+      <checkbox id="cb_demo" text="Ativado" x="0" y="0" w="120" h="20" checked="false"/>
+      <radiobutton id="rb_a" text="A" x="0" y="0" w="40" h="20" group="g1" checked="true"/>
+      <radiobutton id="rb_b" text="B" x="0" y="0" w="40" h="20" group="g1"/>
+      <radiobutton id="rb_c" text="C" x="0" y="0" w="40" h="20" group="g1"/>
+    </row>
+    <separator id="sep_demo" x="0" y="0" w="740" h="6" thickness="1"/>
+    <progress id="pb_demo" x="0" y="0" w="740" h="10" value="0.5" color="#66ee66" radius="5"/>
+    <slider id="sl_demo" x="0" y="0" w="740" h="18" min="0" max="100" value="50"/>
+    <textarea id="ta_notes" x="0" y="0" w="740" h="42"
+              placeholder="Notas (Enter quebra linha)..."
+              bg="#111" color="#ccc" border="#4488ff" radius="6"/>
+    <listbox id="lb_items" x="0" y="0" w="740" h="40" rowheight="20"
+             selected="0" bg="#111" color="#ccc" border="#4488ff">
+      <item label="Alpha"/>
+      <item label="Beta"/>
+      <item label="Gamma"/>
+    </listbox>
+    <tree id="tr_scene" x="0" y="0" w="740" h="62" rowheight="20"
+          bg="#111" color="#ccc" border="#4488ff" accent="#66ee66">
+      <treeitem label="Cena">
+        <treeitem label="Luz"/>
+        <treeitem label="Camera"/>
+      </treeitem>
+    </tree>
+    <combobox id="cmb_fps" x="0" y="0" w="240" h="26" selected="1" rowheight="22"
+              bg="#111" color="#ccc" border="#4488ff">
+      <option label="Fps: 30"/>
+      <option label="Fps: 60"/>
+      <option label="Fps: 120"/>
+    </combobox>
+    <tabs id="tb_demo" x="0" y="0" w="740" h="170" theight="24" active="0"
+          headercolor="#222" tabcolor="#1a1a1a" activecolor="#2a2a2a" accent="#4488ff">
+      <tab label="Geral">
+        <group id="gp_info" name="Grupo" x="10" y="10" w="340" h="60">
+          <label id="lbl_grp" text="Um group com um label dentro." x="10" y="20" w="320" h="20"/>
+        </group>
+        <image id="img_demo" src="debug/screenshots/layout_all.png" x="370" y="10" w="120" h="50"/>
+        <table id="tb_people" x="10" y="66" w="700" h="76" rowheight="20" headerheight="22"
+               selected="0" bg="#111" color="#ccc" border="#4488ff" highlight="#334455"
+               headerbg="#1c2733">
+			<th label="Nome" w="160"/>
+			<th label="Idade" w="80"/>
+			<th label="Cidade"/>
+			<th label="cpf"/>
+			<th label="email"/>
+			<th label="estado civil"/>
+			<tr resizable="true" editableCells="Nome;Cidade;email" scrollingText="automatic" cells="Zoe;30;Rio;000.000.000-00;usermail@myemail.com;solteiro(a)"/>
+			<tr resizable="true" editableCells="Nome;Cidade;email" scrollingText="automatic" cells="Ana;25;Sao Paulo;000.000.000-00;usermail@myemail.com;solteiro(a)"/>
+			<tr>
+				<cell resizable="true" editable="true" scrollingText="automatic">Zoe</cell>
+				<cell resizable="true" editable="true" scrollingText="automatic">30</cell>
+				<cell resizable="true" editable="true" scrollingText="automatic">Rio</cell>
+				<cell resizable="true" editable="true" scrollingText="automatic">000.000.000-00</cell>
+				<cell resizable="true" editable="true" scrollingText="automatic">usermail@myemail.com</cell>
+				<cell resizable="true" editable="true" scrollingText="automatic">solteiro(a)</cell>
+				<!-- resizable: true or false -->
+				<!-- editable: true or false -->
+				<!-- scrollingText: automatic or onmouseenter -->
+			</tr>
+        </table>
+      </tab>
+      <tab label="Rolar">
+        <scrollview id="sv_demo" x="10" y="8" w="700" h="86" scrollstep="30">
+          <label id="lbl_scroll" wrap="true" x="0" y="0" w="680" h="220" text="Arraste a roda do mouse para rolar este conteudo. Um paragrafo comprido que ultrapassa a altura da viewport e por isso precisa de scrollview dentro de uma aba dos tabs."/>
+        </scrollview>
+      </tab>
+    </tabs>
+  </column>
+</screen>

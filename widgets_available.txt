@@ -1,0 +1,47 @@
+Available Widgets in ogui (as of current development state)
+
+================================================================================
+Available Widgets (documented in README Elements table)
+
+| Tag | Purpose | Extra attributes |
+| --- | --- | --- |
+| `screen` | document root (one per file) | — |
+| `style` | named style definition | `name` |
+| `panel` | plain rectangle container | — |
+| `window` | bordered panel with a title bar (children are offset by it) | `title`, `title_visible` |
+| `column` | stacks children vertically (gap 4, honours `padding`/`margin`) | — |
+| `row` | lays children out horizontally (minimal: sizes them to the parent) | — |
+| `label` | text | `text`, `wrap`, `align="left\|center\|right"` |
+| `button` | clickable button, press/release feedback | `text` |
+| `textinput` | single-line UTF-8 editor: caret, selection, Ctrl+A/C/X/V | `text`, `placeholder` |
+| `checkbox` | toggle + label | `text`, `checked` |
+| `combobox` | dropdown: current value shown, popup lists `<option>` children (keyboard Up/Down/Enter, autoclose on outside press) | `selected` (index or `label=`), `rowheight`, `panel` (popup bg), `highlight`, `highlighttext`, `arrow` |
+| `slider` | value in `min..max` (drag, arrows, Home/End) | `min`, `max`, `value`, `color` (bar), `bg` (track), `thumbcolor` |
+| `progress` | read-only fill | `value` (0..1), `color`, `bg`, `radius` |
+| `separator` | rule, horizontal or vertical | `thickness`, `color` |
+| `tabs` / `tab` | header strip over stacked pages (inactive pages take no input) | `active`, `theight`, `headercolor`, `tabcolor`, `activecolor`, `accent` / `label` |
+| `group` | titled grouping box | `name` |
+| `image` | textured quad | `src`, `tile` |
+| `scrollview` | wheel-scrollable clipped viewport over its children | `scrollx`, `scrolly`, `scrollstep` |
+
+================================================================================
+
+Currently Implemented & Tested Widgets:
+- Label, Button, TextInput, Checkbox, ProgressBar, Separator, Slider, ComboBox (with popup)
+- Tabs/Tab, Group, Image, ScrollView, Panel, Column, Row
+
+Widgets Under Active Development:
+- RadioButton, RadioGroup, TextArea (multiline), ListBox, ListView, TreeView
+- These are being added to the codebase but may not be fully integrated yet
+
+Project Status:
+- Linux host build: Clean, all 4 ctest tests pass
+- Windows demo.exe: Built successfully (imports SHELL32.dll for D&D)
+- F11 fullscreen toggle removed due to crash reports; manual expansion only
+- Core functionality complete; new widgets under development
+
+For the complete and current list, refer to the README.md Elements table, which is the authoritative source.
+
+================================================================================
+Generated on: $(date)
+================================================================================

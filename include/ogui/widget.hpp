@@ -1,0 +1,188 @@
+#pragma once
+#include "ogui/api.hpp"
+#include "ogui/style.hpp"
+#include "ogui/font.hpp"
+#include "ogui/tween.hpp"
+#include <vector>
+#include <map>
+#include <string>
+#include <memory>
+#include <functional>
+
+namespace ogui {
+
+// Forward declarations
+class Rasterizer;
+class Kernel;
+struct InputState;
+
+// ------------------------------------------------------------------
+// Widget: base of the retained-mode widget tree
+// ------------------------------------------------------------------
+class Widget : public std::enable_shared_from_this<Widget> {
+public:
+    using Ptr = std::shared_ptr<Widget>;
+    using Callback = std::function<void()>;
+
+    Widget();
+    virtual ~Widget();
+
+    Widget(const Widget&) = delete;
+    Widget& operator=(const Widget&) = delete;
+
+    Widget(Widget&&) = default;
+    Widget& operator=(Widget&&) = default;
+
+    // ---- identity ----
+    const std::string& id() const { return m_id; }
+    void setId(const std::string& id) { m_id = id; }
+
+    // Event binding name (from XML onclick="..."), resolved via Kernel::bind.
+    const std::string& binding() const { return m_binding; }
+    void setBinding(const std::string& b) { m_binding = b; }
+
+    // Every attribute the XML parser saw on this element (keys lowercased).
+    // Lets data-only tags (e.g. <manifest><screen path="..."/></manifest>)
+    // carry information that no built-in widget consumes.
+    void setRawAttributes(const std::map<std::string, std::string>& attrs) {
+        m_rawAttrs = attrs;
+    }
+    const std::map<std::string, std::string>& rawAttributes() const {
+        return m_rawAttrs;
+    }
+    const std::string* rawAttribute(const std::string& key) const {
+        auto it = m_rawAttrs.find(key);
+        return it == m_rawAttrs.end() ? nullptr : &it->second;
+    }
+
+    // Direct click handler (set by the host or by Kernel::bind).
+    void setClickHandler(Callback fn) { m_onClick = std::move(fn); }
+    const Callback& clickHandler() const { return m_onClick; }
+    void click() { if (m_onClick) m_onClick(); }
+
+    // ---- hierarchy ----
+    virtual Widget* parent() const { return m_parent; }
+    virtual void setParent(Widget* parent);
+
+    const std::vector<Ptr>& children() const { return m_children; }
+
+    void addChild(Ptr child);
+    void removeChild(Ptr child);
+
+    // Kernel that owns this widget tree, refreshed by the Kernel at the top
+    // of every frame; lets widgets reach popup/event APIs from handlers.
+    Kernel* kernel() const { return m_kernel; }
+    void setKernel(Kernel* k) { m_kernel = k; }
+
+    // Visual-state helpers: true while the Kernel's pointer/focus sits on
+    // this exact widget. Used by onDraw() for hover/pressed/focus feedback.
+    bool isHovered() const;
+    bool isFocused() const;
+
+    // ---- layout ----
+    Rect bounds() const { return m_bounds; }
+    void setBounds(const Rect& b) { m_bounds = b; }
+    void setPos(float x, float y) { m_bounds.x = x; m_bounds.y = y; }
+    void setSize(float w, float h) { m_bounds.w = w; m_bounds.h = h; }
+    void setSize(const Rect& r) { m_bounds = r; }
+
+    virtual void layout(float parentWidth, float parentHeight);
+
+    // Per-frame tick (dt in seconds). The Kernel advances every widget once
+    // per frame using the input clock; animating widgets override the base
+    // but call it to keep bounds tweens alive.
+    virtual void onTick(float dt);
+
+    // Tween this widget's bounds to `target` over `duration` seconds. The
+    // base onTick() advances the animation; animateTo() snaps an in-flight
+    // animation to its end state and starts the new one from the current
+    // (possibly mid-flight) bounds, so calls stack smoothly.
+    void animateTo(const Rect& target, float duration,
+                   TweenEase ease = TweenEase::EaseOutCubic);
+
+    // ---- transform ----
+    virtual void transform(const Matrix4x4& m) { m_transform = m; }
+
+    // ---- input ----
+    // Returns true if the point (in parent-local coords, y-down) hits this widget.
+    virtual bool hitTest(const Offset2D& p) const;
+
+    // Origin of this widget in the coordinate space the Kernel delivers
+    // pointer events in (bounds are parent-relative, so walk the chain).
+    Offset2D absoluteOrigin() const;
+
+    // p is in the same space as absoluteOrigin() (screen/framebuffer).
+    virtual void onPointerDown(MouseButton btn, const Offset2D& p);
+    virtual void onPointerUp(MouseButton btn);
+    virtual void onPointerMove(const Offset2D& p);
+    virtual void onPointerScroll(float dx, float dy);
+    virtual void onKeyDown(KeyCode key, uint32_t mods);
+    virtual void onKeyUp(KeyCode key);
+    virtual void onChar(uint32_t ch);
+    virtual void onFocus(bool focused);
+    // Called by the Kernel when an open popup is dismissed without going
+    // through the owner (e.g. a press outside closes it). Owners that keep
+    // their own open-state mirror here.
+    virtual void onPopupDismissed() {}
+
+    // ---- container hooks (tree walk) ----
+    // Used by the Kernel while drawing and hit-testing children:
+    //   childOffset()   - extra offset applied to the children (ScrollView
+    //                     returns its scroll delta);
+    //   clipsChildren() - when true, children are clipped to the returned
+    //                     rect, given in THIS widget's coordinate space;
+    //   wantsScroll()   - marks the widget that should receive wheel events
+    //                     raised anywhere in its subtree (the Kernel bubbles
+    //                     the event up until it finds one).
+    virtual Offset2D childOffset() const;
+    virtual bool clipsChildren(Rect& outRect) const;
+    virtual bool wantsScroll() const;
+
+    // ---- style ----
+    virtual void applyStyle(const Style& style);
+    const Style& style() const { return m_style; }
+
+    // ---- visibility / tooltip ----
+    // A widget is only shown (and only takes input) when it AND all of its
+    // ancestors are visible; hiding e.g. a <tab> hides its whole page.
+    // setVisible() flips just this widget's own flag.
+    bool isVisible() const {
+        for (const Widget* w = this; w != nullptr; w = w->m_parent) {
+            if (!w->m_style.isVisible) return false;
+        }
+        return true;
+    }
+    void setVisible(bool v) { m_style.isVisible = v; }
+
+    // Shown by the Kernel as a small panel while the pointer hovers this
+    // widget for the tooltip delay (empty = none).
+    void setTooltip(const std::string& text) { m_tooltip = text; }
+    const std::string& tooltip() const { return m_tooltip; }
+
+    // ---- drawing ----
+    virtual void onDraw(Rasterizer& r) const;
+
+    // ---- events ----
+    void dispatchEvent(EventType type, const Offset2D& pos);
+
+protected:
+    std::string m_id;
+    std::string m_binding;
+    std::map<std::string, std::string> m_rawAttrs;
+    Callback m_onClick;
+    Widget* m_parent = nullptr;
+    Kernel* m_kernel = nullptr;
+    std::vector<Ptr> m_children;
+    Rect m_bounds{};            // local bounds
+    Matrix4x4 m_transform{};    // parent-space transform
+    Style m_style;
+    std::string m_tooltip;
+
+    // Bounds animation state (see animateTo/onTick).
+    bool m_boundsAnimating = false;
+    Rect m_boundsStart{};
+    Rect m_boundsTarget{};
+    Tween m_boundsTween{};
+};
+
+} // namespace ogui

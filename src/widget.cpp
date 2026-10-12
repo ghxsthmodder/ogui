@@ -1,0 +1,164 @@
+#include "ogui/widget.hpp"
+#include "ogui/rasterizer.hpp"
+#include "ogui/kernel.hpp"
+#include <cstring>
+
+namespace ogui {
+
+// ---- Widget ---------------------------------------------------------------
+Widget::Widget() = default;
+Widget::~Widget() = default;
+
+bool Widget::isHovered() const {
+    return m_kernel != nullptr && m_kernel->hoveredWidget() == this;
+}
+
+bool Widget::isFocused() const {
+    return m_kernel != nullptr && m_kernel->focusedWidget() == this;
+}
+
+void Widget::setParent(Widget* parent) {
+    if (m_parent == parent) return;   // already in place
+    if (m_parent) {
+        // detach from old parent
+        for (auto it = m_parent->m_children.begin(); it != m_parent->m_children.end(); ++it) {
+            if (it->get() == this) { m_parent->m_children.erase(it); break; }
+        }
+    }
+    m_parent = parent;
+    if (parent) {
+        // Avoid duplicate entries when re-attaching.
+        for (const auto& c : parent->m_children) {
+            if (c.get() == this) return;
+        }
+        parent->m_children.push_back(shared_from_this());
+    }
+}
+
+void Widget::addChild(Ptr child) {
+    if (!child) return;
+    child->setParent(this);
+}
+
+void Widget::removeChild(Ptr child) {
+    if (!child) return;
+    for (auto it = m_children.begin(); it != m_children.end(); ++it) {
+        if (it->get() == child.get()) {
+            if (child->m_parent == this) child->m_parent = nullptr;
+            m_children.erase(it);
+            break;
+        }
+    }
+}
+
+void Widget::layout(float parentWidth, float parentHeight) {
+    // Base widgets have no opinion about their children's placement, but
+    // containers nested below still need to run their own layout pass.
+    // Subclasses that position children (Column/Row/ScrollView) override this
+    // and do NOT call the base implementation.
+    for (const auto& c : m_children) {
+        if (c) c->layout(m_bounds.w > 0.0f ? m_bounds.w : parentWidth,
+                         m_bounds.h > 0.0f ? m_bounds.h : parentHeight);
+    }
+}
+
+void Widget::onTick(float dt) {
+    if (!m_boundsAnimating) return;
+    if (!m_boundsTween.running()) {
+        m_boundsAnimating = false;
+        return;
+    }
+    m_boundsTween.update(dt);
+    const float t = m_boundsTween.value();
+    const Rect& a = m_boundsStart;
+    const Rect& b = m_boundsTarget;
+    // Tween from the starting rect toward the fixed target stored by
+    // animateTo(); `a`/`b` never move so the curve is stable.
+    m_bounds = Rect{a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t,
+                    a.w + (b.w - a.w) * t, a.h + (b.h - a.h) * t};
+    if (!m_boundsTween.running()) m_boundsAnimating = false;
+}
+
+void Widget::animateTo(const Rect& target, float duration, TweenEase ease) {
+    m_boundsStart = m_bounds;
+    m_boundsTarget = target;
+    m_boundsTween.start(0.0f, 1.0f, duration, ease);
+    m_bounds = target;
+    m_boundsAnimating = true;
+}
+
+bool Widget::hitTest(const Offset2D& p) const {
+    Rect b = bounds();
+    return p.x >= b.x && p.x <= b.x + b.w &&
+           p.y >= b.y && p.y <= b.y + b.h;
+}
+
+Offset2D Widget::absoluteOrigin() const {
+    Offset2D o{};
+    for (const Widget* w = this; w != nullptr; w = w->parent()) {
+        o.x += w->bounds().x;
+        o.y += w->bounds().y;
+    }
+    return o;
+}
+
+void Widget::onPointerDown(MouseButton, const Offset2D&) {
+    (void)this;
+}
+
+void Widget::onPointerUp(MouseButton) {
+    (void)this;
+}
+
+void Widget::onPointerMove(const Offset2D&) {
+    (void)this;
+}
+
+void Widget::onPointerScroll(float, float) {
+    (void)this;
+}
+
+Offset2D Widget::childOffset() const {
+    return Offset2D{0.0f, 0.0f};
+}
+
+bool Widget::clipsChildren(Rect& outRect) const {
+    (void)outRect;
+    return false;
+}
+
+bool Widget::wantsScroll() const {
+    return false;
+}
+
+void Widget::onKeyDown(KeyCode, uint32_t) {
+    (void)this;
+}
+
+void Widget::onKeyUp(KeyCode) {
+    (void)this;
+}
+
+void Widget::onChar(uint32_t) {
+    (void)this;
+}
+
+void Widget::onFocus(bool) {
+    (void)this;
+}
+
+void Widget::applyStyle(const Style& style) {
+    // The parser hands over a fully-formed Style built from the element's
+    // attributes (missing keys keep Style defaults), so this replaces.
+    m_style = style;
+}
+
+void Widget::onDraw(Rasterizer&) const {
+    // subclasses override
+}
+
+void Widget::dispatchEvent(EventType, const Offset2D&) {
+    // subclasses override
+}
+
+} // namespace ogui

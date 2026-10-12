@@ -1,0 +1,32 @@
+<screen id="data">
+  <panel id="bg" x="0" y="0" w="800" h="600" bg="#161616"/>
+  <label id="lbl_group" x="10" y="52" w="780" h="20" text="Dados: tabela ordenavel, editavel e com marquee"
+         font sans 16 color="#66ee66"/>
+  <label x="10" y="78" w="780" h="18"
+         text="Ordene clicando no cabecalho; arraste a borda de uma coluna para redimensionar; clique numa celula editavel (ou F2) para editar."/>
+
+  <table id="tb_people" x="10" y="104" w="780" h="360" rowheight="22" headerheight="24"
+         selected="0" bg="#111" color="#ccc" border="#4488ff" highlight="#334455"
+         headerbg="#1c2733">
+    <th label="Nome" w="160" editable="true"/>
+    <th label="Idade" w="80" resizable="true" scrollingText="automatic"/>
+    <th label="Cidade" w="140"/>
+    <th label="cpf" w="150"/>
+    <th label="email" w="180" scrollingText="automatic"/>
+    <th label="estado civil"/>
+    <tr resizable="true" editableCells="Nome;Cidade;email" scrollingText="automatic"
+        cells="Zoe;30;Rio de Janeiro;000.000.000-00;usermail@myemail.com;solteiro(a)"/>
+    <tr resizable="true" editableCells="Nome;Cidade;email" scrollingText="automatic"
+        cells="Ana;25;Sao Paulo;111.111.111-11;ana@example.com;casado(a)"/>
+    <tr>
+      <cell editable="true" scrollingText="automatic">Bob</cell>
+      <cell scrollingText="automatic">9</cell>
+      <cell editable="true" scrollingText="automatic">Curitiba</cell>
+      <cell scrollingText="automatic">222.222.222-22</cell>
+      <cell editable="true" scrollingText="automatic">bob@example.com.br</cell>
+      <cell scrollingText="automatic">viuvo(a)</cell>
+    </tr>
+    <tr cells="Carla;41;Porto Alegre;333.333.333-33;carla@mail.com;divorciado(a)"/>
+    <tr cells="Diego;19;Belo Horizonte;444.444.444-44;diego@site.org;solteiro(a)"/>
+  </table>
+</screen>

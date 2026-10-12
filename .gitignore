@@ -1,0 +1,10 @@
+# build artefacts
+build/
+build-win/
+debug/build-win-objs/
+debug/build-msvc/
+*.o
+*.a
+
+# local tool state
+.qoder/
