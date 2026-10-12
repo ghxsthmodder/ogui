@@ -883,6 +883,73 @@ static void testBatchBWidgets() {
     }
 }
 
+static void testBatchCWidgets() {
+    Kernel k;
+    k.init();
+
+    XmlParser p;
+    auto res = p.parse(R"(<screen id="s">
+  <panel id="bg" x="0" y="0" w="800" h="600" bg="#101010"/>
+  <rampeditor id="re" x="100" y="100" w="200" h="26"
+              stops="0:#000000 0.5:#ff3300 1:#ffffaa" bind="re_change"/>
+  <curveeditor id="ce" x="100" y="200" w="200" h="100"
+               points="0,0 0.33,1 0.66,0 1,1" bind="ce_change"/>
+</screen>)");
+    assert(res.root);
+    auto s = std::make_shared<Screen>("s");
+    s->widgets.push_back(res.root);
+    s->width = 800;
+    s->height = 600;
+    k.pushScreen(s);
+
+    int reHits = 0, ceHits = 0;
+    k.bind("re_change", [&] { ++reHits; });
+    k.bind("ce_change", [&] { ++ceHits; });
+
+    InputState st = makeInput();
+    idle(k, st);
+
+    auto* re = dynamic_cast<RampEditor*>(k.findWidget("re"));
+    auto* ce = dynamic_cast<CurveEditor*>(k.findWidget("ce"));
+    CHECK(re && ce);
+    if (!re || !ce) return;
+
+    // --- RampEditor: parsed stops + sampled endpoints ---
+    CHECK(re->stopCount() == 3);
+    CHECK(re->sample(0.0f).r == 0 && re->sample(0.0f).b == 0);
+    CHECK(re->sample(1.0f).r == 255 && re->sample(1.0f).b == 0xaa);
+    // Midpoint between the two authored stops is a blend, not a pure stop.
+    const Color mid = re->sample(0.25f);
+    CHECK(mid.r > 0 && mid.r < 255);
+
+    // Click empty bar (local x=50 -> pos 0.25) adds a stop and fires binding.
+    pressAt(k, st, 150.0f, 113.0f);
+    releaseAt(k, st);
+    CHECK(re->stopCount() == 4);
+    CHECK(reHits == 1);
+
+    // Drag the far-right stop (pos 1.0 at x=300) left to ~0.9.
+    pressAt(k, st, 300.0f, 113.0f);
+    st.mouseX = 280.0f; st.mouseDown[0] = true; k.frame(st);   // move while held
+    releaseAt(k, st);
+    CHECK(re->stopCount() == 4);
+    CHECK(re->stops().back().pos < 0.95f);
+    CHECK(reHits >= 2);
+
+    // --- CurveEditor: parsed endpoints + symmetric evaluation ---
+    CHECK(ce->evaluate(0.0f) == 0.0f);
+    CHECK(ce->evaluate(1.0f) == 1.0f);
+    CHECK(std::fabs(ce->evaluate(0.5f) - 0.5f) < 0.01f);
+
+    // Drag control point P1 (local 66,0 -> absolute 166,200) down to y=0.5.
+    pressAt(k, st, 166.0f, 200.0f);
+    st.mouseY = 250.0f; st.mouseDown[0] = true; k.frame(st);   // move while held
+    releaseAt(k, st);
+    CHECK(ceHits == 1);
+    CHECK(ce->point(1).y < 0.9f);
+    CHECK(ce->evaluate(0.5f) < 0.5f);   // lowered control drags the curve down
+}
+
 static void testLabelWrapAndColumnAutoHeight() {
     if (!FontManager::instance().get("sans", 14)) {
         std::cout << "  (no system font; skipping wrap checks)\n";
@@ -2282,6 +2349,7 @@ int main() {
     testGrid();
     testBatchAWidgets();
     testBatchBWidgets();
+    testBatchCWidgets();
     testLabelWrapAndColumnAutoHeight();
     testNewWidgets();
     testRadioButtonGroup();

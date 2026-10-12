@@ -3513,6 +3513,10 @@ std::map<std::string, WidgetFactory>& widgetRegistry() {
         reg["contextmenu"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<ContextMenu>(); };
         reg["colorpicker"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<ColorPicker>(); };
         reg["pathpicker"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<PathPicker>(); };
+        reg["rampeditor"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<RampEditor>(); };
+        reg["ramp"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<RampEditor>(); };
+        reg["curveeditor"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<CurveEditor>(); };
+        reg["curve"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<CurveEditor>(); };
     }
     return reg;
 }
@@ -4551,6 +4555,264 @@ void PathPicker::onDraw(Rasterizer& r) const {
     r.drawText("...", button.x + button.w * 0.5f,
                button.y + button.h * 0.5f, m_fontSize, "sans",
                hexColor("#dddddd"), Align::Center, VertAlign::Middle);
+}
+
+// ------------------------------------------------------------------
+// RampEditor
+// ------------------------------------------------------------------
+RampEditor::RampEditor() = default;
+RampEditor::~RampEditor() = default;
+
+void RampEditor::setStops(const std::vector<Stop>& stops) {
+    m_stops = stops;
+    std::sort(m_stops.begin(), m_stops.end(),
+              [](const Stop& a, const Stop& b) { return a.pos < b.pos; });
+}
+
+bool RampEditor::setStopsFromSpec(const std::string& spec) {
+    std::vector<Stop> out;
+    size_t i = 0;
+    while (i < spec.size()) {
+        while (i < spec.size() && std::isspace(static_cast<unsigned char>(spec[i]))) ++i;
+        size_t j = i;
+        while (j < spec.size() && !std::isspace(static_cast<unsigned char>(spec[j]))) ++j;
+        if (j > i) {
+            const std::string tok = spec.substr(i, j - i);
+            const size_t colon = tok.find(':');
+            if (colon == std::string::npos) return false;
+            Stop s;
+            s.pos = std::clamp(static_cast<float>(std::atof(tok.substr(0, colon).c_str())), 0.0f, 1.0f);
+            s.color = hexColor(tok.substr(colon + 1));
+            out.push_back(s);
+        }
+        i = j;
+    }
+    if (out.empty()) return false;
+    setStops(out);
+    return true;
+}
+
+void RampEditor::clear() {
+    m_stops.clear();
+}
+
+Color RampEditor::sample(float pos) const {
+    if (m_stops.empty()) return hexColor("#ffffff");
+    std::vector<Stop> sorted = m_stops;
+    std::sort(sorted.begin(), sorted.end(),
+              [](const Stop& a, const Stop& b) { return a.pos < b.pos; });
+    pos = std::clamp(pos, 0.0f, 1.0f);
+    if (pos <= sorted.front().pos) return sorted.front().color;
+    if (pos >= sorted.back().pos) return sorted.back().color;
+    for (size_t i = 1; i < sorted.size(); ++i) {
+        if (pos <= sorted[i].pos) {
+            const Stop& a = sorted[i - 1];
+            const Stop& b = sorted[i];
+            const float span = b.pos - a.pos;
+            const float t = span > 0.0f ? (pos - a.pos) / span : 0.0f;
+            Color c;
+            c.r = static_cast<uint8_t>(a.color.r + (b.color.r - a.color.r) * t);
+            c.g = static_cast<uint8_t>(a.color.g + (b.color.g - a.color.g) * t);
+            c.b = static_cast<uint8_t>(a.color.b + (b.color.b - a.color.b) * t);
+            c.a = 255;
+            return c;
+        }
+    }
+    return sorted.back().color;
+}
+
+void RampEditor::notify() {
+    if (m_onChanged) m_onChanged();
+}
+
+void RampEditor::onPointerDown(MouseButton btn, const Offset2D& p) {
+    if (btn != Mouse_Left) return;
+    const Offset2D o = absoluteOrigin();
+    const Rect b = bounds();
+    if (b.w <= 0.0f) return;
+    const float lx = static_cast<float>(p.x) - o.x;   // 0-based local
+    // Grab the nearest existing stop within a small radius, else add one.
+    int best = -1;
+    float bestDist = 8.0f;
+    for (int i = 0; i < static_cast<int>(m_stops.size()); ++i) {
+        const float tx = m_stops[i].pos * b.w;
+        const float d = std::fabs(tx - lx);
+        if (d < bestDist) { bestDist = d; best = i; }
+    }
+    if (best >= 0) {
+        m_drag = best;
+    } else {
+        Stop s;
+        s.pos = std::clamp(lx / b.w, 0.0f, 1.0f);
+        s.color = sample(s.pos);
+        m_stops.push_back(s);
+        m_drag = static_cast<int>(m_stops.size()) - 1;
+        notify();
+    }
+}
+
+void RampEditor::onPointerUp(MouseButton) {
+    if (m_drag >= 0) {
+        m_drag = -1;
+        std::sort(m_stops.begin(), m_stops.end(),
+                  [](const Stop& a, const Stop& b) { return a.pos < b.pos; });
+        notify();
+    }
+}
+
+void RampEditor::onPointerMove(const Offset2D& p) {
+    if (m_drag < 0 || m_drag >= static_cast<int>(m_stops.size())) return;
+    const Offset2D o = absoluteOrigin();
+    const Rect b = bounds();
+    if (b.w <= 0.0f) return;
+    const float lx = static_cast<float>(p.x) - o.x;
+    m_stops[m_drag].pos = std::clamp(lx / b.w, 0.0f, 1.0f);
+}
+
+void RampEditor::onDraw(Rasterizer& r) const {
+    if (!m_style.isVisible) return;
+    const Rect b = bounds();
+    // Gradient bar: one thin vertical slice per step, colour sampled at centre.
+    constexpr float kStep = 3.0f;
+    for (float x = 0.0f; x < b.w; x += kStep) {
+        const float frac = (x + kStep * 0.5f) / b.w;
+        r.drawRect(Rect{b.x + x, b.y, kStep + 1.0f, b.h}, sample(frac));
+    }
+    r.drawRectBorder(b, m_borderColor, 1.0f, 0.0f);
+    // Stop markers: a tick down the bar plus a filled diamond at the base.
+    for (const Stop& s : m_stops) {
+        const float cx = b.x + s.pos * b.w;
+        r.drawLine({cx, b.y}, {cx, b.y + b.h - 6.0f}, hexColor("#00000080"), 1.0f);
+        const float cy = b.y + b.h - 5.0f;
+        const float k = 5.0f;
+        r.drawTriangle({cx - k, cy}, {cx, cy - k}, {cx + k, cy}, s.color);
+        r.drawTriangle({cx - k, cy}, {cx, cy + k}, {cx + k, cy}, s.color);
+        r.drawRectBorder(Rect{cx - k, cy - k, k * 2.0f, k * 2.0f}, m_thumbColor, 1.0f, 0.0f);
+    }
+}
+
+// ------------------------------------------------------------------
+// CurveEditor
+// ------------------------------------------------------------------
+CurveEditor::CurveEditor() = default;
+CurveEditor::~CurveEditor() = default;
+
+void CurveEditor::setPoints(const Point pts[4]) {
+    for (int i = 0; i < 4; ++i) {
+        m_pts[i].x = std::clamp(pts[i].x, 0.0f, 1.0f);
+        m_pts[i].y = std::clamp(pts[i].y, 0.0f, 1.0f);
+    }
+}
+
+bool CurveEditor::setPointsFromSpec(const std::string& spec) {
+    Point tmp[4];
+    int n = 0;
+    size_t i = 0;
+    while (i < spec.size() && n < 4) {
+        while (i < spec.size() && (std::isspace(static_cast<unsigned char>(spec[i])) || spec[i] == ',')) ++i;
+        size_t c = spec.find(',', i);
+        if (c == std::string::npos) break;
+        tmp[n].x = std::atof(spec.substr(i, c - i).c_str());
+        size_t d = spec.find_first_of(" ,", c + 1);
+        if (d == std::string::npos) d = spec.size();
+        tmp[n].y = std::atof(spec.substr(c + 1, d - c - 1).c_str());
+        ++n;
+        i = d;
+    }
+    if (n != 4) return false;
+    setPoints(tmp);
+    return true;
+}
+
+float CurveEditor::evaluate(float t) const {
+    t = std::clamp(t, 0.0f, 1.0f);
+    const float mt = 1.0f - t;
+    const float y = mt * mt * mt * m_pts[0].y
+                  + 3.0f * mt * mt * t * m_pts[1].y
+                  + 3.0f * mt * t * t * m_pts[2].y
+                  + t * t * t * m_pts[3].y;
+    return std::clamp(y, 0.0f, 1.0f);
+}
+
+void CurveEditor::notify() {
+    if (m_onChanged) m_onChanged();
+}
+
+void CurveEditor::onPointerDown(MouseButton btn, const Offset2D& p) {
+    if (btn != Mouse_Left) return;
+    const Offset2D o = absoluteOrigin();
+    const Rect b = bounds();
+    if (b.w <= 0.0f || b.h <= 0.0f) return;
+    const float px = static_cast<float>(p.x) - o.x;   // 0-based local pixels
+    const float py = static_cast<float>(p.y) - o.y;
+    int best = -1;
+    float bestDist = 10.0f;
+    for (int i = 0; i < 4; ++i) {
+        const float hx = m_pts[i].x * b.w;
+        const float hy = (1.0f - m_pts[i].y) * b.h;
+        const float d = std::sqrt((hx - px) * (hx - px) + (hy - py) * (hy - py));
+        if (d < bestDist) { bestDist = d; best = i; }
+    }
+    m_drag = best;
+}
+
+void CurveEditor::onPointerUp(MouseButton) {
+    if (m_drag >= 0) { m_drag = -1; notify(); }
+}
+
+void CurveEditor::onPointerMove(const Offset2D& p) {
+    if (m_drag < 0) return;
+    const Offset2D o = absoluteOrigin();
+    const Rect b = bounds();
+    if (b.w <= 0.0f || b.h <= 0.0f) return;
+    m_pts[m_drag].x = std::clamp((static_cast<float>(p.x) - o.x) / b.w, 0.0f, 1.0f);
+    m_pts[m_drag].y = std::clamp(1.0f - (static_cast<float>(p.y) - o.y) / b.h, 0.0f, 1.0f);
+}
+
+void CurveEditor::onDraw(Rasterizer& r) const {
+    if (!m_style.isVisible) return;
+    const Rect b = bounds();
+    r.drawRect(b, m_bgColor);
+
+    auto toPx = [&](const Point& pt) {
+        return Offset2D{ b.x + pt.x * b.w, b.y + (1.0f - pt.y) * b.h };
+    };
+
+    // Unit grid at quarter steps.
+    for (int i = 1; i < 4; ++i) {
+        const float gx = b.x + b.w * (i / 4.0f);
+        const float gy = b.y + b.h * (i / 4.0f);
+        r.drawLine({gx, b.y}, {gx, b.y + b.h}, m_gridColor, 1.0f);
+        r.drawLine({b.x, gy}, {b.x + b.w, gy}, m_gridColor, 1.0f);
+    }
+
+    // Control handles P0-P1 and P2-P3.
+    r.drawLine(toPx(m_pts[0]), toPx(m_pts[1]), m_handleColor, 1.0f);
+    r.drawLine(toPx(m_pts[2]), toPx(m_pts[3]), m_handleColor, 1.0f);
+
+    // The cubic Bezier, sampled as short segments.
+    Point prev = m_pts[0];
+    for (int s = 1; s <= 48; ++s) {
+        const float t = s / 48.0f;
+        const float mt = 1.0f - t;
+        Point cur;
+        cur.x = mt * mt * mt * m_pts[0].x + 3.0f * mt * mt * t * m_pts[1].x
+              + 3.0f * mt * t * t * m_pts[2].x + t * t * t * m_pts[3].x;
+        cur.y = mt * mt * mt * m_pts[0].y + 3.0f * mt * mt * t * m_pts[1].y
+              + 3.0f * mt * t * t * m_pts[2].y + t * t * t * m_pts[3].y;
+        r.drawLine(toPx(prev), toPx(cur), m_curveColor, 2.0f);
+        prev = cur;
+    }
+
+    // Draggable nodes: endpoints cyan, control points yellow.
+    for (int i = 0; i < 4; ++i) {
+        const Offset2D c = toPx(m_pts[i]);
+        const bool end = (i == 0 || i == 3);
+        const float k = (m_drag == i) ? 6.0f : 4.0f;
+        r.drawRect(Rect{c.x - k, c.y - k, k * 2.0f, k * 2.0f},
+                   end ? m_endColor : m_ctrlColor);
+    }
+    r.drawRectBorder(b, hexColor("#3a3b44"), 1.0f, 0.0f);
 }
 
 } // namespace ogui

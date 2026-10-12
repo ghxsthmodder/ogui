@@ -1930,6 +1930,81 @@ private:
 };
 
 // ------------------------------------------------------------------
+// RampEditor / ColorGradient: a horizontal bar built from movable color
+// stops. Click the bar to add a stop, drag a stop to reposition it. The
+// gradient is the piecewise-linear interpolation between adjacent stops.
+// ------------------------------------------------------------------
+class RampEditor : public Widget {
+public:
+    struct Stop { float pos = 0.0f; Color color{}; };
+
+    RampEditor();
+    virtual ~RampEditor() override;
+
+    void setStops(const std::vector<Stop>& stops);
+    // "0:#000000 0.5:#ff3300 1:#ffffaa" — whitespace-separated pos:hex pairs.
+    bool setStopsFromSpec(const std::string& spec);
+    const std::vector<Stop>& stops() const { return m_stops; }
+    int stopCount() const { return static_cast<int>(m_stops.size()); }
+    // Interpolated color at pos (clamped to [0,1]).
+    Color sample(float pos) const;
+    void clear();
+    void setOnChanged(std::function<void()> cb) { m_onChanged = std::move(cb); }
+
+    virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
+    virtual void onPointerUp(MouseButton btn) override;
+    virtual void onPointerMove(const Offset2D& p) override;
+    virtual void onDraw(Rasterizer& r) const override;
+
+private:
+    void notify();
+
+    std::vector<Stop> m_stops;
+    int m_drag = -1;             // index of the stop being dragged
+    std::function<void()> m_onChanged;
+    Color m_borderColor{ogui::hexColor("#3a3b44")};
+    Color m_thumbColor{ogui::hexColor("#ffffff")};
+};
+
+// ------------------------------------------------------------------
+// CurveEditor: a cubic Bezier with four draggable control points, drawn
+// in a unit box (x = input 0..1, y = output 0..1, top edge = 1.0).
+// ------------------------------------------------------------------
+class CurveEditor : public Widget {
+public:
+    struct Point { float x = 0.0f, y = 0.0f; };   // normalised, y up
+
+    CurveEditor();
+    virtual ~CurveEditor() override;
+
+    void setPoints(const Point pts[4]);
+    // "0,0 0.33,1 0.66,0 1,1" — whitespace-separated x,y pairs (y up).
+    bool setPointsFromSpec(const std::string& spec);
+    const Point& point(int i) const { return m_pts[i]; }
+    // Output value (0..1, y up) for input t (0..1).
+    float evaluate(float t) const;
+    void setOnChanged(std::function<void()> cb) { m_onChanged = std::move(cb); }
+
+    virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
+    virtual void onPointerUp(MouseButton btn) override;
+    virtual void onPointerMove(const Offset2D& p) override;
+    virtual void onDraw(Rasterizer& r) const override;
+
+private:
+    void notify();
+
+    Point m_pts[4] = { {0.0f, 0.0f}, {0.33f, 1.0f}, {0.66f, 0.0f}, {1.0f, 1.0f} };
+    int m_drag = -1;
+    std::function<void()> m_onChanged;
+    Color m_bgColor{ogui::hexColor("#111114")};
+    Color m_gridColor{ogui::hexColor("#26272e")};
+    Color m_handleColor{ogui::hexColor("#444455")};
+    Color m_curveColor{ogui::hexColor("#ffffff")};
+    Color m_endColor{ogui::hexColor("#00e5ff")};
+    Color m_ctrlColor{ogui::hexColor("#ffea00")};
+};
+
+// ------------------------------------------------------------------
 // XML widgets *ebay registry* (tag -> creator)
 // ------------------------------------------------------------------
 using WidgetFactory = std::shared_ptr<Widget> (*)(const Style&, const std::map<std::string, std::string>&);

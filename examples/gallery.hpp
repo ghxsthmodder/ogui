@@ -221,6 +221,17 @@ inline void install(ogui::Kernel& k, Gallery& g, int& index, int start = 0) {
         if (auto* pp = dynamic_cast<ogui::PathPicker*>(k.findWidget("pp_mesh")))
             k.setText("lbl_cp", "Arquivo: " + pp->value());
     });
+    k.bind("re_change", [&k] {
+        if (auto* re = dynamic_cast<ogui::RampEditor*>(k.findWidget("re_ramp")))
+            k.showToast("Rampa: " + std::to_string(re->stopCount()) + " stops.",
+                        ogui::Kernel::ToastKind::Info);
+    });
+    k.bind("ce_change", [&k] {
+        if (auto* ce = dynamic_cast<ogui::CurveEditor*>(k.findWidget("ce_curve")))
+            k.showToast("Curva em t=0.5: " + std::to_string(
+                            static_cast<int>(ce->evaluate(0.5f) * 100.0f)) + "%",
+                        ogui::Kernel::ToastKind::Info);
+    });
 
     k.pushScreen(g.screens[static_cast<size_t>(index)]);
     show();

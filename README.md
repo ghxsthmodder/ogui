@@ -309,6 +309,8 @@ theme default.
 | `contextmenu` | right-click menu holder (invisible in the tree); any widget points at it with `contextmenu="<id>"` and right-clicking it opens the menu at the pointer (right-click never fires click bindings) | `id`; children are `menuitem`/`menuseparator` |
 | `colorpicker` | swatch + hex label; click opens a popup with a saturation/value grid, a hue strip and a live hex readout; drags update the color and fire the widget's `bind()` | `color` (`#rrggbb`) |
 | `pathpicker` | read-only path field with a `...` button that opens a file-browser popup (folders first with a trailing `/`, `..` to go up, capped at 40 entries); picking a file fires the widget's `bind()` | `value`, `placeholder`, `path` (start folder), `filter` (extension, e.g. `.png`) |
+| `rampeditor` / `ramp` | horizontal color-gradient bar built from movable stops; click the bar to add a stop, drag a stop to reposition it, colours blend piecewise-linearly between neighbours; a change fires the widget's `bind()` | `stops` (`pos:#rrggbb pos:#rrggbb ...`, pos 0..1) |
+| `curveeditor` / `curve` | cubic-Bézier curve in a unit box with four draggable control points (endpoints cyan, handles yellow); `evaluate(t)` samples the eased output for animation | `points` (`x,y x,y x,y x,y`, normalised 0..1, y up) |
 | `separator` | rule, horizontal or vertical | `thickness`, `color` |
 | `tabs` / `tab` | header strip over stacked pages (inactive pages take no input); pages that don't fit the width collapse into a `...` popup menu | `active`, `theight`, `headercolor`, `tabcolor`, `activecolor`, `accent` / `label` |
 | `group` | titled grouping box | `name` |

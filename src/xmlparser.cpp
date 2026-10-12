@@ -811,6 +811,10 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         if (const std::string* v = get("placeholder")) pp->setPlaceholder(*v);
         if (const std::string* v = get("path")) pp->setStartPath(*v);
         if (const std::string* v = get("filter")) pp->setFilter(*v);
+    } else if (auto* re = dynamic_cast<RampEditor*>(w.get())) {
+        if (const std::string* v = get("stops")) re->setStopsFromSpec(*v);
+    } else if (auto* ce = dynamic_cast<CurveEditor*>(w.get())) {
+        if (const std::string* v = get("points")) ce->setPointsFromSpec(*v);
     } else if (auto* tb = dynamic_cast<Tabs*>(w.get())) {
         if (const std::string* v = get("active")) {
             int idx = 0;

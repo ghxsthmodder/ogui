@@ -94,6 +94,15 @@
       <label id="lbl_cp" x="10" y="76" w="95%" h="18" text="Clique no swatch ou em ..."
              font sans 12 color="#888888"/>
     </panel>
+
+    <!-- celula 6: rampa de cor e curva bezier -->
+    <panel x="0" y="0" w="100%" h="150" bg="#1c1d22" border="#3a3b44" radius="6">
+      <label x="10" y="8" w="90%" h="18" text="Rampa / Curva" font sans 14 color="#aaaaaa"/>
+      <rampeditor id="re_ramp" x="10" y="32" w="95%" h="26"
+                  stops="0:#000000 0.5:#ff3300 1:#ffffaa" bind="re_change"/>
+      <curveeditor id="ce_curve" x="10" y="66" w="95%" h="72"
+                   points="0,0 0.33,1 0.66,0 1,1" bind="ce_change"/>
+    </panel>
   </grid>
 
   <!-- menu de contexto do painel Formulario (botao direito) -->
