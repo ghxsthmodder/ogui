@@ -53,6 +53,8 @@ public:
     void drawRoundedRect(const Rect& r, const Color& col, float radius);
     // Rect filled with a top->bottom colour ramp (interpolated per-vertex).
     void drawVerticalGradient(const Rect& r, const Color& top, const Color& bottom);
+    // Left-to-right ramp; the sharp counterpart of drawVerticalGradient.
+    void drawHorizontalGradient(const Rect& r, const Color& left, const Color& right);
     // Rounded variant of drawVerticalGradient: the ramp is evaluated per
     // vertex so the corner fans blend like the straight edges do.
     void drawRoundedGradient(const Rect& r, const Color& top,

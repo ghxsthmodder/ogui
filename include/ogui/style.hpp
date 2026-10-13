@@ -53,8 +53,11 @@ struct Style {
     float shadowDx = 0.0f;
     float shadowDy = 0.0f;
     // vertical gradient: backgroundColor (top) -> gradientColor (bottom).
+    // With gradientHorizontal the ramp runs backgroundColor (left) ->
+    // gradientColor (right) and corner radius is ignored.
     Color gradientColor = hexColor("#000000");
     bool hasGradient = false;
+    bool gradientHorizontal = false;
     // geometry
     float padding = 0.0f;
     float margin = 0.0f;

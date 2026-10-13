@@ -93,9 +93,12 @@ void Button::onDraw(Rasterizer& r) const {
                          focus ? 2.0f : m_borderWidth, m_radius);
     }
     if (!m_text.empty()) {
-        r.drawText(m_text.c_str(), b.x + b.w * 0.5f, b.y + b.h * 0.5f,
+        float tx = b.x + b.w * 0.5f;
+        if (m_textAlign == Align::Left) tx = b.x + m_textPadding;
+        else if (m_textAlign == Align::Right) tx = b.x + b.w - m_textPadding;
+        r.drawText(m_text.c_str(), tx, b.y + b.h * 0.5f,
                    m_fontSize, m_fontFamily, m_textColor,
-                   Align::Center, VertAlign::Middle);
+                   m_textAlign, VertAlign::Middle);
     }
 }
 
@@ -149,7 +152,10 @@ void Panel::onDraw(Rasterizer& r) const {
     if (!m_style.isVisible) return;
     Rect b = bounds();
     if (m_style.hasGradient) {
-        r.drawRoundedGradient(b, m_bgColor, m_style.gradientColor, m_radius);
+        if (m_style.gradientHorizontal)
+            r.drawHorizontalGradient(b, m_bgColor, m_style.gradientColor);
+        else
+            r.drawRoundedGradient(b, m_bgColor, m_style.gradientColor, m_radius);
     } else if (m_bgColor.a > 0) {
         r.drawRoundedRect(b, m_bgColor, m_radius);
     }
@@ -212,7 +218,9 @@ void Window::onDraw(Rasterizer& r) const {
     Rect b = bounds();
 
     // Body first, then title bar on top of it.
-    if (m_style.hasGradient)
+    if (m_style.hasGradient && m_style.gradientHorizontal)
+        r.drawHorizontalGradient(b, m_bgColor, m_style.gradientColor);
+    else if (m_style.hasGradient)
         r.drawRoundedGradient(b, m_bgColor, m_style.gradientColor, m_radius);
     else if (m_bgColor.a > 0) r.drawRoundedRect(b, m_bgColor, m_radius);
 

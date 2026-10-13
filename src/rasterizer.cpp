@@ -100,6 +100,18 @@ void Rasterizer::drawVerticalGradient(const Rect& r, const Color& top,
             clip, m_texId);
 }
 
+void Rasterizer::drawHorizontalGradient(const Rect& r, const Color& left,
+                                        const Color& right) {
+    if (r.w <= 0.0f || r.h <= 0.0f) return;
+    Rect clip = currentClip(r);
+    if (clip.w <= 0.0f || clip.h <= 0.0f) return;
+
+    float x0 = r.x, y0 = r.y, x1 = r.x + r.w, y1 = r.y + r.h;
+    addQuad(mk(x0, y0, 0, 0, left), mk(x1, y0, 1, 0, right),
+            mk(x1, y1, 1, 1, right), mk(x0, y1, 0, 1, left),
+            clip, m_texId);
+}
+
 void Rasterizer::drawRoundedGradient(const Rect& r, const Color& top,
                                      const Color& bottom, float radius) {
     if (r.w <= 0.0f || r.h <= 0.0f) return;

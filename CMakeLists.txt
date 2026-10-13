@@ -127,6 +127,8 @@ endif()
 if(OGUI_BUILD_TESTS)
     add_executable(ogui_parser_test tests/parser_test.cpp)
     target_link_libraries(ogui_parser_test PRIVATE ogui)
+    target_compile_definitions(ogui_parser_test PRIVATE
+        OGUI_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 
     add_executable(ogui_drawlist_test tests/drawlist_test.cpp)
     target_link_libraries(ogui_drawlist_test PRIVATE ogui)

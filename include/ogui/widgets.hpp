@@ -99,6 +99,12 @@ public:
     void setBorderColor(const Color& col) { m_borderColor = col; }
     void setBorderWidth(float w) { m_borderWidth = w; }
     void setRadius(float r) { m_radius = r; }
+    // Horizontal text placement inside the button (default center) and the
+    // inset used by the left/right alignments.
+    void setHAlign(Align a) { m_textAlign = a; }
+    void setTextPadding(float p) { m_textPadding = p; }
+    Align hAlign() const { return m_textAlign; }
+    float textPadding() const { return m_textPadding; }
 
     virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
     virtual void onPointerUp(MouseButton btn) override;
@@ -117,6 +123,8 @@ private:
     Color m_borderColor{ogui::hexColor("#3366cc")};
     float m_borderWidth = 1.0f;
     float m_radius = 4.0f;
+    Align m_textAlign = Align::Center;
+    float m_textPadding = 12.0f;
     bool m_pressed = false;
 };
 

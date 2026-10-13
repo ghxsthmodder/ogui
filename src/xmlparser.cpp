@@ -1,6 +1,7 @@
 #include "ogui/xmlparser.hpp"
 #include "ogui/widget.hpp"
 #include "ogui/widgets.hpp"
+#include "ogui/font.hpp"
 
 #include <fstream>
 #include <cctype>
@@ -140,6 +141,23 @@ void XmlParser::parseElement() {
     // <style name="..."> defines a reusable style; it is not a widget.
     if (tag == "style") {
         parseStyleDef(attrs, selfClosing);
+        return;
+    }
+
+    // <font family="..." source="file.ttf"> registers a font family with the
+    // FontManager; like <style> it is data-only and yields no widget.
+    if (tag == "font") {
+        auto find = [&](const char* k) -> std::string {
+            auto it = attrs.find(k);
+            return it == attrs.end() ? std::string() : it->second;
+        };
+        const std::string family = find("family");
+        std::string path = find("source");
+        if (path.empty()) path = find("path");
+        if (!family.empty() && !path.empty())
+            FontManager::instance().setFontPath(family, path);
+        else
+            addError("font: family and source are required");
         return;
     }
 
@@ -607,6 +625,8 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
     if (const std::string* v = get("gradient")) {
         st.gradientColor = colorOf(*v);
         st.hasGradient = true;
+        if (const std::string* d = get("gradientdirection"))
+            st.gradientHorizontal = (*d == "horizontal" || *d == "left" || *d == "right");
         hasStyle = true;
     }
     if (hasStyle) w->applyStyle(st);
@@ -621,6 +641,15 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         }
     } else if (auto* b = dynamic_cast<Button*>(w.get())) {
         if (const std::string* v = get("text")) b->setText(*v);
+        if (const std::string* v = get("align")) {
+            b->setHAlign(*v == "left" ? Align::Left
+                                      : (*v == "right" ? Align::Right : Align::Center));
+        }
+        if (const std::string* v = get("textpadding")) {
+            float pad = 0.0f;
+            toFloat(*v, pad);
+            b->setTextPadding(pad);
+        }
         if (hasStyle) {
             b->setFontFamily(st.fontFamily); b->setFontSize(st.fontSize);
             b->setTextColor(st.textColor); b->setBgColor(st.backgroundColor);

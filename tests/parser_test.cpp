@@ -1,6 +1,7 @@
 // ogui_parser_test.cpp : unit test for the XML layout parser.
 // Build: g++ -std=c++20 tests/parser_test.cpp -I../include -L../build -logui -o parser_test
 #include "ogui/xmlparser.hpp"
+#include "ogui/font.hpp"
 #include <cassert>
 #include <iostream>
 
@@ -198,6 +199,34 @@ int main() {
         assert(r8.root != nullptr);
         assert(r8.root->rawAttribute("foo") && *r8.root->rawAttribute("foo") == "bar");
         assert(r8.root->children().size() == 1);
+    }
+
+    // ---- <font> registration, gradient direction, button text align -------
+    {
+        const std::string fontPath =
+            std::string(OGUI_SOURCE_DIR) + "/assets/Anton-Regular.ttf";
+        ogui::XmlParser p9;
+        auto r9 = p9.parse("<screen id=\"s\">\n"
+            "<font family=\"testanton\" source=\"" + fontPath + "\"/>\n"
+            "<panel id=\"fade\" x=\"0\" y=\"0\" width=\"100\" height=\"100\""
+            " background=\"#000000aa\" gradient=\"#00000000\""
+            " gradientDirection=\"horizontal\"/>\n"
+            "<button id=\"b\" text=\"GO\" align=\"left\" textPadding=\"20\"/>\n"
+            "</screen>");
+        assert(r9.root != nullptr);
+        assert(r9.errors.empty());
+        assert(r9.root->children().size() == 2);   // <font> yields no widget
+        // The family is registered: FontManager loads it from the given file.
+        assert(ogui::FontManager::instance().get("testanton", 24) != nullptr);
+        auto fade = std::dynamic_pointer_cast<ogui::Panel>(r9.root->children()[0]);
+        assert(fade != nullptr);
+        assert(fade->style().hasGradient);
+        assert(fade->style().gradientHorizontal);
+        assert(fade->style().gradientColor.a == 0);
+        auto b = std::dynamic_pointer_cast<ogui::Button>(r9.root->children()[1]);
+        assert(b != nullptr);
+        assert(b->hAlign() == ogui::Align::Left);
+        assert(b->textPadding() == 20.0f);
     }
 
     std::cout << "parser_test: OK - parsed " << child_count << " top-level widgets\n";

@@ -130,7 +130,7 @@ lower-right corner.
 | `font` / `fontSize` | family and size (`fontSize` overrides; legacy `font sans 20 color "#66ee66"` pseudo-syntax also works) |
 | `shadow` | drop shadow as `"blur[,dy[,dx]]"` |
 | `shadowColor` | shadow tint |
-| `gradient` | fill gradient |
+| `gradient` | fill gradient; `gradientDirection="horizontal"` runs the ramp left→right (radius ignored) |
 
 ## Named styles
 
@@ -177,7 +177,7 @@ opt in with `style="p"`; the named style provides the base and the element's
 
 | Element | Typed attributes | Children |
 |---|---|---|
-| `button` | `text` | — |
+| `button` | `text`, `align` (`left`/`center`/`right`), `textPadding` (inset for left/right) | — |
 | `checkbox` | `text`, `checked`, `color`, `background` (check colour), `borderColor` | — |
 | `radiobutton` | `text`, `checked`, `group`, `accent` | — |
 | `toggleswitch` / `toggle` | `checked`, `on`, `text` | — |
@@ -239,6 +239,7 @@ Overflowing tab headers collapse into a `...` popup menu automatically.
 | Element | Notes |
 |---|---|
 | `manifest` | root only; `theme`, children `screen title path` |
+| `font` | registers a font family: `<font family="anton" source="assets/Anton-Regular.ttf"/>`; later `font="anton"` attributes resolve to that file. Data-only, yields no widget |
 | `option` | entry of `optionspin`/`combobox` |
 | `item` | entry of `listbox`/`combobox` |
 

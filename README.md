@@ -244,7 +244,7 @@ Conventional names that are not abbreviations stay as-is: `x`, `y`, `id`,
 | `background` `color` `border` `borderColor` `borderWidth` `radius` | colors/metrics |
 | `shadow` | soft drop shadow: `blur` or `blur,dy` or `blur,dx,dy` (pixels) |
 | `shadowColor` | shadow color (default `#000000`), e.g. `shadowColor="#000000"` |
-| `gradient` | vertical background gradient end color: `background` stays the top color |
+| `gradient` | vertical background gradient end color: `background` stays the top color; `gradientDirection="horizontal"` ramps left→right instead |
 | `padding` `margin` | layout knobs (`<column>` uses both) |
 | `font` `fontSize` | `font="sans 20"` or the legacy `font sans 20 color "#66ee66"` |
 
@@ -320,13 +320,14 @@ theme default.
 | `screen` | document root (one per file) | — |
 | `manifest` | data-only root listing gallery screens (`<screen title path/>` children) | `theme` (`dark`/`light`, initial palette) |
 | `style` | named style definition | `name` |
+| `font` | registers a font family for later `font="..."` use (data-only, no widget) | `family`, `source` (TTF/OTF path) |
 | `panel` | plain rectangle container | — |
 | `window` | bordered panel with a title bar (children are offset by it) | `title`, `titleVisible` |
 | `column` | stacks children vertically (gap 4, honours `padding`/`margin`) | — |
 | `row` | lays children out horizontally, tiling authored widths with a gap | — |
 | `grid` | row-major tiling over column tracks; children fill each cell origin (child `x`/`y` are ignored, percent/fill resolve against the cell) | `columns` (`"3"` = 3 equal tracks, or a list like `"120 1fr 25%"`: px, fractional, percent), `gap` (px, default 4), `rowHeight` (px; default is auto = tallest child of the row) |
 | `label` | text | `text`, `wrap`, `align="left\|center\|right"` |
-| `button` | clickable button, press/release feedback | `text` |
+| `button` | clickable button, press/release feedback | `text`, `align="left\|center\|right"`, `textPadding` (inset for left/right) |
 | `textinput` | single-line UTF-8 editor: caret, click-drag / Shift+arrows / Shift+click selection, double-click selects the word, triple-click selects all, Ctrl+Left/Right jump words, Ctrl+A/C/X/V | `text`, `placeholder` |
 | `textarea` | multiline UTF-8 editor: Enter inserts a newline, Up/Down navigate lines, selection spans lines (word/line drag, double/triple-click and Shift+click like `textinput`), long lines soft-wrap to the widget width, wheel scrolls, vertical scrollbar (drag the thumb or click the track) when content overflows | `text`, `placeholder` (style attrs as `textinput`) |
 | `listbox` | scrollable list with single selection (click, wheel, Up/Down/Home/End) | `selected`, `rowHeight`, `highlight` + `<item>` children |

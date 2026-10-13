@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<!-- layout_game.xml : recria o menu principal do jogo "South American
+     Farming" (tests/gui/__main__.py, pyray) usando somente widgets ogui.
+     Design 1228x700. Assetos em assets/ (back.png, logo.png, Anton). -->
+<screen id="game">
+  <font family="anton" source="assets/Anton-Regular.ttf"/>
+
+  <!-- fundo fullscreen (mesma distensao do draw_texture_pro de referencia) -->
+  <image source="assets/back.png" x="0" y="0" width="100%" height="100%"/>
+
+  <!-- gradiente horizontal escuro: equivale ao draw_rectangle_gradient_h
+       520px, rgba(0,0,0,170) -> transparente -->
+  <panel x="0" y="0" width="520" height="100%"
+         background="#000000aa" gradient="#00000000" gradientDirection="horizontal"/>
+
+  <!-- logo 662x377 escala 0.5 -->
+  <image source="assets/logo.png" x="0" y="0" width="331" height="189"/>
+
+  <!-- menu: retangulos 250x46 em x=42, y=274+58k; texto Anton 28,
+       esq. +20px. Selecionado = dourado, demais = preto translucido. -->
+  <style name="menu-on"  background="#c49b3deb" color="#ffffff" radius="0" borderWidth="0"/>
+  <style name="menu-off" background="#0000005f" color="#ebebeb" radius="0" borderWidth="0"/>
+
+  <button id="mi_continue" style="menu-on"  text="CONTINUE" font="anton" fontSize="28"
+          align="left" textPadding="20" x="42" y="274" width="250" height="46"/>
+  <button id="mi_newgame"  style="menu-off" text="NEW GAME" font="anton" fontSize="28"
+          align="left" textPadding="20" x="42" y="332" width="250" height="46"/>
+  <button id="mi_loadgame" style="menu-off" text="LOAD GAME" font="anton" fontSize="28"
+          align="left" textPadding="20" x="42" y="390" width="250" height="46"/>
+  <button id="mi_settings" style="menu-off" text="SETTINGS" font="anton" fontSize="28"
+          align="left" textPadding="20" x="42" y="448" width="250" height="46"/>
+  <button id="mi_exit"     style="menu-off" text="EXIT" font="anton" fontSize="28"
+          align="left" textPadding="20" x="42" y="506" width="250" height="46"/>
+
+  <!-- rodape: Anton 20 branco -->
+  <label text="EARLY DEVELOPMENT BUILD" font="anton" fontSize="20" color="#ffffff"
+         x="40" y="630" width="320" height="24"/>
+  <label text="V0.1.0.0" font="anton" fontSize="20" color="#ffffff"
+         x="40" y="654" width="160" height="24"/>
+  <label text="WORK IN PROGRESS" font="anton" fontSize="20" color="#ffffff"
+         align="right" x="888" y="654" width="300" height="24"/>
+</screen>
