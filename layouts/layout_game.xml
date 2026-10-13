@@ -3,7 +3,8 @@
      Farming" (tests/gui/__main__.py, pyray) usando somente widgets ogui.
      Design 1228x700. Assetos em assets/ (back.png, logo.png, Anton). -->
 <screen id="game">
-  <font family="anton" source="assets/Anton-Regular.ttf"/>
+  <!-- fonte Anton + estilos menu-on/menu-off vêm da stylesheet externa -->
+  <stylesheet path="themes/game.xml"/>
 
   <!-- fundo fullscreen (mesma distensao do draw_texture_pro de referencia) -->
   <image source="assets/back.png" x="0" y="0" width="100%" height="100%"/>
@@ -17,10 +18,8 @@
   <image source="assets/logo.png" x="0" y="0" width="331" height="189"/>
 
   <!-- menu: retangulos 250x46 em x=42, y=274+58k; texto Anton 28,
-       esq. +20px. Selecionado = dourado, demais = preto translucido. -->
-  <style name="menu-on"  background="#c49b3deb" color="#ffffff" radius="0" borderWidth="0"/>
-  <style name="menu-off" background="#0000005f" color="#ebebeb" radius="0" borderWidth="0"/>
-
+       esq. +20px. Selecionado = dourado, demais = preto translucido
+       (estilos definidos em themes/game.xml). -->
   <button id="mi_continue" style="menu-on"  text="CONTINUE" font="anton" fontSize="28"
           align="left" textPadding="20" x="42" y="274" width="250" height="46"/>
   <button id="mi_newgame"  style="menu-off" text="NEW GAME" font="anton" fontSize="28"

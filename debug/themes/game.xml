@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<!-- themes/game.xml : stylesheet da tela Game (layouts/layout_game.xml).
+     Centraliza a fonte do menu e os estilos dos itens, exatamente como o
+     menu original em pyray (tests/gui/__main__.py). -->
+<theme name="game">
+  <font family="anton" source="assets/Anton-Regular.ttf"/>
+
+  <!-- item selecionado: dourado do jogo; demais: preto translucido -->
+  <style name="menu-on"  background="#c49b3deb" color="#ffffff" radius="0" borderWidth="0"/>
+  <style name="menu-off" background="#0000005f" color="#ebebeb" radius="0" borderWidth="0"/>
+</theme>

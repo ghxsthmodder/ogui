@@ -163,8 +163,10 @@ directory lists them in navigation order —
 
 — so adding or removing a screen needs no recompile (a built-in list is the
 fallback when the file is missing). `theme="dark|light"` (`escuro`/`claro`
-also accepted) picks the initial palette; the nav bar toggle still flips it
-at runtime. `examples/gallery.hpp` parses it with the
+also accepted) picks the initial palette — or name a `<theme>` stylesheet
+file (e.g. `theme="themes/game.xml"`) to layer custom tokens, named styles
+and fonts over dark; the nav bar toggle still flips the preset at runtime.
+`examples/gallery.hpp` parses it with the
 library's own `XmlParser` (`<manifest>` is a data-only root tag; every widget
 keeps the attributes it was authored with in `Widget::rawAttributes()`),
 injects a shared `< Voltar` / `Avancar >` nav bar (plus a `Tema claro`
@@ -321,6 +323,9 @@ theme default.
 | `manifest` | data-only root listing gallery screens (`<screen title path/>` children) | `theme` (`dark`/`light`, initial palette) |
 | `style` | named style definition | `name` |
 | `font` | registers a font family for later `font="..."` use (data-only, no widget) | `family`, `source` (TTF/OTF path) |
+| `theme` | stylesheet root: shared palette + named styles + fonts (`base="dark\|light"` preset it layers over) | `name`, `base` |
+| `palette` | inside `<theme>` only: re-colours tokens (`accent="#e8b33c" ...`); unknown tokens warn | token names |
+| `stylesheet` | merges an external `<theme>` file into the current document (named styles, fonts, palette) | `path` |
 | `panel` | plain rectangle container | — |
 | `window` | bordered panel with a title bar (children are offset by it) | `title`, `titleVisible` |
 | `column` | stacks children vertically (gap 4, honours `padding`/`margin`) | — |

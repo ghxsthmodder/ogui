@@ -75,7 +75,18 @@ inline void applyManifestTheme(const std::string& file = "manifest.xml") {
     if (!t || t->empty()) return;
     if (*t == "light" || *t == "claro") ogui::setActiveTheme(ogui::lightTheme());
     else if (*t == "dark" || *t == "escuro") ogui::setActiveTheme(ogui::darkTheme());
-    else std::cerr << "gallery: unknown manifest theme \"" << *t << "\"\n";
+    else {
+        // Any other value names a <theme> stylesheet file layered over dark.
+        ogui::XmlParser tp;
+        auto tr = tp.parseThemeFile(*t, ogui::darkTheme());
+        if (!tr.errors.empty()) {
+            for (const auto& e : tr.errors)
+                std::cerr << "gallery: theme " << *t << ": " << e << "\n";
+            std::cerr << "gallery: falling back to dark\n";
+            return;
+        }
+        ogui::setActiveTheme(tr.theme);
+    }
 }
 
 // A Prev / Title / Next bar laid out as a Row across the top of a screen.

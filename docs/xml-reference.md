@@ -28,8 +28,10 @@ A layout file must open with one of two root elements:
 |---|---|
 | `<screen>` | A UI layout. Its children are widgets. Optional `id` (defaults to `screen`). |
 | `<manifest>` | A data-only list of screens (used by the demo host to pick up layouts without recompiling). |
+| `<theme>` | A stylesheet file: `<palette>` token overrides, shared `<style name>` definitions and `<font>` registrations. Loaded by `XmlParser::parseThemeFile()` or referenced from `<manifest theme="file.xml">`. `base="dark|light"` picks the preset it layers over (default: keep the current theme). |
 
-`<manifest theme="dark|light">` sets the initial theme and contains one
+`<manifest theme="dark|light">` sets the initial theme (any other value
+names a `<theme>` stylesheet file to load instead) and contains one
 `<screen title="..." path="relative/file.xml"/>` per screen, in navigation
 order:
 
@@ -145,6 +147,29 @@ opt in with `style="p"`; the named style provides the base and the element's
 <button style="primary" text="Iniciar" width="150" height="38"/>
 ```
 
+## Stylesheets
+
+A `<theme>` file moves those definitions (plus palette tokens and font
+registrations) out of the screen and into a shared document:
+
+```xml
+<theme name="game" base="dark">
+  <font family="anton" source="assets/Anton-Regular.ttf"/>
+  <style name="menu-on" background="#c49b3deb" color="#ffffff" radius="0"/>
+  <palette accent="#e8b33c" text="#e6e1d4"/>
+</theme>
+```
+
+- `<palette .../>` re-colours the theme tokens; attribute names are token
+  names (case-insensitive), values are hex colours. Unknown tokens warn.
+- `<style>`/`<font>` work exactly as inside a screen.
+- Any screen can pull one in with `<stylesheet path="themes/game.xml"/>`:
+  its named styles merge into the document (own `<style>` definitions win),
+  fonts register, and a `<palette>` is installed app-wide so `@tokens`
+  downstream re-resolve. Paths are cwd-relative, like `image source`.
+- `<manifest theme="themes/game.xml">` loads a stylesheet as the app theme
+  instead of the `dark`/`light` presets.
+
 ## Elements
 
 ### Text
@@ -239,6 +264,9 @@ Overflowing tab headers collapse into a `...` popup menu automatically.
 | Element | Notes |
 |---|---|
 | `manifest` | root only; `theme`, children `screen title path` |
+| `theme` | root only; a stylesheet — children `palette`, `style`, `font`; `base` (`dark`/`light`) |
+| `palette` | token colour overrides, only valid inside a `<theme>` root |
+| `stylesheet` | merges an external `<theme>` file into this document | `path` |
 | `font` | registers a font family: `<font family="anton" source="assets/Anton-Regular.ttf"/>`; later `font="anton"` attributes resolve to that file. Data-only, yields no widget |
 | `option` | entry of `optionspin`/`combobox` |
 | `item` | entry of `listbox`/`combobox` |

@@ -7,6 +7,14 @@
 #include <set>
 #include <string>
 
+#ifdef _WIN32
+#include <direct.h>
+#define OG_CHDIR(p) _chdir(p)
+#else
+#include <unistd.h>
+#define OG_CHDIR(p) chdir(p)
+#endif
+
 #ifndef OGUI_SOURCE_DIR
 #define OGUI_SOURCE_DIR "."
 #endif
@@ -30,6 +38,9 @@ static void collectIds(const Widget& w, std::set<std::string>& out) {
 
 int main() {
     const std::string root = OGUI_SOURCE_DIR;
+    // Layouts reference assets and stylesheets with cwd-relative paths
+    // (same rule the demo host uses), so run from the project root.
+    OG_CHDIR(root.c_str());
     XmlParser manifest;
     auto res = manifest.parseFile(root + "/manifest.xml");
     if (!res.root) {

@@ -35,9 +35,23 @@ public:
     // Parse a file (reads the file into memory).
     ParseResult parseFile(const std::string& path, const Theme* theme = nullptr);
 
+    // ---- stylesheets ------------------------------------------------------
+    // A <theme> document restyles the whole app: <palette> overrides tokens,
+    // <style name> defines reusable attribute sets shared by every screen,
+    // <font> registers families. parseTheme layers the file over `base`.
+    struct ThemeResult {
+        Theme theme;
+        std::vector<std::string> errors;
+        std::vector<std::string> warnings;
+    };
+    ThemeResult parseTheme(const std::string& xml, const Theme& base);
+    ThemeResult parseThemeFile(const std::string& path, const Theme& base);
+
 private:
     std::string m_text;
     const Theme* m_theme = nullptr;
+    // Non-null while parsing a <theme> stylesheet: <palette> writes here.
+    Theme* m_themeTarget = nullptr;
 
     size_t m_pos = 0;
     size_t m_len = 0;

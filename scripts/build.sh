@@ -83,6 +83,7 @@ build_win() {
     cp -f manifest.xml layout_demo.xml debug/
     rm -rf debug/layouts && cp -r layouts debug/layouts
     rm -rf debug/assets && cp -r assets debug/assets
+    rm -rf debug/themes && cp -r themes debug/themes
 
     echo
     echo "== demo.exe imports =="

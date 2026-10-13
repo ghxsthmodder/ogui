@@ -27,8 +27,9 @@ void XmlParser::parseDocument() {
     skipWhitespace();
 
     // Find the root element. <screen> is the normal layout root; <manifest>
-    // is a data-only list of screens. XML declaration / BOM / comments are
-    // skipped by skipWhitespace().
+    // is a data-only list of screens; <theme> is a stylesheet (only valid as
+    // the root of a parseTheme() document). XML declaration / BOM / comments
+    // are skipped by skipWhitespace().
     std::string rootTag;
     if (m_pos + 2 <= m_len && m_text[m_pos] == '<' && m_text[m_pos + 1] != '/') {
         const size_t save = m_pos + 1;
@@ -36,7 +37,8 @@ void XmlParser::parseDocument() {
         rootTag = parseTagName();
         m_pos = save - 1;
     }
-    if (rootTag != "screen" && rootTag != "manifest") {
+    const bool themeRoot = m_themeTarget && rootTag == "theme";
+    if (rootTag != "screen" && rootTag != "manifest" && !themeRoot) {
         // No recognised root tag; treat entire text as a label.
         std::string txt = parseChars();
         m_root = createWidget("label", Style{}, {});
@@ -68,15 +70,27 @@ void XmlParser::parseDocument() {
     }
 
     // create the root widget
+    std::shared_ptr<Widget> root;
     Style base = m_theme ? m_theme->defaultStyle : Style{};
     base.isVisible = true;
-    auto root = createWidget(rootTag, base, attrs);
-    if (!root) {
-        // Unknown root tag: report it, then fall back to a plain container so
-        // callers always get a usable tree instead of nullptr.
-        addError("unknown root element <" + rootTag + ">");
+    if (themeRoot) {
+        // <theme base="dark|light"> re-seeds the stylesheet over a preset.
+        const auto b = attrs.find("base");
+        if (b != attrs.end() && (b->second == "light" || b->second == "claro"))
+            *m_themeTarget = lightTheme();
+        else if (b != attrs.end() && (b->second == "dark" || b->second == "escuro"))
+            *m_themeTarget = darkTheme();
         root = std::make_shared<Widget>();
         root->setId(attrs["id"]);
+    } else {
+        root = createWidget(rootTag, base, attrs);
+        if (!root) {
+            // Unknown root tag: report it, then fall back to a plain container
+            // so callers always get a usable tree instead of nullptr.
+            addError("unknown root element <" + rootTag + ">");
+            root = std::make_shared<Widget>();
+            root->setId(attrs["id"]);
+        }
     }
     root->setRawAttributes(attrs);
 
@@ -158,6 +172,47 @@ void XmlParser::parseElement() {
             FontManager::instance().setFontPath(family, path);
         else
             addError("font: family and source are required");
+        return;
+    }
+
+    // <palette .../> re-colours the theme being built (only inside <theme>).
+    if (tag == "palette") {
+        if (!m_themeTarget) {
+            addError("palette: only valid inside a <theme> stylesheet");
+            skipElement(tag, selfClosing);
+            return;
+        }
+        for (const auto& kv : attrs) {
+            if (kv.first == "id") continue;
+            if (!m_themeTarget->palette.setToken(kv.first, colorOf(kv.second)))
+                addWarning("palette: unknown token \"" + kv.first + "\"");
+        }
+        if (!selfClosing) skipElement(tag, false);
+        return;
+    }
+
+    // <stylesheet path="..."/> pulls an external <theme> file into this
+    // document: its named styles merge into the parser, its <font> entries
+    // register, and its <palette> (if any) is installed app-wide.
+    if (tag == "stylesheet") {
+        auto it = attrs.find("path");
+        if (it == attrs.end() || it->second.empty()) it = attrs.find("source");
+        if (it == attrs.end() || it->second.empty()) {
+            addError("stylesheet: path is required");
+            skipElement(tag, selfClosing);
+            return;
+        }
+        XmlParser sub;
+        ThemeResult tr = sub.parseThemeFile(it->second, activeTheme());
+        for (const auto& e : tr.errors)
+            addError("stylesheet " + it->second + ": " + e);
+        for (const auto& [name, props] : tr.theme.namedStyles)
+            m_namedStyles[name] = props;
+        // Install the (possibly palette-edited) theme so @tokens downstream
+        // resolve against it. Identity with activeTheme() is a no-op.
+        setActiveTheme(tr.theme);
+        if (m_theme) m_theme = &activeTheme();
+        if (!selfClosing) skipElement(tag, false);
         return;
     }
 
@@ -1114,6 +1169,9 @@ XmlParser::ParseResult XmlParser::parse(const std::string& xml, const Theme* the
     if (theme) setActiveTheme(*theme);
     m_root = nullptr;
     m_stack.clear();
+    m_themeTarget = nullptr;
+    m_namedStyles.clear();
+    if (theme) m_namedStyles = theme->namedStyles;
 
     XmlParser::ParseResult res;
     m_result = &res;
@@ -1141,12 +1199,55 @@ XmlParser::ParseResult XmlParser::parseFile(const std::string& path, const Theme
     if (theme) setActiveTheme(*theme);
     m_root = nullptr;
     m_stack.clear();
+    m_themeTarget = nullptr;
+    m_namedStyles.clear();
+    if (theme) m_namedStyles = theme->namedStyles;
 
     m_result = &res;
     parseDocument();
     m_result = nullptr;
     res.root = m_root;
     return res;
+}
+
+// ---- stylesheets -----------------------------------------------------------
+XmlParser::ThemeResult XmlParser::parseTheme(const std::string& xml, const Theme& base) {
+    ThemeResult res;
+    m_text = xml;
+    m_len = m_text.size();
+    m_pos = 0;
+    m_theme = nullptr;
+    m_root = nullptr;
+    m_stack.clear();
+    m_namedStyles = base.namedStyles;
+    Theme target = base;
+    m_themeTarget = &target;
+
+    ParseResult pr;
+    m_result = &pr;
+    parseDocument();
+    m_result = nullptr;
+    m_themeTarget = nullptr;
+
+    res.errors = std::move(pr.errors);
+    res.warnings = std::move(pr.warnings);
+    target.namedStyles = std::move(m_namedStyles);
+    res.theme = std::move(target);
+    return res;
+}
+
+XmlParser::ThemeResult XmlParser::parseThemeFile(const std::string& path, const Theme& base) {
+    std::ifstream f(path, std::ios::binary);
+    if (!f.is_open()) {
+        ThemeResult res;
+        res.theme = base;
+        res.errors.push_back("cannot open file: " + path);
+        return res;
+    }
+    std::string data((std::istreambuf_iterator<char>(f)),
+                     std::istreambuf_iterator<char>());
+    f.close();
+    return parseTheme(data, base);
 }
 
 } // namespace ogui

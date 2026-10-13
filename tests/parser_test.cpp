@@ -229,6 +229,51 @@ int main() {
         assert(b->textPadding() == 20.0f);
     }
 
+    // ---- <theme> stylesheet + <stylesheet> element ------------------------
+    {
+        ogui::XmlParser tp;
+        auto tr = tp.parseTheme(R"XML(<theme base="light">
+  <palette accent="#123456" surfaceHi="#abcdef" nope="#111111"/>
+  <style name="big" fontSize="30" color="#111111"/>
+</theme>)XML", ogui::darkTheme());
+        assert(tr.errors.empty());
+        assert(tr.theme.palette.accent.r == 0x12 &&
+               tr.theme.palette.accent.g == 0x34 &&
+               tr.theme.palette.accent.b == 0x56);
+        assert(tr.theme.palette.surfaceHi.r == 0xab);
+        assert(tr.theme.palette.text.r == 0x33);   // base="light" survived
+        assert(!tr.warnings.empty());              // unknown token warned
+        assert(tr.theme.namedStyles.count("big") == 1);
+
+        // A screen parsed with that theme resolves style="big" from it.
+        ogui::XmlParser sp;
+        auto sr = sp.parse(R"XML(<screen id="s">
+  <label id="l" style="big" text="x"/>
+</screen>)XML", &tr.theme);
+        assert(sr.errors.empty());
+        auto l = std::dynamic_pointer_cast<ogui::Label>(sr.root->children()[0]);
+        assert(l && l->fontSize() == 30);
+    }
+
+    // <stylesheet path> pulls the repo's themes/game.xml into a screen.
+    {
+        const std::string sheet =
+            std::string(OGUI_SOURCE_DIR) + "/themes/game.xml";
+        ogui::XmlParser sp;
+        auto r = sp.parse("<screen id=\"s\">\n"
+            "<stylesheet path=\"" + sheet + "\"/>\n"
+            "<button id=\"b\" style=\"menu-on\" text=\"GO\"/>\n"
+            "</screen>");
+        assert(r.errors.empty());
+        assert(r.root->children().size() == 1);   // stylesheet yields no widget
+        auto b = std::dynamic_pointer_cast<ogui::Button>(r.root->children()[0]);
+        assert(b != nullptr);
+        assert(b->style().backgroundColor.r == 0xc4 &&
+               b->style().backgroundColor.g == 0x9b &&
+               b->style().backgroundColor.a == 0xeb);
+        assert(b->style().radius == 0.0f);
+    }
+
     std::cout << "parser_test: OK - parsed " << child_count << " top-level widgets\n";
     return 0;
 }

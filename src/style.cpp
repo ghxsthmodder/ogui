@@ -44,6 +44,35 @@ const Color& Palette::token(const std::string& raw) const {
     return window;
 }
 
+bool Palette::setToken(const std::string& raw, const Color& c) {
+    std::string name;
+    name.reserve(raw.size());
+    for (char ch : raw)
+        name.push_back(ch >= 'A' && ch <= 'Z' ? char(ch - 'A' + 'a') : ch);
+    if (name == "window")       { window = c; return true; }
+    if (name == "screen")       { screen = c; return true; }
+    if (name == "surface")      { surface = c; return true; }
+    if (name == "surfacehi")    { surfaceHi = c; return true; }
+    if (name == "surfacelo")    { surfaceLo = c; return true; }
+    if (name == "border")       { border = c; return true; }
+    if (name == "borderstrong") { borderStrong = c; return true; }
+    if (name == "track")        { track = c; return true; }
+    if (name == "guide")        { guide = c; return true; }
+    if (name == "text")         { text = c; return true; }
+    if (name == "textbright")   { textBright = c; return true; }
+    if (name == "white")        { white = c; return true; }
+    if (name == "dim")          { dim = c; return true; }
+    if (name == "focus")        { focus = c; return true; }
+    if (name == "accent")       { accent = c; return true; }
+    if (name == "danger")       { danger = c; return true; }
+    if (name == "info")         { info = c; return true; }
+    if (name == "warn")         { warn = c; return true; }
+    if (name == "error")        { error = c; return true; }
+    if (name == "overlay")      { overlay = c; return true; }
+    if (name == "shadow")       { shadow = c; return true; }
+    return false;
+}
+
 // ---- presets ---------------------------------------------------------------
 const Theme& darkTheme() {
     static Theme theme;  // palette/Style defaults already describe dark

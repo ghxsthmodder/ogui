@@ -34,6 +34,10 @@ struct Palette {
     // Named lookup for XML "@token" colour refs (case-insensitive);
     // returns the token colour or window when unknown.
     const Color& token(const std::string& name) const;
+
+    // Case-insensitive token assignment (used by <theme> stylesheets);
+    // false when the name matches no token.
+    bool setToken(const std::string& name, const Color& c);
 };
 
 // ---- style: layout + style, merged from XML <style> and per-element attrs --
@@ -73,7 +77,10 @@ struct Style {
 struct Theme {
     Style defaultStyle;
     Palette palette;
-    std::map<std::string, Style> namedStyles;
+    // Reusable attribute sets authored by <style> elements (in screens or
+    // in a <theme> stylesheet file). Keys are the lowercased attribute names
+    // exactly as the XmlParser reads them.
+    std::map<std::string, std::map<std::string, std::string>> namedStyles;
 };
 
 // The process-wide active theme: widgets resolve palette()/defaultStyle
