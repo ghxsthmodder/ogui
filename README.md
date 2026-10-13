@@ -193,6 +193,11 @@ borders accent and the arrow flips while open, and text inputs/spinboxes get a
 
 ## XML reference
 
+The complete element/attribute catalogue — every registered tag, its typed
+attributes, `@token` palette values for both themes and the named-style
+rules — lives in [`docs/xml-reference.md`](docs/xml-reference.md). Quick
+intro below.
+
 ```xml
 <screen id="main">
   <style name="primary" bg="#4488ff" color="#ffffff" radius="6"/>
