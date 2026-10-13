@@ -17,6 +17,12 @@ static Color colorOf(const std::string& v) {
     return hexColor(v);
 }
 
+namespace {
+// Defined below with the other attribute helpers; needed by <default>.
+void parseFontAttr(const std::string& v, std::string& family, int& size);
+bool toFloat(const std::string& s, float& out);
+} // namespace
+
 // ------------------------------------------------------------------
 // XmlParser
 // ------------------------------------------------------------------
@@ -175,6 +181,29 @@ void XmlParser::parseElement() {
         return;
     }
 
+    // <default .../> restyles the theme's base Style (only inside <theme>).
+    if (tag == "default") {
+        if (!m_themeTarget) {
+            addError("default: only valid inside a <theme> stylesheet");
+            skipElement(tag, selfClosing);
+            return;
+        }
+        Style& d = m_themeTarget->defaultStyle;
+        if (auto v = attrs.find("font"); v != attrs.end())
+            parseFontAttr(v->second, d.fontFamily, d.fontSize);
+        if (auto v = attrs.find("fontsize"); v != attrs.end()) {
+            float f = 0.0f;
+            if (toFloat(v->second, f)) d.fontSize = static_cast<int>(f);
+        }
+        if (auto v = attrs.find("color"); v != attrs.end()) d.textColor = colorOf(v->second);
+        if (auto v = attrs.find("background"); v != attrs.end()) d.backgroundColor = colorOf(v->second);
+        if (auto v = attrs.find("border"); v != attrs.end()) { d.borderColor = colorOf(v->second); d.borderWidth = 1.0f; }
+        if (auto v = attrs.find("borderwidth"); v != attrs.end()) toFloat(v->second, d.borderWidth);
+        if (auto v = attrs.find("radius"); v != attrs.end()) toFloat(v->second, d.radius);
+        if (!selfClosing) skipElement(tag, false);
+        return;
+    }
+
     // <palette .../> re-colours the theme being built (only inside <theme>).
     if (tag == "palette") {
         if (!m_themeTarget) {
@@ -208,6 +237,8 @@ void XmlParser::parseElement() {
             addError("stylesheet " + it->second + ": " + e);
         for (const auto& [name, props] : tr.theme.namedStyles)
             m_namedStyles[name] = props;
+        for (const auto& [tag2, props] : tr.theme.elementStyles)
+            m_elementStyles[tag2] = props;
         // Install the (possibly palette-edited) theme so @tokens downstream
         // resolve against it. Identity with activeTheme() is a no-op.
         setActiveTheme(tr.theme);
@@ -458,25 +489,34 @@ std::shared_ptr<Widget> XmlParser::createWidget(const std::string& tag,
     if (!w) {
         return nullptr;
     }
-    applyAttributes(w, tag, withNamedStyle(attrs));
+    applyAttributes(w, tag, withNamedStyle(tag, attrs));
     return w;
 }
 
-// ---- <style name="..."> ----------------------------------------------------
+// ---- <style name|element="..."> --------------------------------------------
 void XmlParser::parseStyleDef(const std::map<std::string, std::string>& attrs,
                               bool selfClosing) {
-    auto it = attrs.find("name");
-    if (it == attrs.end() || it->second.empty()) {
-        addWarning("<style> without a name attribute ignored");
+    // <style element="button"> styles every button of the document; a named
+    // <style name="p"> is opt-in through style="p". Element wins the target
+    // lookup; name is the classic path.
+    auto nameIt = attrs.find("name");
+    auto elemIt = attrs.find("element");
+    const bool isElement =
+        (nameIt == attrs.end() || nameIt->second.empty()) &&
+        elemIt != attrs.end() && !elemIt->second.empty();
+    if (!isElement && (nameIt == attrs.end() || nameIt->second.empty())) {
+        addWarning("<style> without a name or element attribute ignored");
         if (!selfClosing) skipElement("style", false);
         return;
     }
     std::map<std::string, std::string> props;
     for (const auto& kv : attrs) {
-        if (kv.first == "name") continue;
+        if (kv.first == "name" || kv.first == "element") continue;
         props[kv.first] = kv.second;
     }
-    m_namedStyles[it->second] = std::move(props);
+    auto& table = isElement ? m_elementStyles : m_namedStyles;
+    const std::string key = isElement ? elemIt->second : nameIt->second;
+    table[key] = std::move(props);
 
     // Non-self-closing <style> bodies may carry nested <set> declarations.
     if (!selfClosing) {
@@ -492,7 +532,7 @@ void XmlParser::parseStyleDef(const std::map<std::string, std::string>& attrs,
                 while (m_pos < m_len && m_text[m_pos] != '>') ++m_pos;
                 if (m_pos < m_len) ++m_pos;
                 for (const auto& kv : setAttrs) {
-                    m_namedStyles[it->second][kv.first] = kv.second;
+                    table[key][kv.first] = kv.second;
                 }
             } else {
                 // Unknown content inside <style>: skip one element/text run.
@@ -512,17 +552,34 @@ void XmlParser::parseStyleDef(const std::map<std::string, std::string>& attrs,
 }
 
 std::map<std::string, std::string> XmlParser::withNamedStyle(
+    const std::string& tag,
     const std::map<std::string, std::string>& attrs) const {
-    auto it = attrs.find("style");
-    if (it == attrs.end()) return attrs;
+    // Cascade: element style (lowest) -> named styles in list order -> the
+    // element's own attributes (highest).
+    std::map<std::string, std::string> merged;
+    auto elem = m_elementStyles.find(tag);
+    if (elem != m_elementStyles.end()) merged = elem->second;
 
-    auto named = m_namedStyles.find(it->second);
-    if (named == m_namedStyles.end()) {
-        addWarning("unknown style \"" + it->second + "\"");
-        return attrs;
+    auto it = attrs.find("style");
+    if (it != attrs.end() && !it->second.empty()) {
+        std::string tok;
+        auto flush = [this, &merged, &tok]() {
+            if (tok.empty()) return;
+            auto named = m_namedStyles.find(tok);
+            if (named == m_namedStyles.end()) {
+                addWarning("unknown style \"" + tok + "\"");
+            } else {
+                for (const auto& kv : named->second) merged[kv.first] = kv.second;
+            }
+            tok.clear();
+        };
+        for (char c : it->second) {
+            if (c == ',' || c == ' ' || c == ';' || c == '|') flush();
+            else tok.push_back(c);
+        }
+        flush();
     }
-    // Named style provides the base; the element's own attrs win.
-    std::map<std::string, std::string> merged = named->second;
+
     for (const auto& kv : attrs) {
         if (kv.first == "style") continue;
         merged[kv.first] = kv.second;
@@ -1171,7 +1228,11 @@ XmlParser::ParseResult XmlParser::parse(const std::string& xml, const Theme* the
     m_stack.clear();
     m_themeTarget = nullptr;
     m_namedStyles.clear();
-    if (theme) m_namedStyles = theme->namedStyles;
+    m_elementStyles.clear();
+    if (theme) {
+        m_namedStyles = theme->namedStyles;
+        m_elementStyles = theme->elementStyles;
+    }
 
     XmlParser::ParseResult res;
     m_result = &res;
@@ -1201,7 +1262,11 @@ XmlParser::ParseResult XmlParser::parseFile(const std::string& path, const Theme
     m_stack.clear();
     m_themeTarget = nullptr;
     m_namedStyles.clear();
-    if (theme) m_namedStyles = theme->namedStyles;
+    m_elementStyles.clear();
+    if (theme) {
+        m_namedStyles = theme->namedStyles;
+        m_elementStyles = theme->elementStyles;
+    }
 
     m_result = &res;
     parseDocument();
@@ -1220,6 +1285,7 @@ XmlParser::ThemeResult XmlParser::parseTheme(const std::string& xml, const Theme
     m_root = nullptr;
     m_stack.clear();
     m_namedStyles = base.namedStyles;
+    m_elementStyles = base.elementStyles;
     Theme target = base;
     m_themeTarget = &target;
 
@@ -1232,6 +1298,7 @@ XmlParser::ThemeResult XmlParser::parseTheme(const std::string& xml, const Theme
     res.errors = std::move(pr.errors);
     res.warnings = std::move(pr.warnings);
     target.namedStyles = std::move(m_namedStyles);
+    target.elementStyles = std::move(m_elementStyles);
     res.theme = std::move(target);
     return res;
 }

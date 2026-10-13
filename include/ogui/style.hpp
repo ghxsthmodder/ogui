@@ -81,6 +81,9 @@ struct Theme {
     // in a <theme> stylesheet file). Keys are the lowercased attribute names
     // exactly as the XmlParser reads them.
     std::map<std::string, std::map<std::string, std::string>> namedStyles;
+    // <style element="tag"> defaults, keyed by element tag; they sit under
+    // namedStyles in the cascade.
+    std::map<std::string, std::map<std::string, std::string>> elementStyles;
 };
 
 // The process-wide active theme: widgets resolve palette()/defaultStyle

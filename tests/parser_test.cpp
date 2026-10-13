@@ -274,6 +274,55 @@ int main() {
         assert(b->style().radius == 0.0f);
     }
 
+    // ---- element styles, multi-style list and <default> -------------------
+    {
+        ogui::XmlParser tp;
+        auto tr = tp.parseTheme(R"XML(<theme base="dark">
+  <default font="serif" fontSize="18" color="#010203"/>
+  <style element="label" fontSize="30" color="#ff0000"/>
+  <style name="small" fontSize="12"/>
+  <style name="blue" color="#0000ff"/>
+</theme>)XML", ogui::darkTheme());
+        assert(tr.errors.empty());
+        assert(tr.theme.defaultStyle.fontFamily == "serif");
+        assert(tr.theme.defaultStyle.fontSize == 18);
+        assert(tr.theme.defaultStyle.textColor.r == 0x01);
+        assert(tr.theme.elementStyles.count("label") == 1);
+
+        ogui::XmlParser sp;
+        auto sr = sp.parse(R"XML(<screen id="s">
+  <label id="a" text="plain"/>
+  <label id="b" text="own" fontSize="12"/>
+  <label id="c" text="multi" style="small,blue"/>
+  <label id="d" text="override" style="blue" color="#00ff00"/>
+</screen>)XML", &tr.theme);
+        assert(sr.errors.empty());
+        auto lab = [&](size_t i) {
+            return std::dynamic_pointer_cast<ogui::Label>(sr.root->children()[i]);
+        };
+        // element style reaches every label...
+        assert(lab(0)->fontSize() == 30);
+        assert(lab(0)->textColor().r == 0xff);
+        // ...but own attributes win over it
+        assert(lab(1)->fontSize() == 12);
+        // style="a,b": both apply, later name wins on conflicts
+        assert(lab(2)->fontSize() == 12);
+        assert(lab(2)->textColor().b == 0xff && lab(2)->textColor().r == 0);
+        // own attribute beats the named style
+        assert(lab(3)->textColor().g == 0xff && lab(3)->textColor().b == 0);
+    }
+
+    // <default> outside a <theme> document is an error, parse continues.
+    {
+        ogui::XmlParser p10;
+        auto r10 = p10.parse(R"XML(<screen id="s">
+  <default fontSize="9"/>
+  <label id="l" text="x"/>
+</screen>)XML");
+        assert(!r10.errors.empty());
+        assert(r10.root->children().size() == 1);
+    }
+
     std::cout << "parser_test: OK - parsed " << child_count << " top-level widgets\n";
     return 0;
 }

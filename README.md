@@ -242,7 +242,7 @@ Conventional names that are not abbreviations stay as-is: `x`, `y`, `id`,
 | `x` `y` `width` `height` | bounds, **relative to the parent**; each accepts pixels (`20`), percent (`"50%"`) or — for `width`/`height` — `"fill"` (see below) |
 | `anchor` | pin edges across parent resizes: `anchor="right"`, `"l,r"`, `"top,bottom"` etc. (`left/right/top/bottom`, short forms `l/r/t/b`, space/comma-separated) |
 | `visible` | `true/false` — an invisible widget (and its subtree) is skipped by drawing *and* input |
-| `style` | name of a `<style>` declared earlier in the document |
+| `style` | named style(s) applied to the element; a comma/space list stacks (`"a,b"`, later wins) |
 | `background` `color` `border` `borderColor` `borderWidth` `radius` | colors/metrics |
 | `shadow` | soft drop shadow: `blur` or `blur,dy` or `blur,dx,dy` (pixels) |
 | `shadowColor` | shadow color (default `#000000`), e.g. `shadowColor="#000000"` |
@@ -321,7 +321,8 @@ theme default.
 | --- | --- | --- |
 | `screen` | document root (one per file) | — |
 | `manifest` | data-only root listing gallery screens (`<screen title path/>` children) | `theme` (`dark`/`light`, initial palette) |
-| `style` | named style definition | `name` |
+| `style` | named style definition (`name`) or element-wide defaults (`element="button"`) applied under own attributes and named styles | `name` / `element` |
+| `default` | inside `<theme>` only: base Style overrides (`font`, `fontSize`, `color`, `background`, ...) | — |
 | `font` | registers a font family for later `font="..."` use (data-only, no widget) | `family`, `source` (TTF/OTF path) |
 | `theme` | stylesheet root: shared palette + named styles + fonts (`base="dark\|light"` preset it layers over) | `name`, `base` |
 | `palette` | inside `<theme>` only: re-colours tokens (`accent="#e8b33c" ...`); unknown tokens warn | token names |

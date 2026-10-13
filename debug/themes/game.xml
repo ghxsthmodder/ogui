@@ -5,7 +5,11 @@
 <theme name="game">
   <font family="anton" source="assets/Anton-Regular.ttf"/>
 
+  <!-- todos os botoes do menu: Anton 28, texto esq. +20px, sem borda -->
+  <style element="button" font="anton" fontSize="28" align="left"
+         textPadding="20" radius="0" borderWidth="0"/>
+
   <!-- item selecionado: dourado do jogo; demais: preto translucido -->
-  <style name="menu-on"  background="#c49b3deb" color="#ffffff" radius="0" borderWidth="0"/>
-  <style name="menu-off" background="#0000005f" color="#ebebeb" radius="0" borderWidth="0"/>
+  <style name="menu-on"  background="#c49b3deb" color="#ffffff"/>
+  <style name="menu-off" background="#0000005f" color="#ebebeb"/>
 </theme>

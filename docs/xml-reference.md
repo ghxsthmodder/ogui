@@ -142,6 +142,15 @@ non-self-closing `<style>` containing nested `<set .../>` elements. Elements
 opt in with `style="p"`; the named style provides the base and the element's
 **own attributes win**. Referencing an unknown style warns and is ignored.
 
+`<style element="button" .../>` (no `name`) is an **element style**: it
+applies to every `button` in the document without opting in. A widget can
+also stack several named styles — `style="primary,dark"` — merged left to
+right. The full cascade, lowest to highest:
+
+```
+element style  <  named styles (left→right)  <  own attributes
+```
+
 ```xml
 <style name="primary" background="@accent" color="@white" radius="6"/>
 <button style="primary" text="Iniciar" width="150" height="38"/>
@@ -155,18 +164,25 @@ registrations) out of the screen and into a shared document:
 ```xml
 <theme name="game" base="dark">
   <font family="anton" source="assets/Anton-Regular.ttf"/>
-  <style name="menu-on" background="#c49b3deb" color="#ffffff" radius="0"/>
+  <style element="button" font="anton" fontSize="28" radius="0"/>
+  <style name="menu-on" background="#c49b3deb" color="#ffffff"/>
   <palette accent="#e8b33c" text="#e6e1d4"/>
+  <default font="anton" fontSize="16" color="@text"/>
 </theme>
 ```
 
 - `<palette .../>` re-colours the theme tokens; attribute names are token
   names (case-insensitive), values are hex colours. Unknown tokens warn.
-- `<style>`/`<font>` work exactly as inside a screen.
+- `<default .../>` restyles the theme's base Style (`font`, `fontSize`,
+  `color`, `background`, `border`, `borderWidth`, `radius`), so every widget
+  inherits it unless a style or attribute says otherwise.
+- `<style>`/`<font>` work exactly as inside a screen, including element
+  styles: a stylesheet is the right place for app-wide `element` defaults.
 - Any screen can pull one in with `<stylesheet path="themes/game.xml"/>`:
-  its named styles merge into the document (own `<style>` definitions win),
-  fonts register, and a `<palette>` is installed app-wide so `@tokens`
-  downstream re-resolve. Paths are cwd-relative, like `image source`.
+  its named and element styles merge into the document (own `<style>`
+  definitions win), fonts register, and a `<palette>` is installed app-wide
+  so `@tokens` downstream re-resolve. Paths are cwd-relative, like
+  `image source`.
 - `<manifest theme="themes/game.xml">` loads a stylesheet as the app theme
   instead of the `dark`/`light` presets.
 
@@ -264,8 +280,9 @@ Overflowing tab headers collapse into a `...` popup menu automatically.
 | Element | Notes |
 |---|---|
 | `manifest` | root only; `theme`, children `screen title path` |
-| `theme` | root only; a stylesheet — children `palette`, `style`, `font`; `base` (`dark`/`light`) |
+| `theme` | root only; a stylesheet — children `palette`, `default`, `style`, `font`; `base` (`dark`/`light`) |
 | `palette` | token colour overrides, only valid inside a `<theme>` root |
+| `default` | base Style overrides, only valid inside a `<theme>` root |
 | `stylesheet` | merges an external `<theme>` file into this document | `path` |
 | `font` | registers a font family: `<font family="anton" source="assets/Anton-Regular.ttf"/>`; later `font="anton"` attributes resolve to that file. Data-only, yields no widget |
 | `option` | entry of `optionspin`/`combobox` |

@@ -110,8 +110,14 @@ private:
     // Named styles collected from <style> elements (name -> attributes).
     std::map<std::string, std::map<std::string, std::string>> m_namedStyles;
 
-    // Returns attrs merged over the named style referenced by style="...".
+    // Element-type styles from <style element="..."> (tag -> attributes);
+    // they sit under named styles in the cascade.
+    std::map<std::string, std::map<std::string, std::string>> m_elementStyles;
+
+    // Returns attrs merged over the element style for `tag` and the named
+    // styles referenced by style="a,b" (later names win; own attrs win all).
     std::map<std::string, std::string> withNamedStyle(
+        const std::string& tag,
         const std::map<std::string, std::string>& attrs) const;
 
     // Resolve a named style (e.g. "button") into a merged Style.
