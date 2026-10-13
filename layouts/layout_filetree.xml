@@ -6,15 +6,15 @@
 
   <label x="1.25%" y="84" width="45%" height="18" text="Diretorio real (dir=.): pastas carregam ao expandir"
          font sans 12 color="@dim"/>
-  <tree id="tr_disk" x="1.25%" y="110" width="45%" height="72%" auto_height="false"
-        row_height="24" icons="true" guides="true"
+  <tree id="tr_disk" x="1.25%" y="110" width="45%" height="72%" autoHeight="false"
+        rowHeight="24" icons="true" guides="true"
         background="@window" border="@border" dir=".">
   </tree>
 
   <label id="lbl_tree" x="48.75%" y="84" width="50%" height="18" text="2 itens marcados"
          font sans 12 color="@dim"/>
-  <tree id="tr_files" x="48.75%" y="110" width="50%" height="72%" auto_height="false"
-        row_height="24" icons="true" checks="true" guides="true"
+  <tree id="tr_files" x="48.75%" y="110" width="50%" height="72%" autoHeight="false"
+        rowHeight="24" icons="true" checks="true" guides="true"
         background="@window" border="@accent" bind="tree_change">
     <treeitem label="temp_test_backup" folder="true" expanded="true">
       <treeitem label="ProjTest1.sln" file="true" checked="true"/>

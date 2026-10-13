@@ -26,7 +26,7 @@
 
     <!-- celula 1: form -->
     <panel x="0" y="0" width="100%" height="220" background="@surface" border="@border" radius="6"
-           context_menu="cm_form">
+           contextMenu="cm_form">
       <label x="10" y="8" width="90%" height="18" text="Formulario" font sans 14 color="@dim"/>
       <searchinput id="se_busca" x="10" y="32" width="62%" height="30"
                    placeholder="Buscar..." background="@window"/>
@@ -122,7 +122,7 @@
 
   <!-- modal de confirmacao (por ultimo: cobre a tela quando aberto) -->
   <modal id="md_confirm" x="0" y="0" width="100%" height="100%" title="Confirmação"
-         open="false" panel_width="320" panel_height="170">
+         open="false" panelWidth="320" panelHeight="170">
     <label x="24" y="34" width="80%" height="40" wrap="true" font sans 13
            text="Deseja regrava os shaders compilados antes de fechar o editor?"/>
     <button id="btn_cancel" x="40" y="112" width="110" height="30" text="Cancelar"

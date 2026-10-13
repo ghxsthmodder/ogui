@@ -5,9 +5,9 @@
   <label x="1.25%" y="78" width="97.5%" height="18"
          text="Ordene clicando no cabecalho; arraste a borda de uma coluna para redimensionar; clique numa celula editavel (ou F2) para editar."/>
 
-  <table id="tb_people" x="1.25%" y="104" width="97.5%" height="60%" row_height="22" header_height="24"
+  <table id="tb_people" x="1.25%" y="104" width="97.5%" height="60%" rowHeight="22" headerHeight="24"
          selected="0" background="@window" color="@text" border="@accent" highlight="#334455"
-         header_background="#1c2733">
+         headerBackground="#1c2733">
     <th label="Nome" width="160" editable="true"/>
     <th label="Idade" width="80" resizable="true" scrollingText="automatic"/>
     <th label="Cidade" width="140"/>

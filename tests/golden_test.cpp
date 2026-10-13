@@ -63,7 +63,7 @@ const char* kLayout = R"XML(<screen id="main">
   <panel id="bg" x="0" y="0" width="480" height="500" background="@screen"/>
 
   <window id="win" x="16" y="16" width="448" height="244" title="golden" background="@surface"
-          border="@accent" border_width="1">
+          border="@accent" borderWidth="1">
     <column id="col">
       <button id="b1" style="primary" text="Iniciar" x="12" y="12" width="150" height="38"
               tooltip="Iniciar"/>
@@ -78,14 +78,14 @@ const char* kLayout = R"XML(<screen id="main">
   </window>
 
   <group id="g1" x="16" y="268" width="448" height="80" background="@surface"
-         border="@accent" border_width="1">
+         border="@accent" borderWidth="1">
     <checkbox id="c1" text="Opcao" x="12" y="10" width="150" height="22" checked="true"/>
     <separator id="s1" x="180" y="14" width="110" height="8" thickness="2" color="@borderStrong"/>
     <progress id="p1" x="12" y="46" width="200" height="16" value="0.65" color="#66ee66"/>
     <slider id="sl1" x="240" y="42" width="190" height="24" min="0" max="100" value="40"/>
   </group>
 
-  <tabs id="tt" x="16" y="356" width="448" height="52" tab_height="24" background="@window" active="0">
+  <tabs id="tt" x="16" y="356" width="448" height="52" tabHeight="24" background="@window" active="0">
     <tab label="Pagina A">
       <label id="tl1" text="conteudo visivel" x="12" y="6" width="300" height="20" color="#66ee66"/>
     </tab>
@@ -95,7 +95,7 @@ const char* kLayout = R"XML(<screen id="main">
   </tabs>
 
   <scrollview id="sv" x="16" y="416" width="448" height="72" background="@window"
-              border="@accent" border_width="1" scroll_y="-40">
+              border="@accent" borderWidth="1" scrollY="-40">
     <label id="sv1" text="linha rolavel um (escondida)" x="12" y="8"
            width="400" height="20" color="@text"/>
     <label id="sv2" text="linha rolavel dois (no topo)" x="12" y="40"

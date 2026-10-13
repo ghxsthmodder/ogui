@@ -621,7 +621,7 @@ static void testGrid() {
     // Explicit track list: px + fr + %.
     XmlParser p2parser;
     auto res2 = p2parser.parse(R"(<screen id="s2">
-  <grid id="g" x="0" y="0" width="800" height="100" columns="120 1fr 25%" gap="0" row_height="30">
+  <grid id="g" x="0" y="0" width="800" height="100" columns="120 1fr 25%" gap="0" rowHeight="30">
     <panel id="a" background="#111111"/>
     <panel id="b" width="100%" background="#222222"/>
     <panel id="c" background="#333333"/>
@@ -657,10 +657,10 @@ static void testBatchAWidgets() {
     auto res = p.parse(R"(<screen id="s">
   <panel id="bg" x="0" y="0" width="800" height="600" background="#101010"/>
   <accordion id="ac" x="20" y="20" width="300" height="200" gap="4">
-    <section id="sec1" header="H1" expanded="true" header_height="24">
+    <section id="sec1" header="H1" expanded="true" headerHeight="24">
       <label id="l1" x="0" y="0" width="100%" height="18" text="A"/>
     </section>
-    <section id="sec2" header="H2" header_height="24">
+    <section id="sec2" header="H2" headerHeight="24">
       <label id="l2" x="0" y="0" width="100%" height="18" text="B"/>
     </section>
   </accordion>
@@ -668,7 +668,7 @@ static void testBatchAWidgets() {
   <badge id="bd2" x="130" y="300" width="100" height="24" text="Keep" removable="true"/>
   <searchinput id="se" x="20" y="340" width="200" height="30" placeholder="Buscar..."/>
   <modal id="md" x="0" y="0" width="100%" height="100%" title="T" open="false"
-         panel_width="320" panel_height="170">
+         panelWidth="320" panelHeight="170">
     <button id="md_ok" x="40" y="112" width="110" height="30" text="OK"/>
   </modal>
 </screen>)");
@@ -780,7 +780,7 @@ static void testBatchBWidgets() {
       </menuitem>
     </menu>
   </menubar>
-  <panel id="tgt" x="50" y="100" width="200" height="100" background="#1c1d22" context_menu="cm"/>
+  <panel id="tgt" x="50" y="100" width="200" height="100" background="#1c1d22" contextMenu="cm"/>
   <contextmenu id="cm">
     <menuitem label="Copiar" command="cmd_copy"/>
   </contextmenu>
@@ -1136,7 +1136,7 @@ static void testTable() {
     XmlParser p;
     auto res = p.parse(R"XML(<screen id="s">
   <panel id="bg" x="0" y="0" width="800" height="600"/>
-  <table id="tb" x="20" y="20" width="400" height="120" row_height="22" header_height="24" selected="1">
+  <table id="tb" x="20" y="20" width="400" height="120" rowHeight="22" headerHeight="24" selected="1">
     <th label="Nome" width="120"/>
     <th label="Idade" width="80"/>
     <th label="Cidade"/>
@@ -1220,7 +1220,7 @@ static void testTableFeatures() {
     XmlParser p;
     auto res = p.parse(R"XML(<screen id="s">
   <panel id="bg" x="0" y="0" width="800" height="600"/>
-  <table id="tb" x="20" y="20" width="400" height="120" row_height="22" header_height="24">
+  <table id="tb" x="20" y="20" width="400" height="120" rowHeight="22" headerHeight="24">
     <th label="Nome" width="120" editable="true"/>
     <th label="Idade" width="80" resizable="true" scrollingText="automatic"/>
     <th label="Cidade"/>
@@ -1475,7 +1475,7 @@ static void testTabs() {
     XmlParser p;
     auto res = p.parse(R"XML(<screen id="s">
   <panel id="bg" x="0" y="0" width="800" height="600"/>
-  <tabs id="tb" x="100" y="200" width="400" height="120" tab_height="24" active="0">
+  <tabs id="tb" x="100" y="200" width="400" height="120" tabHeight="24" active="0">
     <tab label="Um">
       <label id="la" text="pagina um" x="10" y="10" width="200" height="20"/>
     </tab>
@@ -1565,7 +1565,7 @@ static void testTabsOverflow() {
     XmlParser p;
     auto res = p.parse(R"XML(<screen id="s">
   <panel id="bg" x="0" y="0" width="800" height="600"/>
-  <tabs id="tb" x="100" y="200" width="160" height="120" tab_height="24" active="0">
+  <tabs id="tb" x="100" y="200" width="160" height="120" tabHeight="24" active="0">
     <tab label="Alpha"><label id="p0" text="0" x="8" y="8" width="30" height="16"/></tab>
     <tab label="Beta"><label id="p1" text="1" x="8" y="8" width="30" height="16"/></tab>
     <tab label="Gamma"><label id="p2" text="2" x="8" y="8" width="30" height="16"/></tab>
@@ -1759,7 +1759,7 @@ static void testComboBox() {
     <option label="Medio" value="1"/>
     <option label="Alto" value="2"/>
   </combobox>
-  <button id="btn" text="Clicar" x="400" y="200" width="120" height="40" on_click="go"/>
+  <button id="btn" text="Clicar" x="400" y="200" width="120" height="40" onClick="go"/>
 </screen>)");
     CHECK(res.root != nullptr);
     if (!res.root) return;
@@ -1941,7 +1941,7 @@ static void testTextArea() {
     XmlParser p;
     auto res = p.parse(R"XML(<screen id="s">
   <panel id="bg" x="0" y="0" width="800" height="600"/>
-  <textarea id="ta" x="20" y="20" width="300" height="100" background="#111111" color="#cccccc" font_size="14"/>
+  <textarea id="ta" x="20" y="20" width="300" height="100" background="#111111" color="#cccccc" fontSize="14"/>
 </screen>)XML");
     CHECK(res.root != nullptr);
     if (!res.root) return;
@@ -2053,7 +2053,7 @@ static void testListBox() {
     XmlParser p;
     auto res = p.parse(R"XML(<screen id="s">
   <panel id="bg" x="0" y="0" width="800" height="600"/>
-  <listbox id="lb" x="360" y="20" width="200" height="80" row_height="20" selected="0">
+  <listbox id="lb" x="360" y="20" width="200" height="80" rowHeight="20" selected="0">
     <item label="Um"/>
     <item label="Dois"/>
     <item id="it3" label="Tres"/>
@@ -2109,7 +2109,7 @@ static void testTreeView() {
     XmlParser p;
     auto res = p.parse(R"XML(<screen id="s">
   <panel id="bg" x="0" y="0" width="800" height="600"/>
-  <tree id="tr" x="360" y="120" width="240" height="120" row_height="20" indent="14">
+  <tree id="tr" x="360" y="120" width="240" height="120" rowHeight="20" indent="14">
     <treeitem label="Raiz">
       <treeitem label="Filho A"/>
       <treeitem label="Filho B"/>
@@ -2204,8 +2204,8 @@ static void testToggleAndFileTree() {
   <panel id="bg" x="0" y="0" width="800" height="600"/>
   <toggleswitch id="ts" x="40" y="40" width="150" height="24" checked="true"
                 text="VSync" bind="ts_test"/>
-  <tree id="tr" x="360" y="120" width="240" height="120" row_height="22" indent="14"
-        auto_height="false" icons="true" checks="true" guides="true"
+  <tree id="tr" x="360" y="120" width="240" height="120" rowHeight="22" indent="14"
+        autoHeight="false" icons="true" checks="true" guides="true"
         bind="tree_test">
     <treeitem label="Pasta" folder="true" expanded="true" checked="true">
       <treeitem label="a.txt" file="true"/>

@@ -11,10 +11,12 @@ XML text ──XmlParser──▶ widget tree ──Kernel::frame──▶ DrawL
 
 ## Attribute naming
 
-Attribute names are **full snake_case** — `background`, `width`, `height`,
-`row_height`, `border_width`, `font_size`, ... The old short forms (`bg`, `w`,
-`h`, `rowheight`, `borderwidth`, `fontsize`, ...) are **not** recognised: use
-the full spelling. A few conventional names are not abbreviations and stay as
+Attribute names are **full camelCase words** — `background`, `width`,
+`height`, `rowHeight`, `borderWidth`, `fontSize`, `onClick`, ... Matching is
+case-insensitive, so `rowHeight`, `rowheight` and `ROWHEIGHT` are the same
+key. The old single-word abbreviations (`bg`, `w`, `h`, `cols`, `src`,
+`theight`, `panelw`, `panelh`, `headerbg`) are **not** recognised — use the
+full spelling. A few conventional names are not abbreviations and stay as
 they are: `x`, `y` (position), `id`, `min`, `max`, `color`, `text`, `value`,
 `label`, `title`.
 
@@ -44,7 +46,7 @@ an empty container.
 
 ## General syntax rules
 
-- **Attribute names are case-insensitive** (`FontSize`, `font_size`,
+- **Attribute names are case-insensitive** (`FontSize`, `fontSize`,
   `FONT_SIZE` are the same key). **Element names are exact-match lowercase.**
 - A bare attribute with no value means `"true"`: `<checkbox checked/>`.
 - Values may be quoted (`attr="12"`) or unquoted (`attr=12`); quoted values
@@ -115,19 +117,19 @@ lower-right corner.
 | Attribute | Effect |
 |---|---|
 | `id` | lookup name (`Kernel::findWidget`) |
-| `on_click` / `bind` | action name fired on click |
-| `context_menu` | id of a `<contextmenu>` to pop on right-click |
+| `onClick` / `bind` | action name fired on click |
+| `contextMenu` | id of a `<contextmenu>` to pop on right-click |
 | `tooltip` | hover text |
 | `visible` | show/hide |
 | `background` | fill colour |
 | `color` | foreground/text colour |
-| `border` / `border_color` | stroke colour |
-| `border_width` | stroke thickness in px |
+| `border` / `borderColor` | stroke colour |
+| `borderWidth` | stroke thickness in px |
 | `radius` | corner radius |
 | `padding` / `margin` | inner / outer spacing |
-| `font` / `font_size` | family and size (`font_size` overrides; legacy `font sans 20 color "#66ee66"` pseudo-syntax also works) |
+| `font` / `fontSize` | family and size (`fontSize` overrides; legacy `font sans 20 color "#66ee66"` pseudo-syntax also works) |
 | `shadow` | drop shadow as `"blur[,dy[,dx]]"` |
-| `shadow_color` | shadow tint |
+| `shadowColor` | shadow tint |
 | `gradient` | fill gradient |
 
 ## Named styles
@@ -162,9 +164,9 @@ opt in with `style="p"`; the named style provides the base and the element's
 | `textinput` | `text`, `placeholder` | — |
 | `searchinput` | `text`, `placeholder` | — |
 | `textarea` | — (common attributes only) | — |
-| `spinbox` | `min`, `max`, `value`, `step`, `decimals`, `wrap`, `prefix`, `suffix`, `text`, `button_color` | — |
+| `spinbox` | `min`, `max`, `value`, `step`, `decimals`, `wrap`, `prefix`, `suffix`, `text`, `buttonColor` | — |
 | `optionspin` | `options="a,b,c"`, `value`, `index`, `wrap` | `option` |
-| `slider` | `min`, `max`, `value`, `color`, `background`, `thumb_color` | — |
+| `slider` | `min`, `max`, `value`, `color`, `background`, `thumbColor` | — |
 | `rangeslider` | `low`, `high` (plus slider attrs) | — |
 | `colorpicker` | `color` | — |
 | `pathpicker` | `value`, `placeholder`, `path`, `filter` | — |
@@ -176,7 +178,7 @@ opt in with `style="p"`; the named style provides the base and the element's
 | Element | Typed attributes | Children |
 |---|---|---|
 | `button` | `text` | — |
-| `checkbox` | `text`, `checked`, `color`, `background` (check colour), `border_color` | — |
+| `checkbox` | `text`, `checked`, `color`, `background` (check colour), `borderColor` | — |
 | `radiobutton` | `text`, `checked`, `group`, `accent` | — |
 | `toggleswitch` / `toggle` | `checked`, `on`, `text` | — |
 | `progress` | `value` (0..1), `indeterminate` | — |
@@ -186,13 +188,13 @@ opt in with `style="p"`; the named style provides the base and the element's
 
 | Element | Typed attributes | Children |
 |---|---|---|
-| `listbox` | `row_height`, `selected`, `highlight` | `item` (`ListItem`) |
+| `listbox` | `rowHeight`, `selected`, `highlight` | `item` (`ListItem`) |
 | `item` | `label`/`text`, `value` | — |
-| `table` | `row_height`, `header_height`, `selected`, `sortable`, `header_background` | `th`, `tr` |
-| `th` | `label`, `width`, `resizable`, `editable`, `scrolling_text` (`automatic`/`onmouseenter`) | — |
-| `tr` | `cells="a;b;c"`, `value`, `editable_cells`, `resizable`, `scrolling_text` | `cell` |
-| `cell` | `editable`, `resizable`, `scrolling_text`; text content also works (`<cell>Zoe</cell>`) | — |
-| `tree` | `row_height`, `indent`, `auto_height`, `selected`, `icons`, `checks`, `guides`, `dir` | `treeitem` |
+| `table` | `rowHeight`, `headerHeight`, `selected`, `sortable`, `headerBackground` | `th`, `tr` |
+| `th` | `label`, `width`, `resizable`, `editable`, `scrollingText` (`automatic`/`onmouseenter`) | — |
+| `tr` | `cells="a;b;c"`, `value`, `editableCells`, `resizable`, `scrollingText` | `cell` |
+| `cell` | `editable`, `resizable`, `scrollingText`; text content also works (`<cell>Zoe</cell>`) | — |
+| `tree` | `rowHeight`, `indent`, `autoHeight`, `selected`, `icons`, `checks`, `guides`, `dir` | `treeitem` |
 | `treeitem` | `label`, `value`, `expanded`, `folder`/`file`, `checked` | nested `treeitem` |
 
 `listbox`, `table` and `tree` draw an overlay scrollbar (drag it, or click
@@ -204,16 +206,16 @@ empty track to jump) whenever content exceeds the viewport.
 |---|---|---|
 | `panel` | — | any widget |
 | `group` | `name` (box caption) | any widget |
-| `window` | `title`, `title_visible` | any widget |
-| `scrollview` | `scroll_step`, `scroll_x`, `scroll_y` | any widget |
+| `window` | `title`, `titleVisible` | any widget |
+| `scrollview` | `scrollStep`, `scrollX`, `scrollY` | any widget |
 | `column` / `row` | — | any widget (stacked) |
-| `grid` | `columns`, `gap`, `row_height` | any widget |
-| `splitter` | `orientation`/`vertical`, `split` (0..1), `handle_size`, `handle_color` | two panels |
-| `tabs` | `active`, `tab_height`, `header_color`, `tab_color`, `active_color`, `accent` | `tab` |
+| `grid` | `columns`, `gap`, `rowHeight` | any widget |
+| `splitter` | `orientation`/`vertical`, `split` (0..1), `handleSize`, `handleColor` | two panels |
+| `tabs` | `active`, `tabHeight`, `headerColor`, `tabColor`, `activeColor`, `accent` | `tab` |
 | `tab` | `label` | any widget |
 | `accordion` | `exclusive`, `gap` | `section` |
-| `section` | `header`/`text`, `expanded`, `header_height` | any widget |
-| `combobox` | `selected`, `row_height`, `highlight`, `panel`, `accent` | `item`/`option` |
+| `section` | `header`/`text`, `expanded`, `headerHeight` | any widget |
+| `combobox` | `selected`, `rowHeight`, `highlight`, `panel`, `accent` | `item`/`option` |
 
 Overflowing tab headers collapse into a `...` popup menu automatically.
 
@@ -225,8 +227,8 @@ Overflowing tab headers collapse into a `...` popup menu automatically.
 | `menu` | `label` | `menuitem`, `menuseparator`, nested `menu` |
 | `menuitem` | `label`/`text`, `command` | — |
 | `menuseparator` | — | — |
-| `contextmenu` | located by its `id` (pointed to from `context_menu="..."` on any widget) | `menuitem` |
-| `modal` | `title`, `open`, `panel_width`, `panel_height` | any widget |
+| `contextmenu` | located by its `id` (pointed to from `contextMenu="..."` on any widget) | `menuitem` |
+| `modal` | `title`, `open`, `panelWidth`, `panelHeight` | any widget |
 
 ### Data-only
 

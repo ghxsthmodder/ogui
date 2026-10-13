@@ -4,7 +4,7 @@
          font sans 16 color="#66ee66"/>
 
   <label x="1.25%" y="84" width="45%" height="18" text="ListBox"/>
-  <listbox id="lb_items" x="1.25%" y="106" width="45%" height="20%" row_height="22"
+  <listbox id="lb_items" x="1.25%" y="106" width="45%" height="20%" rowHeight="22"
            selected="0" background="@window" color="@text" border="@accent">
     <item label="Alpha"/>
     <item label="Beta"/>
@@ -23,7 +23,7 @@
   </listbox>
 
   <label x="48.75%" y="84" width="50%" height="18" text="ComboBox"/>
-  <combobox id="cmb_fps" x="48.75%" y="106" width="30%" height="28" selected="1" row_height="22"
+  <combobox id="cmb_fps" x="48.75%" y="106" width="30%" height="28" selected="1" rowHeight="22"
             background="@window" color="@text" border="@accent">
     <option label="Fps: 30"/>
     <option label="Fps: 60"/>
@@ -32,7 +32,7 @@
 
   <label x="48.75%" y="150" width="50%" height="18" text="TreeView (encolhe ao recolher)"/>
   <tree id="tr_scene" x="48.75%" y="172" width="50%" height="30%"
-        row_height="22"
+        rowHeight="22"
         background="@window" color="@text" border="@accent" accent="#66ee66">
     <treeitem label="Cena" expanded="true">
       <treeitem label="Luz"/>

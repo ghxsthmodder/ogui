@@ -78,8 +78,8 @@ int main() {
     {
         ogui::XmlParser p2;
         std::string xml2 = R"(<screen id="s">
-  <style name="primary" background="#4488ff" color="#ffffff" radius="8" font_size="18"/>
-  <button id="go" style="primary" text="Go" x="0" y="0" width="100" height="32" on_click="onGo"/>
+  <style name="primary" background="#4488ff" color="#ffffff" radius="8" fontSize="18"/>
+  <button id="go" style="primary" text="Go" x="0" y="0" width="100" height="32" onClick="onGo"/>
 </screen>)";
         auto r2 = p2.parse(xml2);
         assert(r2.root != nullptr);
@@ -143,7 +143,7 @@ int main() {
     {
         ogui::XmlParser p6;
         std::string xml6 = R"XML(<screen id="s">
-  <tabs id="tb" x="10" y="10" width="300" height="100" active="1" tab_height="22">
+  <tabs id="tb" x="10" y="10" width="300" height="100" active="1" tabHeight="22">
     <tab label="Um" id="t1"/>
     <tab text="Dois" id="t2"/>
   </tabs>
