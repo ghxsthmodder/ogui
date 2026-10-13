@@ -70,7 +70,7 @@ cd build && ctest --output-on-failure      # parser, drawlist, kernel, screens, 
 * `drawlist` — rasterizer geometry, text measurement and wrapping.
 * `kernel` — input dispatch, focus/capture, text editing, tabs, tooltip.
 * `screens` — every manifest screen parses in both themes and keeps the ids the gallery binds to.
-* `scrollbar` — presses on the listbox/treeview/table bars scroll instead of selecting rows.
+* `scrollbar` — presses on the listbox/treeview/table/scrollview/window bars scroll instead of selecting or hitting children.
 * `golden` — renders a fixed `@token` layout through
   `Kernel -> DrawList -> SoftwareRenderer` in both themes and diffs it
   against `tests/golden/basic.png` (dark) and `tests/golden/basic_light.png`

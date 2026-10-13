@@ -102,6 +102,13 @@ namespace ogui {
         return std::clamp((ly - grab - trk.y) / span, 0.0f, 1.0f) * maxScroll;
     }
 
+    // Bars are hit-tested in the widget's LOCAL space (pointer minus
+    // absoluteOrigin) but drawn while the Kernel has shifted bounds() into
+    // absolute space; translate the local rects by the shifted origin.
+    inline Rect offsetRect(const Rect& r, float dx, float dy) {
+        return Rect{r.x + dx, r.y + dy, r.w, r.h};
+    }
+
     inline void drawVerticalBar(Rasterizer& r, const Rect& trk, const Rect& thumb,
                                 bool active) {
         Color track = palette().surface;

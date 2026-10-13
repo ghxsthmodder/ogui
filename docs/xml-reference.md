@@ -197,8 +197,9 @@ opt in with `style="p"`; the named style provides the base and the element's
 | `tree` | `rowHeight`, `indent`, `autoHeight`, `selected`, `icons`, `checks`, `guides`, `dir` | `treeitem` |
 | `treeitem` | `label`, `value`, `expanded`, `folder`/`file`, `checked` | nested `treeitem` |
 
-`listbox`, `table` and `tree` draw an overlay scrollbar (drag it, or click
-empty track to jump) whenever content exceeds the viewport.
+`listbox`, `table`, `tree`, `scrollview` and `window` draw an overlay
+scrollbar (drag the thumb, or click the empty track to jump) whenever
+content exceeds the viewport. In `window` the bar sits below the title bar.
 
 ### Containers
 

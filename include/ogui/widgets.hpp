@@ -191,9 +191,22 @@ public:
     virtual bool wantsScroll() const override { return true; }
     virtual void onPointerScroll(float, float dy) override;
 
+    // Overlay scrollbar on the body's right edge, draggable like the list
+    // widgets' bars (claimsPoint keeps presses off the scrolled children).
+    virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
+    virtual void onPointerUp(MouseButton btn) override;
+    virtual void onPointerMove(const Offset2D& p) override;
+    virtual bool claimsPoint(const Offset2D& localP) const override;
+    virtual void onDrawForeground(Rasterizer& r) const override;
+
     virtual void onDraw(Rasterizer& r) const override;
 
 private:
+    bool barVisible() const;           // body content overflows
+    Rect barTrack() const;             // widget-local space, below the title
+    Rect barThumb() const;
+    void applyBarScroll(float scroll); // clamp m_scrollY from a bar position
+
     std::string m_title;
     bool m_titleVisible = true;
     float m_titleHeight = 24.0f;
@@ -205,6 +218,8 @@ private:
     float m_scrollY = 0.0f;     // wheel scroll of an overflowing body
     float m_overflow = 0.0f;    // px the children extend past the body
     float m_scrollStep = 24.0f;
+    bool m_barDrag = false;     // pointer is dragging the scrollbar thumb
+    float m_barGrab = 0.0f;     // thumb-top offset of the drag press
 };
 
 // ------------------------------------------------------------------
@@ -240,13 +255,22 @@ public:
 
     virtual void layout(float parentWidth, float parentHeight) override;
     virtual void onDraw(Rasterizer& r) const override;
+    virtual void onDrawForeground(Rasterizer& r) const override;
     virtual Offset2D childOffset() const override { return m_offset; }
     virtual bool clipsChildren(Rect& outRect) const override;
     virtual bool wantsScroll() const override { return true; }
     virtual void onPointerScroll(float dx, float dy) override;
+    virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
+    virtual void onPointerUp(MouseButton btn) override;
+    virtual void onPointerMove(const Offset2D& p) override;
+    virtual bool claimsPoint(const Offset2D& localP) const override;
 
 private:
     void clampScroll();
+    bool barVisible() const;           // content overflows the viewport
+    Rect barTrack() const;             // widget-local space
+    Rect barThumb() const;
+    void applyBarScroll(float scroll); // set -m_offset.y from a bar position
 
     std::shared_ptr<Widget> m_content;
     Rect m_viewport{0.0f, 0.0f, 0.0f, 0.0f};      // within this widget's bounds
@@ -256,6 +280,8 @@ private:
     float m_borderWidth = 0.0f;
     Color m_bgColor{ogui::palette().window};
     Color m_borderColor{ogui::palette().accent};
+    bool m_barDrag = false; // pointer is dragging the scrollbar thumb
+    float m_barGrab = 0.0f; // thumb-top offset of the drag press
 };
 
 // ------------------------------------------------------------------

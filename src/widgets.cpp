@@ -245,6 +245,84 @@ void Window::onDraw(Rasterizer& r) const {
     }
 }
 
+// ---- overlay scrollbar ----
+// Vertical bar on the body's right edge (below the title), draggable; the
+// scroll range is the px the children reach past the bottom (m_overflow).
+
+bool Window::barVisible() const {
+    return m_overflow > 1.0f;
+}
+
+Rect Window::barTrack() const {
+    const Rect b = bounds();
+    const float th = titleHeight();
+    return Rect{b.w - kBarW - kBarMargin, th + kBarMargin,
+                kBarW, std::max(b.h - th - 2.0f * kBarMargin, 0.0f)};
+}
+
+Rect Window::barThumb() const {
+    const float viewH = std::max(bounds().h - titleHeight(), 0.0f);
+    return barThumbRect(barTrack(), viewH, viewH + m_overflow, m_scrollY);
+}
+
+void Window::applyBarScroll(float scroll) {
+    m_scrollY = std::clamp(scroll, 0.0f, m_overflow);
+    if (Kernel* kn = kernel()) kn->invalidate();
+}
+
+bool Window::claimsPoint(const Offset2D& localP) const {
+    if (!barVisible()) return false;
+    const Rect trk = barTrack();
+    return localP.x >= trk.x && localP.x <= trk.x + trk.w &&
+           localP.y >= trk.y && localP.y <= trk.y + trk.h;
+}
+
+void Window::onPointerDown(MouseButton btn, const Offset2D& p) {
+    const Offset2D o = absoluteOrigin();
+    const float lx = static_cast<float>(p.x) - o.x;
+    const float ly = static_cast<float>(p.y) - o.y;
+    if (barVisible()) {
+        const Rect trk = barTrack();
+        if (lx >= trk.x && lx <= trk.x + trk.w &&
+            ly >= trk.y && ly <= trk.y + trk.h) {
+            m_barDrag = true;
+            const float viewH = std::max(bounds().h - titleHeight(), 0.0f);
+            const float total = viewH + m_overflow;
+            const Rect th = barThumb();
+            if (ly >= th.y && ly <= th.y + th.h) {
+                m_barGrab = ly - th.y;
+            } else {
+                // Empty track: jump the thumb center to the press point.
+                m_barGrab = th.h * 0.5f;
+                applyBarScroll(barScrollAt(trk, viewH, total, ly, m_barGrab));
+            }
+            return;
+        }
+    }
+    Panel::onPointerDown(btn, p);
+}
+
+void Window::onPointerUp(MouseButton btn) {
+    m_barDrag = false;
+    Panel::onPointerUp(btn);
+}
+
+void Window::onPointerMove(const Offset2D& p) {
+    if (!m_barDrag) return;
+    const float ly = static_cast<float>(p.y) - absoluteOrigin().y;
+    const float viewH = std::max(bounds().h - titleHeight(), 0.0f);
+    const float total = viewH + m_overflow;
+    applyBarScroll(barScrollAt(barTrack(), viewH, total, ly, m_barGrab));
+}
+
+void Window::onDrawForeground(Rasterizer& r) const {
+    if (!barVisible()) return;
+    // Bounds are shifted into absolute space by Kernel::drawTree here.
+    const Rect bb = bounds();
+    drawVerticalBar(r, offsetRect(barTrack(), bb.x, bb.y),
+                    offsetRect(barThumb(), bb.x, bb.y), m_barDrag);
+}
+
 // ------------------------------------------------------------------
 // Separator
 // ------------------------------------------------------------------

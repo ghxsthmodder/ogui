@@ -88,6 +88,81 @@ void ScrollView::onDraw(Rasterizer& r) const {
     // clipped to the viewport (childOffset()/clipsChildren()).
 }
 
+// ---- overlay scrollbar ----
+// Vertical bar on the right edge, draggable; the content's own scroll is
+// -m_offset.y over a range of (contentBottom - viewport height).
+
+bool ScrollView::barVisible() const {
+    const float viewH = std::max(m_viewport.h, 0.0f);
+    return m_contentBounds.y + m_contentBounds.h - viewH > 1.0f;
+}
+
+Rect ScrollView::barTrack() const {
+    const Rect b = bounds();
+    return Rect{b.w - kBarW - kBarMargin, kBarMargin,
+                kBarW, std::max(b.h - 2.0f * kBarMargin, 0.0f)};
+}
+
+Rect ScrollView::barThumb() const {
+    const float viewH = std::max(m_viewport.h, 0.0f);
+    const float total = viewH + std::max(m_contentBounds.y + m_contentBounds.h - viewH, 0.0f);
+    return barThumbRect(barTrack(), viewH, total, -m_offset.y);
+}
+
+void ScrollView::applyBarScroll(float scroll) {
+    m_offset.y = -std::max(scroll, 0.0f);
+    clampScroll();
+    if (Kernel* k = kernel()) k->invalidate();
+}
+
+bool ScrollView::claimsPoint(const Offset2D& localP) const {
+    if (!barVisible()) return false;
+    const Rect trk = barTrack();
+    return localP.x >= trk.x && localP.x <= trk.x + trk.w &&
+           localP.y >= trk.y && localP.y <= trk.y + trk.h;
+}
+
+void ScrollView::onPointerDown(MouseButton, const Offset2D& p) {
+    const Offset2D o = absoluteOrigin();
+    const float lx = static_cast<float>(p.x) - o.x;
+    const float ly = static_cast<float>(p.y) - o.y;
+    if (!barVisible()) return;
+    const Rect trk = barTrack();
+    if (lx < trk.x || lx > trk.x + trk.w || ly < trk.y || ly > trk.y + trk.h)
+        return;
+    m_barDrag = true;
+    const float viewH = std::max(m_viewport.h, 0.0f);
+    const float total = viewH + std::max(m_contentBounds.y + m_contentBounds.h - viewH, 0.0f);
+    const Rect th = barThumb();
+    if (ly >= th.y && ly <= th.y + th.h) {
+        m_barGrab = ly - th.y;
+    } else {
+        // Empty track: jump the thumb center to the press point.
+        m_barGrab = th.h * 0.5f;
+        applyBarScroll(barScrollAt(trk, viewH, total, ly, m_barGrab));
+    }
+}
+
+void ScrollView::onPointerUp(MouseButton) {
+    m_barDrag = false;
+}
+
+void ScrollView::onPointerMove(const Offset2D& p) {
+    if (!m_barDrag) return;
+    const float ly = static_cast<float>(p.y) - absoluteOrigin().y;
+    const float viewH = std::max(m_viewport.h, 0.0f);
+    const float total = viewH + std::max(m_contentBounds.y + m_contentBounds.h - viewH, 0.0f);
+    applyBarScroll(barScrollAt(barTrack(), viewH, total, ly, m_barGrab));
+}
+
+void ScrollView::onDrawForeground(Rasterizer& r) const {
+    if (!barVisible()) return;
+    // Bounds are shifted into absolute space by Kernel::drawTree here.
+    const Rect bb = bounds();
+    drawVerticalBar(r, offsetRect(barTrack(), bb.x, bb.y),
+                    offsetRect(barThumb(), bb.x, bb.y), m_barDrag);
+}
+
 // ------------------------------------------------------------------
 // Column
 // ------------------------------------------------------------------

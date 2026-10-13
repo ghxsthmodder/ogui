@@ -53,6 +53,10 @@ Widget* hitTestTree(const std::vector<Widget::Ptr>& roots, const Offset2D& p,
                 return w.get();
         }
 
+        // Overlays (scrollbars) claim their pixels before the children
+        // they are drawn on top of get a chance.
+        if (w->claimsPoint(Offset2D{p.x - ax, p.y - ay})) return w.get();
+
         const Offset2D off = w->childOffset();
         if (Widget* child = hitTestTree(w->children(), p, ax + off.x, ay + off.y))
             return child;
@@ -604,6 +608,12 @@ void Kernel::drawTree(Rasterizer& r, Widget* w, float ox, float oy) const {
         if (c) drawTree(r, c.get(), cx, cy);
     }
     if (clipped) r.endFrame();
+
+    // Foreground pass: overlays (scrollbars) draw above the children, with
+    // the same shifted-bounds convention as onDraw above.
+    w->setBounds(Rect{b.x + ox, b.y + oy, b.w, b.h});
+    w->onDrawForeground(r);
+    w->setBounds(saved);
 }
 
 } // namespace ogui

@@ -168,6 +168,19 @@ public:
     // their own open-state mirror here.
     virtual void onPopupDismissed() {}
 
+    // Container interception: return true for points (in THIS widget's
+    // local space) that belong to the widget itself rather than to the
+    // children it overlaps — an overlay scrollbar drawing on top of the
+    // scrolled content uses this so presses reach the bar, not the child
+    // underneath. Checked before the children are recursed into.
+    virtual bool claimsPoint(const Offset2D& /*localP*/) const { return false; }
+
+    // Drawn after the children (onDraw runs before them). Containers use
+    // this for overlays — scrollbars — that must sit above scrolled
+    // content. Bounds are shifted into the parent space for the call, the
+    // same convention as onDraw.
+    virtual void onDrawForeground(Rasterizer& /*r*/) const {}
+
     // ---- container hooks (tree walk) ----
     // Used by the Kernel while drawing and hit-testing children:
     //   childOffset()   - extra offset applied to the children (ScrollView

@@ -120,6 +120,104 @@ int main() {
         CHECK(tv->selectedIndex() > 30);
     }
 
+    // ---- ListBox at a non-zero origin: the bar hit region must follow
+    // the widget (local-space regression) ----
+    {
+        auto lb = std::make_shared<ListBox>();
+        lb->setId("lbofs");
+        lb->setBounds({30, 20, 200, 100});
+        std::vector<std::string> items;
+        for (int i = 0; i < 100; ++i) items.push_back("item " + std::to_string(i));
+        lb->setItems(items);
+        show(k, lb);
+        k.frame(st);
+
+        pressAt(k, st, 30 + 194, 20 + 95);  // bottom of the offset bar
+        releaseAt(k, st);
+        CHECK(lb->selectedIndex() == -1);   // the bar took the press
+        pressAt(k, st, 30 + 100, 20 + 50);  // body click hits a late row
+        releaseAt(k, st);
+        CHECK(lb->selectedIndex() > 60);
+    }
+
+    // ---- ScrollView: 300px page in a 100px viewport ----
+    {
+        auto sv = std::make_shared<ScrollView>();
+        sv->setId("sv");
+        sv->setBounds({0, 0, 200, 100});
+        auto page = std::make_shared<Panel>();
+        page->setBounds({0, 0, 200, 300});
+        sv->addChild(page);
+        show(k, sv);
+        k.frame(st);
+        CHECK(sv->scrollPosition().y == 0.0f);
+
+        // Press the empty bottom track: jumps near the end (claimsPoint
+        // keeps the press off the child page underneath).
+        pressAt(k, st, 194, 95);
+        releaseAt(k, st);
+        CHECK(sv->scrollPosition().y <= -190.0f);
+
+        // A press inside the content scrolls nothing.
+        pressAt(k, st, 100, 50);
+        releaseAt(k, st);
+        CHECK(sv->scrollPosition().y <= -190.0f);
+
+        // Thumb sits at the bottom now; press the empty track at the top.
+        pressAt(k, st, 194, 10);
+        releaseAt(k, st);
+        CHECK(sv->scrollPosition().y > -20.0f);
+
+        // Grab the thumb at the top and drag it down.
+        pressAt(k, st, 194, 5);
+        moveWhileDown(k, st, 194, 95);
+        releaseAt(k, st);
+        CHECK(sv->scrollPosition().y <= -190.0f);
+    }
+
+    // ---- ScrollView away from the parent origin ----
+    {
+        auto sv = std::make_shared<ScrollView>();
+        sv->setId("svofs");
+        sv->setBounds({50, 40, 200, 100});
+        auto page = std::make_shared<Panel>();
+        page->setBounds({0, 0, 200, 300});
+        sv->addChild(page);
+        show(k, sv);
+        k.frame(st);
+
+        pressAt(k, st, 50 + 194, 40 + 95);  // bottom of the offset bar
+        releaseAt(k, st);
+        CHECK(sv->scrollPosition().y <= -190.0f);
+    }
+
+    // ---- Window: overflowing body scrolls from the bar under the title ----
+    {
+        auto win = std::make_shared<Window>();
+        win->setId("win");
+        win->setTitle("W");
+        win->setBounds({20, 30, 300, 140});   // title 24, body 116
+        auto page = std::make_shared<Panel>();
+        page->setBounds({0, 0, 300, 400});    // overflow = 424 - 140 = 284
+        win->addChild(page);
+        show(k, win);
+        k.frame(st);
+        CHECK(win->childOffset().y == 0.0f);
+
+        pressAt(k, st, 20 + 294, 30 + 135);   // bottom of the body track
+        releaseAt(k, st);
+        CHECK(win->childOffset().y < -200.0f);
+
+        pressAt(k, st, 20 + 294, 30 + 40);    // top of the track: jump back
+        releaseAt(k, st);
+        CHECK(win->childOffset().y > -20.0f);
+
+        // A press in the body away from the bar must NOT scroll.
+        pressAt(k, st, 20 + 150, 30 + 70);
+        releaseAt(k, st);
+        CHECK(win->childOffset().y > -20.0f);
+    }
+
     std::cout << (failures ? "BAR TEST FAILED" : "bar test OK") << "\n";
     return failures ? 1 : 0;
 }

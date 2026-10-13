@@ -554,7 +554,9 @@ bool ListBox::barVisible() const {
 
 Rect ListBox::barTrack() const {
     const Rect b = bounds();
-    return Rect{b.x + b.w - kBarW - kBarMargin, b.y + kBarMargin,
+    // Local space: hit-tested against pointer-minus-absoluteOrigin, drawn
+    // translated by offsetRect() (see widgets_internal.hpp).
+    return Rect{b.w - kBarW - kBarMargin, kBarMargin,
                 kBarW, std::max(b.h - 2.0f * kBarMargin, 0.0f)};
 }
 
@@ -667,7 +669,11 @@ void ListBox::onDraw(Rasterizer& r) const {
     }
     r.endFrame();
 
-    if (barVisible()) drawVerticalBar(r, barTrack(), barThumb(), m_barDrag);
+    if (barVisible()) {
+        const Rect bb = bounds();
+        drawVerticalBar(r, offsetRect(barTrack(), bb.x, bb.y),
+                        offsetRect(barThumb(), bb.x, bb.y), m_barDrag);
+    }
 }
 
 // ------------------------------------------------------------------
@@ -878,8 +884,7 @@ bool Table::barVisible() const {
 
 Rect Table::barTrack() const {
     const Rect b = bounds();
-    const float top = b.y + m_headH + kBarMargin;
-    return Rect{b.x + b.w - kBarW - kBarMargin, top,
+    return Rect{b.w - kBarW - kBarMargin, m_headH + kBarMargin,
                 kBarW, std::max(b.h - m_headH - 2.0f * kBarMargin, 0.0f)};
 }
 
@@ -1280,7 +1285,11 @@ void Table::onDraw(Rasterizer& r) const {
         r.drawLine({b.x + columnX(c), b.y}, {b.x + columnX(c), b.y + b.h},
                    Color{60, 60, 60, 255}, 1.0f);
 
-    if (barVisible()) drawVerticalBar(r, barTrack(), barThumb(), m_barDrag);
+    if (barVisible()) {
+        const Rect bb = bounds();
+        drawVerticalBar(r, offsetRect(barTrack(), bb.x, bb.y),
+                        offsetRect(barThumb(), bb.x, bb.y), m_barDrag);
+    }
 }
 
 // ------------------------------------------------------------------
@@ -1359,7 +1368,7 @@ bool TreeView::barVisible() const {
 
 Rect TreeView::barTrack() const {
     const Rect b = bounds();
-    return Rect{b.x + b.w - kBarW - kBarMargin, b.y + kBarMargin,
+    return Rect{b.w - kBarW - kBarMargin, kBarMargin,
                 kBarW, std::max(b.h - 2.0f * kBarMargin, 0.0f)};
 }
 
@@ -1768,7 +1777,11 @@ void TreeView::onDraw(Rasterizer& r) const {
     }
     r.endFrame();
 
-    if (barVisible()) drawVerticalBar(r, barTrack(), barThumb(), m_barDrag);
+    if (barVisible()) {
+        const Rect bb = bounds();
+        drawVerticalBar(r, offsetRect(barTrack(), bb.x, bb.y),
+                        offsetRect(barThumb(), bb.x, bb.y), m_barDrag);
+    }
 }
 
 // ------------------------------------------------------------------
