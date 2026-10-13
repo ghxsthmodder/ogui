@@ -57,51 +57,51 @@ constexpr int kMaxChannelDelta = 4;
 constexpr double kMaxBadPixelRatio = 0.01;
 
 const char* kLayout = R"XML(<screen id="main">
-  <style name="primary" bg="#4488ff" color="#ffffff" radius="6"/>
-  <style name="muted"   bg="#3a3a3a" color="#cccccc" radius="6"/>
+  <style name="primary" background="#4488ff" color="#ffffff" radius="6"/>
+  <style name="muted"   background="#3a3a3a" color="#cccccc" radius="6"/>
 
-  <panel id="bg" x="0" y="0" w="480" h="500" bg="@screen"/>
+  <panel id="bg" x="0" y="0" width="480" height="500" background="@screen"/>
 
-  <window id="win" x="16" y="16" w="448" h="244" title="golden" bg="@surface"
-          border="@accent" borderwidth="1">
+  <window id="win" x="16" y="16" width="448" height="244" title="golden" background="@surface"
+          border="@accent" border_width="1">
     <column id="col">
-      <button id="b1" style="primary" text="Iniciar" x="12" y="12" w="150" h="38"
+      <button id="b1" style="primary" text="Iniciar" x="12" y="12" width="150" height="38"
               tooltip="Iniciar"/>
-      <button id="b2" style="muted"   text="Carregar" x="12" y="58" w="150" h="38"/>
-      <label id="l1" text="alinhado ao centro" x="12" y="58" w="424" h="26"
+      <button id="b2" style="muted"   text="Carregar" x="12" y="58" width="150" height="38"/>
+      <label id="l1" text="alinhado ao centro" x="12" y="58" width="424" height="26"
              align="center" color="#66ee66"/>
-      <textinput id="t1" x="12" y="92" w="424" h="36" placeholder="Digite algo..."
-                 bg="@window" color="@text" border="@accent" radius="6"/>
-      <label id="l2" wrap="true" x="12" y="136" w="260" h="0" color="#8fe"
+      <textinput id="t1" x="12" y="92" width="424" height="36" placeholder="Digite algo..."
+                 background="@window" color="@text" border="@accent" radius="6"/>
+      <label id="l2" wrap="true" x="12" y="136" width="260" height="0" color="#8fe"
              text="Uma frase bem longa que o rasterizador quebra em varias linhas dentro de uma caixa estreita."/>
     </column>
   </window>
 
-  <group id="g1" x="16" y="268" w="448" h="80" bg="@surface"
-         border="@accent" borderwidth="1">
-    <checkbox id="c1" text="Opcao" x="12" y="10" w="150" h="22" checked="true"/>
-    <separator id="s1" x="180" y="14" w="110" h="8" thickness="2" color="@borderStrong"/>
-    <progress id="p1" x="12" y="46" w="200" h="16" value="0.65" color="#66ee66"/>
-    <slider id="sl1" x="240" y="42" w="190" h="24" min="0" max="100" value="40"/>
+  <group id="g1" x="16" y="268" width="448" height="80" background="@surface"
+         border="@accent" border_width="1">
+    <checkbox id="c1" text="Opcao" x="12" y="10" width="150" height="22" checked="true"/>
+    <separator id="s1" x="180" y="14" width="110" height="8" thickness="2" color="@borderStrong"/>
+    <progress id="p1" x="12" y="46" width="200" height="16" value="0.65" color="#66ee66"/>
+    <slider id="sl1" x="240" y="42" width="190" height="24" min="0" max="100" value="40"/>
   </group>
 
-  <tabs id="tt" x="16" y="356" w="448" h="52" theight="24" bg="@window" active="0">
+  <tabs id="tt" x="16" y="356" width="448" height="52" tab_height="24" background="@window" active="0">
     <tab label="Pagina A">
-      <label id="tl1" text="conteudo visivel" x="12" y="6" w="300" h="20" color="#66ee66"/>
+      <label id="tl1" text="conteudo visivel" x="12" y="6" width="300" height="20" color="#66ee66"/>
     </tab>
     <tab label="Pagina B">
-      <label id="tl2" text="NAO PODE APARECER" x="12" y="6" w="300" h="20" color="#ff4444"/>
+      <label id="tl2" text="NAO PODE APARECER" x="12" y="6" width="300" height="20" color="#ff4444"/>
     </tab>
   </tabs>
 
-  <scrollview id="sv" x="16" y="416" w="448" h="72" bg="@window"
-              border="@accent" borderwidth="1" scrolly="-40">
+  <scrollview id="sv" x="16" y="416" width="448" height="72" background="@window"
+              border="@accent" border_width="1" scroll_y="-40">
     <label id="sv1" text="linha rolavel um (escondida)" x="12" y="8"
-           w="400" h="20" color="@text"/>
+           width="400" height="20" color="@text"/>
     <label id="sv2" text="linha rolavel dois (no topo)" x="12" y="40"
-           w="400" h="20" color="#66ee66"/>
+           width="400" height="20" color="#66ee66"/>
     <label id="sv3" text="linha rolavel tres (recortada)" x="12" y="100"
-           w="400" h="20" color="#ff4444"/>
+           width="400" height="20" color="#ff4444"/>
   </scrollview>
 </screen>)XML";
 

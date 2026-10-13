@@ -200,10 +200,9 @@ intro below.
 
 Attribute names are full snake_case (`background`, `width`, `height`,
 `row_height`, `border_width`, `font_size`, …). The old short forms (`bg`, `w`,
-`h`, `rowheight`, `borderwidth`, `fontsize`, …) still parse as legacy aliases,
-so existing layouts keep working, but new layouts should use the full names.
-Conventional names that are not abbreviations stay as-is: `x`, `y`, `id`,
-`min`, `max`, `color`, `text`, `value`, `label`, `title`.
+`h`, `rowheight`, `borderwidth`, `fontsize`, …) are not recognised — use the
+full spelling. Conventional names that are not abbreviations stay as-is: `x`,
+`y`, `id`, `min`, `max`, `color`, `text`, `value`, `label`, `title`.
 
 ```xml
 <screen id="main">

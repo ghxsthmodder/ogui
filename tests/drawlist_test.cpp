@@ -256,9 +256,9 @@ static void testLayoutDraw() {
     // Parse the sample layout and make sure drawing it yields geometry.
     ogui::XmlParser parser;
     std::string xml = R"(<screen id="main">
-  <panel id="bg" x="0" y="0" w="800" h="600" bg="#161616"/>
-  <window id="win" x="120" y="80" w="560" h="420" title="Demo">
-    <button id="btn" text="Iniciar" x="0" y="0" w="200" h="50" bg="#4488ff"/>
+  <panel id="bg" x="0" y="0" width="800" height="600" background="#161616"/>
+  <window id="win" x="120" y="80" width="560" height="420" title="Demo">
+    <button id="btn" text="Iniciar" x="0" y="0" width="200" height="50" background="#4488ff"/>
   </window>
 </screen>)";
     auto res = parser.parse(xml);

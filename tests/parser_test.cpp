@@ -8,15 +8,15 @@ int main() {
     ogui::XmlParser parser;
 
     std::string xml = R"(<screen id="main">
-  <panel id="bg" x="0" y="0" w="800" h="600" bg="#161616"/>
-  <window id="win" x="120" y="80" w="560" h="420" title="Teste">
-    <button id="b1" text="Ok" x="20" y="20" w="120" h="40"
-            bg="#4488ff" color="#fff" radius="6"/>
-    <label id="l1" text="Hello world" x="20" y="80" w="200" h="30"
+  <panel id="bg" x="0" y="0" width="800" height="600" background="#161616"/>
+  <window id="win" x="120" y="80" width="560" height="420" title="Teste">
+    <button id="b1" text="Ok" x="20" y="20" width="120" height="40"
+            background="#4488ff" color="#fff" radius="6"/>
+    <label id="l1" text="Hello world" x="20" y="80" width="200" height="30"
            font sans 20 color "#66ee66"/>
   </window>
   <column id="col">
-    <button id="b2" text="Second" x="0" y="0" w="100" h="30"/>
+    <button id="b2" text="Second" x="0" y="0" width="100" height="30"/>
   </column>
 </screen>)";
 
@@ -78,8 +78,8 @@ int main() {
     {
         ogui::XmlParser p2;
         std::string xml2 = R"(<screen id="s">
-  <style name="primary" bg="#4488ff" color="#ffffff" radius="8" fontsize="18"/>
-  <button id="go" style="primary" text="Go" x="0" y="0" w="100" h="32" onclick="onGo"/>
+  <style name="primary" background="#4488ff" color="#ffffff" radius="8" font_size="18"/>
+  <button id="go" style="primary" text="Go" x="0" y="0" width="100" height="32" on_click="onGo"/>
 </screen>)";
         auto r2 = p2.parse(xml2);
         assert(r2.root != nullptr);
@@ -123,7 +123,7 @@ int main() {
     {
         ogui::XmlParser p5;
         std::string xml5 = R"(<screen id="s">
-  <label id="l" text="long text" wrap="true" x="0" y="0" w="120" h="0"/>
+  <label id="l" text="long text" wrap="true" x="0" y="0" width="120" height="0"/>
   <label id="l2" text="short"/>
 </screen>)";
         auto r5 = p5.parse(xml5);
@@ -143,7 +143,7 @@ int main() {
     {
         ogui::XmlParser p6;
         std::string xml6 = R"XML(<screen id="s">
-  <tabs id="tb" x="10" y="10" w="300" h="100" active="1" theight="22">
+  <tabs id="tb" x="10" y="10" width="300" height="100" active="1" tab_height="22">
     <tab label="Um" id="t1"/>
     <tab text="Dois" id="t2"/>
   </tabs>

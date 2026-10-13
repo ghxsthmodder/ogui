@@ -336,7 +336,7 @@ std::map<std::string, std::string> XmlParser::parseAttributes() {
 
             skipWhitespace();
             if (m_pos < m_len && std::isdigit(static_cast<unsigned char>(m_text[m_pos]))) {
-                attrs["fontsize"] = readToken();
+                attrs["font_size"] = readToken();
                 skipWhitespace();
             }
             // Optional trailing: color "#rrggbb"
@@ -358,30 +358,6 @@ std::map<std::string, std::string> XmlParser::parseAttributes() {
         }
 
         skipWhitespace();
-    }
-
-    // Full snake_case names are the authored spelling; normalize them to the
-    // parser's canonical (short) keys so both forms parse identically.
-    static const std::pair<const char*, const char*> kAliases[] = {
-        {"background","bg"},{"width","w"},{"height","h"},{"columns","cols"},
-        {"source","src"},{"font_size","fontsize"},{"border_width","borderwidth"},
-        {"border_color","bordercolor"},{"shadow_color","shadowcolor"},
-        {"button_color","buttoncolor"},{"thumb_color","thumbcolor"},
-        {"header_color","headercolor"},{"header_background","headerbg"},
-        {"header_height","headerheight"},{"row_height","rowheight"},
-        {"tab_height","theight"},{"active_color","activecolor"},
-        {"tab_color","tabcolor"},{"handle_color","handlecolor"},
-        {"handle_size","handlesize"},{"panel_width","panelw"},
-        {"panel_height","panelh"},{"scroll_x","scrollx"},{"scroll_y","scrolly"},
-        {"scroll_step","scrollstep"},{"scrolling_text","scrollingtext"},
-        {"auto_height","autoheight"},{"editable_cells","editablecells"},
-        {"on_click","onclick"},{"context_menu","contextmenu"},
-    };
-    for (const auto& a : kAliases) {
-        auto full = attrs.find(a.first);
-        if (full == attrs.end()) continue;
-        if (attrs.find(a.second) == attrs.end()) attrs[a.second] = full->second;
-        attrs.erase(full);
     }
     return attrs;
 }
@@ -528,9 +504,9 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
     };
     // ---- identity ----
     if (const std::string* v = get("id")) w->setId(*v);
-    if (const std::string* v = get("onclick")) w->setBinding(*v);
+    if (const std::string* v = get("on_click")) w->setBinding(*v);
     if (const std::string* v = get("bind")) w->setBinding(*v);
-    if (const std::string* v = get("contextmenu")) w->setContextMenuName(*v);
+    if (const std::string* v = get("context_menu")) w->setContextMenuName(*v);
     if (const std::string* v = get("tooltip")) w->setTooltip(*v);
 
     // ---- geometry (layout happens later; bounds seed the widget) ----
@@ -553,8 +529,8 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
     };
     bool hasX = parseGeom(get("x"), x, xm);
     bool hasY = parseGeom(get("y"), y, ym);
-    bool hasW = parseGeom(get("w"), wd, wm);
-    bool hasH = parseGeom(get("h"), ht, hm);
+    bool hasW = parseGeom(get("width"), wd, wm);
+    bool hasH = parseGeom(get("height"), ht, hm);
     if (xm || ym || wm || hm) {
         w->setGeometrySpec(Rect{x, y, wd, ht}, xm, ym, wm, hm);
     }
@@ -593,11 +569,11 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
     Style st;
     bool hasStyle = false;
     if (const std::string* v = get("visible")) { st.isVisible = toBool(*v); hasStyle = true; }
-    if (const std::string* v = get("bg"))      { st.backgroundColor = colorOf(*v); hasStyle = true; }
+    if (const std::string* v = get("background"))      { st.backgroundColor = colorOf(*v); hasStyle = true; }
     if (const std::string* v = get("color"))   { st.textColor = colorOf(*v); hasStyle = true; }
     if (const std::string* v = get("border"))  { st.borderColor = colorOf(*v); st.borderWidth = 1.0f; hasStyle = true; }
-    if (const std::string* v = get("bordercolor")) { st.borderColor = colorOf(*v); hasStyle = true; }
-    if (const std::string* v = get("borderwidth")) { toFloat(*v, st.borderWidth); hasStyle = true; }
+    if (const std::string* v = get("border_color")) { st.borderColor = colorOf(*v); hasStyle = true; }
+    if (const std::string* v = get("border_width")) { toFloat(*v, st.borderWidth); hasStyle = true; }
     if (const std::string* v = get("radius"))  { toFloat(*v, st.radius); hasStyle = true; }
     if (const std::string* v = get("padding")) { toFloat(*v, st.padding); hasStyle = true; }
     if (const std::string* v = get("margin"))  { toFloat(*v, st.margin); hasStyle = true; }
@@ -605,7 +581,7 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         parseFontAttr(*v, st.fontFamily, st.fontSize);
         hasStyle = true;
     }
-    if (const std::string* v = get("fontsize")) { toInt(*v, st.fontSize); hasStyle = true; }
+    if (const std::string* v = get("font_size")) { toInt(*v, st.fontSize); hasStyle = true; }
     if (const std::string* v = get("shadow")) {
         // "blur" | "blur,dy" | "blur,dx,dy" (blur 0 disables the shadow).
         std::vector<float> nums;
@@ -627,7 +603,7 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
             hasStyle = true;
         }
     }
-    if (const std::string* v = get("shadowcolor")) { st.shadowColor = colorOf(*v); hasStyle = true; }
+    if (const std::string* v = get("shadow_color")) { st.shadowColor = colorOf(*v); hasStyle = true; }
     if (const std::string* v = get("gradient")) {
         st.gradientColor = colorOf(*v);
         st.hasGradient = true;
@@ -681,22 +657,22 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
     } else if (auto* sv = dynamic_cast<ScrollView*>(w.get())) {
         // Applied before the children are parsed, so they only settle after
         // the first layout pass (clampScroll() keeps them then).
-        if (const std::string* v = get("scrollstep")) {
+        if (const std::string* v = get("scroll_step")) {
             float step = 40.0f;
             toFloat(*v, step);
             sv->setScrollStep(step);
         }
         float sx = sv->scrollPosition().x, sy = sv->scrollPosition().y;
         bool hasScroll = false;
-        if (const std::string* v = get("scrollx")) { toFloat(*v, sx); hasScroll = true; }
-        if (const std::string* v = get("scrolly")) { toFloat(*v, sy); hasScroll = true; }
+        if (const std::string* v = get("scroll_x")) { toFloat(*v, sx); hasScroll = true; }
+        if (const std::string* v = get("scroll_y")) { toFloat(*v, sy); hasScroll = true; }
         if (hasScroll) sv->setScroll(sx, sy);
         if (hasStyle) {
             sv->setBgColor(st.backgroundColor); sv->setBorderColor(st.borderColor);
             sv->setBorderWidth(st.borderWidth);
         }
     } else if (auto* img = dynamic_cast<Image*>(w.get())) {
-        if (const std::string* v = get("src")) img->setImagePath(*v);
+        if (const std::string* v = get("source")) img->setImagePath(*v);
         if (const std::string* v = get("tile")) img->setTile(toBool(*v));
     } else if (auto* grp = dynamic_cast<Group*>(w.get())) {
         if (const std::string* v = get("name")) grp->setGroupName(*v);
@@ -708,8 +684,8 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         if (const std::string* v = get("text")) cb->setText(*v);
         if (const std::string* v = get("checked")) cb->setChecked(toBool(*v));
         if (const std::string* v = get("color")) cb->setTextColor(colorOf(*v));
-        if (const std::string* v = get("bg")) cb->setCheckColor(colorOf(*v));
-        if (const std::string* v = get("bordercolor")) cb->setBoxColor(colorOf(*v));
+        if (const std::string* v = get("background")) cb->setCheckColor(colorOf(*v));
+        if (const std::string* v = get("border_color")) cb->setBoxColor(colorOf(*v));
         else if (const std::string* v = get("border")) cb->setBoxColor(colorOf(*v));
         if (hasStyle) { cb->setFontFamily(st.fontFamily); cb->setFontSize(st.fontSize); }
     } else if (auto* rb = dynamic_cast<RadioButton*>(w.get())) {
@@ -717,7 +693,7 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         if (const std::string* v = get("checked")) rb->setChecked(toBool(*v));
         if (const std::string* v = get("color")) rb->setTextColor(colorOf(*v));
         if (const std::string* v = get("accent")) rb->setDotColor(colorOf(*v));
-        if (const std::string* v = get("bordercolor")) rb->setCircleColor(colorOf(*v));
+        if (const std::string* v = get("border_color")) rb->setCircleColor(colorOf(*v));
         if (const std::string* v = get("group")) rb->setGroup(*v);
         if (hasStyle) { rb->setFontFamily(st.fontFamily); rb->setFontSize(st.fontSize); }
     } else if (auto* sep = dynamic_cast<Separator*>(w.get())) {
@@ -727,7 +703,7 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
             sep->setThickness(t);
         }
         if (const std::string* v = get("color")) sep->setLineColor(colorOf(*v));
-        else if (const std::string* v = get("bg")) sep->setLineColor(colorOf(*v));
+        else if (const std::string* v = get("background")) sep->setLineColor(colorOf(*v));
     } else if (auto* pr = dynamic_cast<ProgressBar*>(w.get())) {
         if (const std::string* v = get("indeterminate")) pr->setIndeterminate(toBool(*v));
         if (const std::string* v = get("value")) {
@@ -736,13 +712,13 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
             pr->setValue(val);
         }
         if (const std::string* v = get("color")) pr->setBarColor(colorOf(*v));
-        if (const std::string* v = get("bg")) pr->setBgColor(colorOf(*v));
-        if (const std::string* v = get("bordercolor")) pr->setBorderColor(colorOf(*v));
+        if (const std::string* v = get("background")) pr->setBgColor(colorOf(*v));
+        if (const std::string* v = get("border_color")) pr->setBorderColor(colorOf(*v));
         else if (const std::string* v = get("border")) {
             pr->setBorderColor(colorOf(*v));
             pr->setBorderWidth(1.0f);
         }
-        if (const std::string* v = get("borderwidth")) {
+        if (const std::string* v = get("border_width")) {
             float bw = 1.0f;
             toFloat(*v, bw);
             pr->setBorderWidth(bw);
@@ -760,8 +736,8 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         if (hasRange) sl->setRange(lo, hi);
         if (const std::string* v = get("value")) { toFloat(*v, val); sl->setValue(val); }
         if (const std::string* v = get("color")) sl->setBarColor(colorOf(*v));
-        if (const std::string* v = get("bg")) sl->setTrackColor(colorOf(*v));
-        if (const std::string* v = get("thumbcolor")) sl->setThumbColor(colorOf(*v));
+        if (const std::string* v = get("background")) sl->setTrackColor(colorOf(*v));
+        if (const std::string* v = get("thumb_color")) sl->setThumbColor(colorOf(*v));
     } else if (auto* sb = dynamic_cast<SpinBox*>(w.get())) {
         float lo = sb->minimum(), hi = sb->maximum(), val = sb->value();
         bool hasRange = false;
@@ -775,10 +751,10 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         if (const std::string* v = get("prefix")) sb->setPrefix(*v);
         if (const std::string* v = get("suffix")) sb->setSuffix(*v);
         if (const std::string* v = get("text")) sb->setPrefix(*v);   // convenience label
-        if (const std::string* v = get("bg")) sb->setBgColor(colorOf(*v));
+        if (const std::string* v = get("background")) sb->setBgColor(colorOf(*v));
         if (const std::string* v = get("color")) sb->setTextColor(colorOf(*v));
-        if (const std::string* v = get("buttoncolor")) sb->setButtonColor(colorOf(*v));
-        if (const std::string* v = get("bordercolor")) sb->setBorderColor(colorOf(*v));
+        if (const std::string* v = get("button_color")) sb->setButtonColor(colorOf(*v));
+        if (const std::string* v = get("border_color")) sb->setBorderColor(colorOf(*v));
         else if (const std::string* v = get("border")) sb->setBorderColor(colorOf(*v));
         if (hasStyle) { sb->setFontFamily(st.fontFamily); sb->setFontSize(st.fontSize); }
     } else if (auto* os = dynamic_cast<OptionSpin*>(w.get())) {
@@ -800,10 +776,10 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         if (const std::string* v = get("value")) os->setValue(*v);
         if (const std::string* v = get("index")) { int i = 0; toInt(*v, i); os->setIndex(i); }
         if (const std::string* v = get("wrap")) os->setWrap(toBool(*v));
-        if (const std::string* v = get("bg")) os->setBgColor(colorOf(*v));
+        if (const std::string* v = get("background")) os->setBgColor(colorOf(*v));
         if (const std::string* v = get("color")) os->setTextColor(colorOf(*v));
-        if (const std::string* v = get("buttoncolor")) os->setButtonColor(colorOf(*v));
-        if (const std::string* v = get("bordercolor")) os->setBorderColor(colorOf(*v));
+        if (const std::string* v = get("button_color")) os->setButtonColor(colorOf(*v));
+        if (const std::string* v = get("border_color")) os->setBorderColor(colorOf(*v));
         else if (const std::string* v = get("border")) os->setBorderColor(colorOf(*v));
         if (hasStyle) { os->setFontFamily(st.fontFamily); os->setFontSize(st.fontSize); }
     } else if (auto* rs = dynamic_cast<RangeSlider*>(w.get())) {
@@ -815,23 +791,23 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         if (const std::string* v = get("low")) { float x = 0; toFloat(*v, x); rs->setLow(x); }
         if (const std::string* v = get("high")) { float x = 0; toFloat(*v, x); rs->setHigh(x); }
         if (const std::string* v = get("color")) rs->setBarColor(colorOf(*v));
-        if (const std::string* v = get("bg")) rs->setTrackColor(colorOf(*v));
-        if (const std::string* v = get("thumbcolor")) rs->setThumbColor(colorOf(*v));
+        if (const std::string* v = get("background")) rs->setTrackColor(colorOf(*v));
+        if (const std::string* v = get("thumb_color")) rs->setThumbColor(colorOf(*v));
     } else if (auto* sp = dynamic_cast<Splitter*>(w.get())) {
         if (const std::string* v = get("orientation")) sp->setVertical(*v != "horizontal");
         if (const std::string* v = get("vertical")) sp->setVertical(toBool(*v));
         if (const std::string* v = get("split")) { float f = 0.5f; toFloat(*v, f); sp->setSplit(f); }
-        if (const std::string* v = get("handlesize")) { float h = 6.0f; toFloat(*v, h); sp->setHandleSize(h); }
-        if (const std::string* v = get("handlecolor")) sp->setHandleColor(colorOf(*v));
+        if (const std::string* v = get("handle_size")) { float h = 6.0f; toFloat(*v, h); sp->setHandleSize(h); }
+        if (const std::string* v = get("handle_color")) sp->setHandleColor(colorOf(*v));
     } else if (auto* gd = dynamic_cast<Grid*>(w.get())) {
-        if (const std::string* v = get("cols")) gd->setCols(*v);
+        if (const std::string* v = get("columns")) gd->setCols(*v);
         if (const std::string* v = get("gap")) { float g = 4.0f; toFloat(*v, g); gd->setGap(g); }
-        if (const std::string* v = get("rowheight")) { float rh = 0.0f; toFloat(*v, rh); gd->setRowHeight(rh); }
+        if (const std::string* v = get("row_height")) { float rh = 0.0f; toFloat(*v, rh); gd->setRowHeight(rh); }
     } else if (auto* bd = dynamic_cast<Badge*>(w.get())) {
         if (const std::string* v = get("text")) bd->setText(*v);
         if (const std::string* v = get("count")) { int c = -1; toInt(*v, c); bd->setCount(c); }
         if (const std::string* v = get("removable")) bd->setRemovable(toBool(*v));
-        if (const std::string* v = get("bg")) bd->setBgColor(colorOf(*v));
+        if (const std::string* v = get("background")) bd->setBgColor(colorOf(*v));
         if (const std::string* v = get("color")) bd->setFgColor(colorOf(*v));
     } else if (auto* spn = dynamic_cast<Spinner*>(w.get())) {
         if (const std::string* v = get("text")) spn->setText(*v);
@@ -845,18 +821,18 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         if (const std::string* v = get("header")) sec->setHeader(*v);
         else if (const std::string* v = get("text")) sec->setHeader(*v);
         if (const std::string* v = get("expanded")) sec->setExpanded(toBool(*v));
-        if (const std::string* v = get("headerheight")) { float h = 24.0f; toFloat(*v, h); sec->setHeaderHeight(h); }
+        if (const std::string* v = get("header_height")) { float h = 24.0f; toFloat(*v, h); sec->setHeaderHeight(h); }
     } else if (auto* md = dynamic_cast<Modal*>(w.get())) {
         if (const std::string* v = get("title")) md->setTitle(*v);
         if (const std::string* v = get("open")) md->setOpen(toBool(*v));
-        if (const std::string* v = get("panelw")) { float f = 340.0f; toFloat(*v, f); md->setPanelSize(f, md->panelSize().h); }
-        if (const std::string* v = get("panelh")) { float f = 160.0f; toFloat(*v, f); md->setPanelSize(md->panelSize().w, f); }
+        if (const std::string* v = get("panel_width")) { float f = 340.0f; toFloat(*v, f); md->setPanelSize(f, md->panelSize().h); }
+        if (const std::string* v = get("panel_height")) { float f = 160.0f; toFloat(*v, f); md->setPanelSize(md->panelSize().w, f); }
     } else if (auto* sl = dynamic_cast<Sparkline*>(w.get())) {
         if (const std::string* v = get("values")) sl->setValues(*v);
         if (const std::string* v = get("label")) sl->setLabel(*v);
         if (const std::string* v = get("max")) { int n = 60; toInt(*v, n); sl->setMaxSamples(n); }
         if (const std::string* v = get("color")) sl->setLineColor(colorOf(*v));
-        if (const std::string* v = get("bg")) sl->setBgColor(colorOf(*v));
+        if (const std::string* v = get("background")) sl->setBgColor(colorOf(*v));
     } else if (auto* mn = dynamic_cast<Menu*>(w.get())) {
         if (const std::string* v = get("label")) mn->setLabel(*v);
         if (const std::string* v = get("text")) mn->setLabel(*v);
@@ -881,17 +857,17 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
             toInt(*v, idx);
             tb->setActive(idx);
         }
-        if (const std::string* v = get("theight")) {
+        if (const std::string* v = get("tab_height")) {
             float th = 28.0f;
             toFloat(*v, th);
             tb->setHeaderHeight(th);
         }
-        if (const std::string* v = get("headercolor")) tb->setHeaderColor(colorOf(*v));
-        if (const std::string* v = get("tabcolor")) tb->setTabColor(colorOf(*v));
-        if (const std::string* v = get("activecolor")) tb->setActiveColor(colorOf(*v));
+        if (const std::string* v = get("header_color")) tb->setHeaderColor(colorOf(*v));
+        if (const std::string* v = get("tab_color")) tb->setTabColor(colorOf(*v));
+        if (const std::string* v = get("active_color")) tb->setActiveColor(colorOf(*v));
         if (const std::string* v = get("accent")) tb->setAccentColor(colorOf(*v));
-        if (const std::string* v = get("bordercolor")) tb->setBorderColor(colorOf(*v));
-        if (const std::string* v = get("borderwidth")) {
+        if (const std::string* v = get("border_color")) tb->setBorderColor(colorOf(*v));
+        if (const std::string* v = get("border_width")) {
             float bw = 0.0f;
             toFloat(*v, bw);
             tb->setBorderWidth(bw);
@@ -909,14 +885,14 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
             toInt(*v, idx);
             box->setSelectedIndex(idx);
         }
-        if (const std::string* v = get("rowheight")) {
+        if (const std::string* v = get("row_height")) {
             float rh = 24.0f;
             toFloat(*v, rh);
             box->setRowHeight(rh);
         }
         if (const std::string* v = get("color")) box->setTextColor(colorOf(*v));
-        if (const std::string* v = get("bg")) box->setBgColor(colorOf(*v));
-        if (const std::string* v = get("bordercolor")) box->setBorderColor(colorOf(*v));
+        if (const std::string* v = get("background")) box->setBgColor(colorOf(*v));
+        if (const std::string* v = get("border_color")) box->setBorderColor(colorOf(*v));
         else if (const std::string* v = get("border")) box->setBorderColor(colorOf(*v));
         if (const std::string* v = get("accent")) box->setArrowColor(colorOf(*v));
         if (const std::string* v = get("highlight")) box->setHighlightColor(colorOf(*v));
@@ -927,7 +903,7 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         else if (const std::string* v = get("text")) opt->setLabel(*v);
         if (const std::string* v = get("value")) opt->setValue(*v);
     } else if (auto* lb = dynamic_cast<ListBox*>(w.get())) {
-        if (const std::string* v = get("rowheight")) {
+        if (const std::string* v = get("row_height")) {
             float rh = 24.0f;
             toFloat(*v, rh);
             lb->setRowHeight(rh);
@@ -938,8 +914,8 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
             lb->setSelectedIndex(idx);
         }
         if (const std::string* v = get("color")) lb->setTextColor(colorOf(*v));
-        if (const std::string* v = get("bg")) lb->setBgColor(colorOf(*v));
-        if (const std::string* v = get("bordercolor")) lb->setBorderColor(colorOf(*v));
+        if (const std::string* v = get("background")) lb->setBgColor(colorOf(*v));
+        if (const std::string* v = get("border_color")) lb->setBorderColor(colorOf(*v));
         else if (const std::string* v = get("border")) lb->setBorderColor(colorOf(*v));
         if (const std::string* v = get("highlight")) lb->setHighlightColor(colorOf(*v));
         if (hasStyle) { lb->setFontFamily(st.fontFamily); lb->setFontSize(st.fontSize); }
@@ -948,12 +924,12 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         else if (const std::string* v = get("text")) li->setLabel(*v);
         if (const std::string* v = get("value")) li->setValue(*v);
     } else if (auto* tb = dynamic_cast<Table*>(w.get())) {
-        if (const std::string* v = get("rowheight")) {
+        if (const std::string* v = get("row_height")) {
             float rh = 22.0f;
             toFloat(*v, rh);
             tb->setRowHeight(rh);
         }
-        if (const std::string* v = get("headerheight")) {
+        if (const std::string* v = get("header_height")) {
             float hh = 24.0f;
             toFloat(*v, hh);
             tb->setHeaderHeight(hh);
@@ -965,44 +941,44 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         }
         if (const std::string* v = get("sortable")) tb->setSortable(*v == "true" || *v == "1");
         if (const std::string* v = get("color")) tb->setTextColor(colorOf(*v));
-        if (const std::string* v = get("bg")) tb->setBgColor(colorOf(*v));
-        if (const std::string* v = get("headerbg")) tb->setHeaderBgColor(colorOf(*v));
-        if (const std::string* v = get("bordercolor")) tb->setBorderColor(colorOf(*v));
+        if (const std::string* v = get("background")) tb->setBgColor(colorOf(*v));
+        if (const std::string* v = get("header_background")) tb->setHeaderBgColor(colorOf(*v));
+        if (const std::string* v = get("border_color")) tb->setBorderColor(colorOf(*v));
         else if (const std::string* v = get("border")) tb->setBorderColor(colorOf(*v));
         if (const std::string* v = get("highlight")) tb->setHighlightColor(colorOf(*v));
         if (hasStyle) { tb->setFontFamily(st.fontFamily); tb->setFontSize(st.fontSize); }
     } else if (auto* th = dynamic_cast<TableColumn*>(w.get())) {
         if (const std::string* v = get("label")) th->setLabel(*v);
         else if (const std::string* v = get("text")) th->setLabel(*v);
-        if (const std::string* v = get("w")) {
+        if (const std::string* v = get("width")) {
             float cw = 0.0f;
             toFloat(*v, cw);
             th->setWidth(cw);
         }
         if (const std::string* v = get("resizable")) th->setResizable(toBool(*v));
         if (const std::string* v = get("editable")) th->setEditable(toBool(*v));
-        if (const std::string* v = get("scrollingtext"))
+        if (const std::string* v = get("scrolling_text"))
             th->setScrollMode(*v == "automatic" ? CellScroll::Automatic
                               : *v == "onmouseenter" ? CellScroll::OnHover
                                                      : CellScroll::None);
     } else if (auto* tr = dynamic_cast<TableRow*>(w.get())) {
         if (const std::string* v = get("cells")) tr->setCells(*v);
         if (const std::string* v = get("value")) tr->setValue(*v);
-        if (const std::string* v = get("editablecells")) tr->setEditableColumns(*v);
+        if (const std::string* v = get("editable_cells")) tr->setEditableColumns(*v);
         if (const std::string* v = get("resizable")) tr->setRowResizable(toBool(*v));
-        if (const std::string* v = get("scrollingtext"))
+        if (const std::string* v = get("scrolling_text"))
             tr->setRowScrollMode(*v == "automatic" ? CellScroll::Automatic
                                  : *v == "onmouseenter" ? CellScroll::OnHover
                                                         : CellScroll::None);
     } else if (auto* cell = dynamic_cast<TableCell*>(w.get())) {
         if (const std::string* v = get("editable")) cell->setEditable(toBool(*v));
         if (const std::string* v = get("resizable")) cell->setResizable(toBool(*v));
-        if (const std::string* v = get("scrollingtext"))
+        if (const std::string* v = get("scrolling_text"))
             cell->setScrollMode(*v == "automatic" ? CellScroll::Automatic
                                 : *v == "onmouseenter" ? CellScroll::OnHover
                                                        : CellScroll::None);
     } else if (auto* tv = dynamic_cast<TreeView*>(w.get())) {
-        if (const std::string* v = get("rowheight")) {
+        if (const std::string* v = get("row_height")) {
             float rh = 22.0f;
             toFloat(*v, rh);
             tv->setRowHeight(rh);
@@ -1012,15 +988,15 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
             toFloat(*v, ind);
             tv->setIndent(ind);
         }
-        if (const std::string* v = get("autoheight")) tv->setAutoHeight(toBool(*v));
+        if (const std::string* v = get("auto_height")) tv->setAutoHeight(toBool(*v));
         if (const std::string* v = get("selected")) {
             int idx = 0;
             toInt(*v, idx);
             tv->setSelectedIndex(idx);
         }
         if (const std::string* v = get("color")) tv->setTextColor(colorOf(*v));
-        if (const std::string* v = get("bg")) tv->setBgColor(colorOf(*v));
-        if (const std::string* v = get("bordercolor")) tv->setBorderColor(colorOf(*v));
+        if (const std::string* v = get("background")) tv->setBgColor(colorOf(*v));
+        if (const std::string* v = get("border_color")) tv->setBorderColor(colorOf(*v));
         else if (const std::string* v = get("border")) tv->setBorderColor(colorOf(*v));
         if (const std::string* v = get("highlight")) tv->setHighlightColor(colorOf(*v));
         if (const std::string* v = get("accent")) tv->setAccentColor(colorOf(*v));
