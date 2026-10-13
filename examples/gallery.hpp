@@ -85,10 +85,12 @@ inline ogui::Label* addNavBar(const ogui::Widget::Ptr& root, float width,
     auto bar = std::make_shared<ogui::Row>();
     bar->setId("navbar");
     bar->setBounds(ogui::Rect{10.0f, 10.0f, width - 20.0f, 32.0f});
-    // x/y/h stay absolute (top-anchored); width tracks the window.
-    bar->setGeometrySpec(ogui::Rect{1.25f, 10.0f, 97.5f, 32.0f},
-                         ogui::Widget::GeomPercent, ogui::Widget::GeomAbsolute,
-                         ogui::Widget::GeomPercent, ogui::Widget::GeomAbsolute);
+    // Fully absolute: the screen may be laid out at the design minimum while
+    // the host window is narrower, and the bar must stay inside the visible
+    // edge rather than stretch across the clamped layout width.
+    bar->setGeometrySpec(ogui::Rect{10.0f, 10.0f, width - 20.0f, 32.0f},
+                         ogui::Widget::GeomAbsolute, ogui::Widget::GeomAbsolute,
+                         ogui::Widget::GeomAbsolute, ogui::Widget::GeomAbsolute);
 
     auto prev = std::make_shared<ogui::Button>();
     prev->setId("nav_prev");
@@ -148,6 +150,11 @@ inline bool activeThemeIsLight() {
 
 inline Gallery loadAll(float width, float height) {
     applyManifestTheme();
+    // The layouts mix fixed-px rows with %-height boxes; below roughly this
+    // design size the percentage rows slide up into the boxes above them.
+    // Keep the layout at its minimum and let a smaller host clip the edges.
+    const float contentW = std::max(width, 800.0f);
+    const float contentH = std::max(height, 600.0f);
     Gallery g;
     g.light = activeThemeIsLight();
     ogui::XmlParser parser;
@@ -167,8 +174,8 @@ inline Gallery loadAll(float width, float height) {
         }
         addNavBar(res.root, width, g.light);
         auto screen = std::make_shared<ogui::Screen>(title);
-        screen->width = width;
-        screen->height = height;
+        screen->width = contentW;
+        screen->height = contentH;
         screen->widgets.push_back(res.root);
         g.titles.push_back(title);
         g.screens.push_back(screen);
