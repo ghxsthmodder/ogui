@@ -79,7 +79,7 @@ cd build && ctest --output-on-failure      # parser, drawlist, kernel, screens, 
   switches, all four hooks and the `ogui.*` widget API; error capture.
 * `golden` — renders a fixed `@token` layout through
   `Kernel -> DrawList -> SoftwareRenderer` in both themes and diffs it
-  against `tests/golden/basic.png` (dark) and `tests/golden/basic_light.png`
+  against `debug/tests/golden/basic.png` (dark) and `debug/tests/golden/basic_light.png`
   (4/4/4 channel slack, 1% bad pixels allowed for FP rounding; it **skips**
   instead of failing when the resolved font files differ from the ones
   recorded in the matching `.meta`).
@@ -474,7 +474,7 @@ manifest.xml      gallery screen list (edit to add/remove screens)
 debug/            test package: demo.exe, its XML screens (synced by
                   `build.sh win`), MSVC project, screenshots/ — download this
                   folder whole via SFTP to test on Windows
-tests/            unit tests + tests/golden/ (golden image + meta)
+debug/tests/      unit tests + debug/tests/golden/ (golden image + meta)
 cmake/            CMake package config template
 scripts/build.sh  host / win / clean
 thirdparty/stb    vendored stb_truetype + stb_image[_write]

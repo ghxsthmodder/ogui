@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<!-- layout_form.xml : scripting showcase — the whole behaviour lives in
+     layouts/form.lua (validation on click + animated progress on update).
+     The widgets carry no onclick: unreleased clicks reach on_click. -->
+<screen id="form">
+  <stylesheet path="themes/design.xml"/>
+
+  <label style="h1" text="Cadastro" x="20" y="60" width="300" height="40"/>
+
+  <panel style="card" x="20" y="116" width="420" height="280">
+    <label style="muted" text="Nome" x="16" y="14" width="120" height="20"/>
+    <textinput id="f_name" placeholder="seu nome" x="16" y="38" width="388" height="34"/>
+
+    <label style="muted" text="E-mail" x="16" y="84" width="120" height="20"/>
+    <textinput id="f_email" placeholder="voce@exemplo.com" x="16" y="108" width="388" height="34"/>
+
+    <toggleswitch id="f_terms" text="Aceito os termos" checked="false"
+                   x="16" y="156" width="220" height="28"/>
+
+    <button id="f_send" style="btnPrimary" text="Cadastrar" x="16" y="198" width="140" height="38"/>
+    <label id="f_status" style="muted" text="..." x="172" y="204" width="232" height="26"/>
+  </panel>
+
+  <label style="h2" text="Progresso do envio" x="20" y="420" width="240" height="24"/>
+  <progress id="f_prog" value="0" x="20" y="450" width="420" height="20"/>
+
+  <script src="layouts/form.lua"/>
+</screen>

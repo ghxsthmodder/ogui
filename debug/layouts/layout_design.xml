@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<!-- layout_design.xml : stylesheet showcase. The look of every widget here
+     comes from themes/design.xml (palette tokens, element defaults and named
+     styles); this file only places widgets and names their styles. -->
+<screen id="design">
+  <stylesheet path="themes/design.xml"/>
+
+  <label id="ttl"  style="h1" text="Design system" x="20" y="60" width="400" height="40"/>
+  <label id="sub"  style="muted" text="cores, fontes e variantes definidas 100% na stylesheet"
+         x="20" y="100" width="520" height="22"/>
+
+  <!-- three cards: same element, different content, identical style="card" -->
+  <panel id="card1" style="card" x="20" y="136" width="240" height="120">
+    <label style="h2" text="Componentes" x="16" y="12" width="200" height="24"/>
+    <label style="muted" text="Element selectors dão o padrão; cada variante é um style."
+           wrap="true" x="16" y="40" width="208" height="60"/>
+  </panel>
+  <panel id="card2" style="card" x="280" y="136" width="240" height="120">
+    <label style="h2" text="Tokens" x="16" y="12" width="200" height="24"/>
+    <label style="muted" text="palette re-colora @accent, @surface, @danger..."
+           wrap="true" x="16" y="40" width="208" height="60"/>
+  </panel>
+  <panel id="card3" style="card" x="540" y="136" width="240" height="120">
+    <label style="h2" text="Cascade" x="16" y="12" width="200" height="24"/>
+    <label style="muted" text="precedência: element → named styles → atributos"
+           wrap="true" x="16" y="40" width="208" height="60"/>
+  </panel>
+
+  <!-- button variants -->
+  <label id="lblBtn" style="h2" text="Botões" x="20" y="284" width="120" height="24"/>
+  <button id="b1" style="btnPrimary" text="Salvar"   x="20"  y="314" width="110" height="36"/>
+  <button id="b2" style="btnGhost"   text="Cancelar" x="146" y="314" width="110" height="36"/>
+  <button id="b3" style="btnDanger"  text="Excluir"  x="272" y="314" width="110" height="36"/>
+  <!-- no style= at all: pure element="button" default -->
+  <button id="b4" text="Padrão" x="398" y="314" width="110" height="36"/>
+  <!-- own attribute still wins over every layer of the cascade -->
+  <button id="b5" style="btnPrimary" text="override" color="#10131a" background="#7fd1a0"
+          x="524" y="314" width="110" height="36"/>
+
+  <!-- form fields -->
+  <label id="lblForm" style="h2" text="Entrada" x="20" y="376" width="120" height="24"/>
+  <textinput id="ti1" placeholder="textinput estilizado" x="20" y="406" width="260" height="34"/>
+  <slider id="sl1" x="300" y="406" width="180" height="34" value="0.4"/>
+  <progress id="pg1" x="500" y="412" width="180" height="22" value="0.7"/>
+
+  <!-- badges -->
+  <label id="lblBadge" style="h2" text="Badges" x="20" y="464" width="120" height="24"/>
+  <badge id="bg1" text="default" x="20" y="494" width="86" height="26"/>
+  <badge id="bg2" style="badgeOk" text="ok" count="3" x="118" y="494" width="70" height="26"/>
+  <badge id="bg3" style="badgeWarn" text="aviso" x="200" y="494" width="66" height="26"/>
+  <badge id="bg4" text="removível" removable="true" x="278" y="494" width="110" height="26"/>
+</screen>

@@ -156,41 +156,41 @@ endif()
 
 # ---- Tests ---------------------------------------------------------------
 if(OGUI_BUILD_TESTS)
-    add_executable(ogui_parser_test tests/parser_test.cpp)
+    add_executable(ogui_parser_test debug/tests/parser_test.cpp)
     target_link_libraries(ogui_parser_test PRIVATE ogui)
     target_compile_definitions(ogui_parser_test PRIVATE
         OGUI_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 
-    add_executable(ogui_drawlist_test tests/drawlist_test.cpp)
+    add_executable(ogui_drawlist_test debug/tests/drawlist_test.cpp)
     target_link_libraries(ogui_drawlist_test PRIVATE ogui)
 
-    add_executable(ogui_kernel_test tests/kernel_test.cpp)
+    add_executable(ogui_kernel_test debug/tests/kernel_test.cpp)
     target_link_libraries(ogui_kernel_test PRIVATE ogui)
     target_compile_definitions(ogui_kernel_test PRIVATE
         OGUI_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets")
 
     # Every manifest screen must parse and keep the ids the gallery binds to.
-    add_executable(ogui_screens_test tests/screens_test.cpp)
+    add_executable(ogui_screens_test debug/tests/screens_test.cpp)
     target_link_libraries(ogui_screens_test PRIVATE ogui)
     target_compile_definitions(ogui_screens_test PRIVATE
         OGUI_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 
     # Presses on the list/tree/table scrollbars must scroll, not select.
-    add_executable(ogui_scrollbar_test tests/scrollbar_test.cpp)
+    add_executable(ogui_scrollbar_test debug/tests/scrollbar_test.cpp)
     target_link_libraries(ogui_scrollbar_test PRIVATE ogui)
 
     # Lua scripting: <script> collection, screen-bound hooks, ogui.* API.
-    add_executable(ogui_script_test tests/script_test.cpp)
+    add_executable(ogui_script_test debug/tests/script_test.cpp)
     target_link_libraries(ogui_script_test PRIVATE ogui)
 
     # Golden-image test: renders a fixed layout and diffs it against
-    # tests/golden/basic.png (regenerate with OGUI_UPDATE_GOLDEN=1).
+    # debug/tests/golden/basic.png (regenerate with OGUI_UPDATE_GOLDEN=1).
     if(OGUI_USE_STATIC_STB)
-        add_executable(ogui_golden_test tests/golden_test.cpp)
+        add_executable(ogui_golden_test debug/tests/golden_test.cpp)
         target_link_libraries(ogui_golden_test PRIVATE ogui)
         target_include_directories(ogui_golden_test PRIVATE ${STB_DIR})
         target_compile_definitions(ogui_golden_test PRIVATE
-            OGUI_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/golden")
+            OGUI_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/debug/tests/golden")
     endif()
 
     enable_testing()

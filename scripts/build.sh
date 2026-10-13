@@ -108,7 +108,7 @@ case "${1:-host}" in
     win)  build_win ;;
     clean)
         rm -rf build build-win debug/build-win-objs build-msvc debug/build-msvc
-        find src tests examples -name '*.o' -delete 2>/dev/null || true
+        find src debug/tests examples -name '*.o' -delete 2>/dev/null || true
         rm -f libogui.a demo.exe debug/demo.exe parser_test.exe
         echo "cleaned (debug/screenshots and debug/*.xml kept)"
         ;;

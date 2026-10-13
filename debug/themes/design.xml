@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<!-- themes/design.xml : app-wide stylesheet for the Design gallery screen.
+     Everything the layout shows comes from here: palette tokens, element
+     defaults and the named styles the widgets reference with style="...". -->
+<theme name="design" base="dark">
+  <font family="anton" source="assets/Anton-Regular.ttf"/>
+
+  <palette accent="#e8b33c" surfaceHi="#262c38" textBright="#f2f5fa"
+           border="#39414f" borderStrong="#5a6472"/>
+
+  <!-- element defaults: every widget of this type starts from these -->
+  <style element="label" color="@text" fontSize="14"/>
+  <style element="button" background="@surfaceHi" color="@textBright"
+         radius="8" borderWidth="0" fontSize="14"/>
+  <style element="panel" background="@surface" radius="10"/>
+  <style element="textinput" background="@screen" color="@textBright"
+         radius="6" borderWidth="1" border="@border"/>
+  <style element="badge" background="@accent" color="#1d1500"/>
+
+  <!-- named styles: layered over the element defaults, under own attrs -->
+  <style name="h1" font="anton" fontSize="30" color="@textBright"/>
+  <style name="h2" fontSize="16" color="@textBright"/>
+  <style name="muted" color="@dim"/>
+  <style name="card" background="@surface" radius="14"
+         borderWidth="1" border="@border" shadow="12,4"/>
+  <style name="btnPrimary" background="@accent" color="#1d1500"/>
+  <style name="btnGhost" background="#00000000" color="@text"
+         borderWidth="1" border="@borderStrong"/>
+  <style name="btnDanger" background="@danger" color="#ffffff"/>
+  <style name="badgeOk" background="#2f9e5f" color="#eafff1"/>
+  <style name="badgeWarn" background="@warn" color="#241a00"/>
+</theme>
