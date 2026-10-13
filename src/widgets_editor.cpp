@@ -196,7 +196,12 @@ void ColorPicker::onPointerDown(MouseButton btn, const Offset2D&) {
     });
     const Offset2D o = absoluteOrigin();
     const Rect b = bounds();
-    m_popup->setBounds(Rect{o.x, o.y + b.h + 2.0f, 180.0f, 170.0f});
+    float sw = 10000.0f, sh = 10000.0f;
+    if (Kernel* k = kernel()) {
+        if (auto scr = k->currentScreen()) { sw = scr->width; sh = scr->height; }
+    }
+    m_popup->setBounds(placePopup(Offset2D{o.x, o.y}, o.y + b.h + 2.0f,
+                                  180.0f, 170.0f, sw, sh));
     if (Kernel* k = kernel()) k->openPopup(m_popup);
 }
 
@@ -267,9 +272,13 @@ void PathPicker::listDir(const std::string& dir) {
     m_popup->setVisible(true);
     const Offset2D o = absoluteOrigin();
     const Rect b = bounds();
+    float sw = 10000.0f, sh = 10000.0f;
+    if (Kernel* k = kernel()) {
+        if (auto scr = k->currentScreen()) { sw = scr->width; sh = scr->height; }
+    }
     const float h = std::min(m_popup->contentHeight(), 340.0f);
-    m_popup->setBounds(Rect{o.x, o.y + b.h + 2.0f,
-                            std::max(b.w, 220.0f), h});
+    m_popup->setBounds(placePopup(Offset2D{o.x, o.y}, o.y + b.h + 2.0f,
+                                  std::max(b.w, 220.0f), h, sw, sh));
     m_popup->setOnSelect([this, dir](const std::string& cmd) {
         if (!cmd.empty() && cmd[0] == 'd' && cmd.size() > 1 && cmd[1] == ':') {
             std::string next;

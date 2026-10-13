@@ -218,6 +218,69 @@ int main() {
         CHECK(win->childOffset().y > -20.0f);
     }
 
+    // ---- TextArea: a bar press scrolls, it must not select text ----
+    {
+        auto ta = std::make_shared<TextArea>();
+        ta->setId("ta");
+        ta->setBounds({10, 20, 220, 120});
+        std::string text;
+        for (int i = 0; i < 40; ++i) text += "linha " + std::to_string(i) + "\n";
+        ta->setText(text);
+        show(k, ta);
+        k.frame(st);
+        const size_t before = ta->caret();
+
+        pressAt(k, st, 10 + 212, 20 + 110);   // bottom of the offset bar
+        releaseAt(k, st);
+        CHECK(ta->caret() == before);         // the bar took the press
+        CHECK(!ta->hasSelection());
+
+        // Body drag still selects normally (bar did not swallow it).
+        pressAt(k, st, 10 + 40, 20 + 60);
+        moveWhileDown(k, st, 10 + 120, 20 + 60);
+        releaseAt(k, st);
+        CHECK(ta->hasSelection());
+    }
+
+    // ---- ComboBox popup: clamped to the screen, bar scrolls the list ----
+    {
+        auto cb = std::make_shared<ComboBox>();
+        cb->setId("cb");
+        cb->setBounds({10, 520, 150, 24});
+        for (int i = 0; i < 100; ++i) {
+            auto opt = std::make_shared<ComboOption>();
+            opt->setLabel("opt " + std::to_string(i));
+            cb->addChild(opt);
+        }
+        show(k, cb);
+        k.frame(st);
+
+        pressAt(k, st, 80, 530);             // open the dropdown
+        releaseAt(k, st);
+        auto* pp = cb->popup();
+        CHECK(pp != nullptr);
+        if (pp) {
+            const Rect pb = pp->bounds();
+            CHECK(pb.h <= 588.0f);           // clamped: 600 - 2*6 margin
+            CHECK(pb.y >= 0.0f && pb.y + pb.h <= 600.0f);   // fully visible
+
+            // Press the empty track at the bottom: jumps the list to the end.
+            pressAt(k, st, pb.x + pb.w - 4, pb.y + pb.h - 4);
+            releaseAt(k, st);
+            CHECK(pp->scroll() > 100.0f);
+
+            // Reopen (scroll resets), then a row click near the bottom of
+            // the list requires the jump first: picks a late option.
+            pressAt(k, st, 80, 530);
+            releaseAt(k, st);
+            pressAt(k, st, pb.x + pb.w - 4, pb.y + pb.h - 4);   // jump to end
+            releaseAt(k, st);
+            pressAt(k, st, pb.x + 20, pb.y + 20);               // top row
+            releaseAt(k, st);
+            CHECK(cb->selectedIndex() >= 70);
+        }
+    }
+
     std::cout << (failures ? "BAR TEST FAILED" : "bar test OK") << "\n";
     return failures ? 1 : 0;
 }

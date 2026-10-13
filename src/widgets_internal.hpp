@@ -119,4 +119,22 @@ namespace ogui {
         r.drawRoundedRect(thumb, knob, thumb.w * 0.5f);
     }
 
+    // Fit a floating popup on the screen: clamp the size, keep it inside
+    // the edges, prefer `belowY` (right under the anchor) and flip above
+    // the anchor's top when it would hang off the bottom.
+    inline Rect placePopup(const Offset2D& anchorTop, float belowY,
+                           float w, float wantH, float screenW, float screenH) {
+        constexpr float margin = 6.0f;
+        const float h = std::min(wantH, std::max(screenH - 2.0f * margin, 30.0f));
+        const float ww = std::min(w, std::max(screenW - 2.0f * margin, 30.0f));
+        const float x = std::clamp(anchorTop.x, margin,
+                                   std::max(screenW - ww - margin, margin));
+        float y = belowY;
+        if (y + h > screenH - margin) {
+            const float above = anchorTop.y - h;
+            y = (above >= margin) ? above : std::max(screenH - margin - h, margin);
+        }
+        return Rect{x, y, ww, h};
+    }
+
 } // namespace ogui

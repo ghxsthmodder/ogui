@@ -485,7 +485,9 @@ float TextArea::viewH() const {
 
 Rect TextArea::sbTrack() const {
     const Rect b = bounds();
-    return Rect{b.x + b.w - kSbW - kSbMargin, b.y + kTextPadY, kSbW, viewH()};
+    // Local space: hit-tested against pointer-minus-absoluteOrigin, drawn
+    // translated by the shifted bounds origin (see onDraw).
+    return Rect{b.w - kSbW - kSbMargin, kTextPadY, kSbW, viewH()};
 }
 
 Rect TextArea::sbThumb() const {
@@ -717,11 +719,13 @@ void TextArea::onDraw(Rasterizer& r) const {
     // Vertical scrollbar: only when the text overflows the viewport. Drawn
     // outside the text clip so the thumb stays crisp over the frame edge.
     if (sbVisible()) {
-        const Rect trk = sbTrack();
+        // b.x/b.y are the shifted (absolute) origin during this draw call;
+        // sbTrack()/sbThumb() are local, so translate them before drawing.
+        const Rect trk = offsetRect(sbTrack(), b.x, b.y);
         Color track = m_bgColor;
         track.a = 90;
         r.drawRoundedRect(trk, track, trk.w * 0.5f);
-        const Rect th = sbThumb();
+        const Rect th = offsetRect(sbThumb(), b.x, b.y);
         Color knob = m_borderColor;
         knob.a = static_cast<uint8_t>(m_dragging || m_sbDrag ? 240 : 170);
         r.drawRoundedRect(th, knob, th.w * 0.5f);

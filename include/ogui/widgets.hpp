@@ -820,11 +820,20 @@ public:
     void setOnDismiss(std::function<void()> cb) { m_onDismiss = std::move(cb); }
     void fadeIn();                       // restarts the open-in animation
 
+    // Pixels of the list scrolled above the popup viewport (tests/peek).
+    float scroll() const { return m_scroll; }
+    // Re-clamp the scroll and keep the hovered row visible after the
+    // opener has finished sizing the popup (setBounds runs last).
+    void refreshScroll();
+
     static constexpr float kOpenDuration = 0.12f;
 
     virtual void onTick(float dt) override;
     virtual void onPointerMove(const Offset2D& p) override;
     virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
+    virtual void onPointerUp(MouseButton btn) override;
+    virtual void onPointerScroll(float, float dy) override;
+    virtual bool wantsScroll() const override { return true; }
     virtual void onKeyDown(KeyCode key, uint32_t mods) override;
     virtual void onDraw(Rasterizer& r) const override;
     virtual void onPopupDismissed() override { if (m_onDismiss) m_onDismiss(); }
@@ -832,6 +841,14 @@ public:
 
 private:
     int rowAt(float localY) const;
+    float contentH() const {
+        return m_rowH * static_cast<float>(m_items.size());
+    }
+    bool barVisible() const;           // list overflows the popup
+    Rect barTrack() const;             // popup-local space
+    Rect barThumb() const;
+    void clampScroll();
+    void ensureHoverVisible();
 
     std::vector<std::string> m_items;
     std::string m_fontFam = "sans";
@@ -840,6 +857,9 @@ private:
     int m_selected = -1;
     float m_rowH = 24.0f;
     float m_textPad = 8.0f;
+    float m_scroll = 0.0f;             // px of the list above the viewport
+    bool m_barDrag = false;            // pointer is dragging the scrollbar
+    float m_barGrab = 0.0f;            // thumb-top offset of the drag press
     Color m_panel{ogui::palette().surface};
     Color m_border{ogui::palette().accent};
     Color m_rowText{ogui::palette().text};
@@ -1851,10 +1871,15 @@ public:
     float contentHeight() const {
         return static_cast<float>(m_rows.size()) * m_rowH;
     }
+    // Pixels of the row list scrolled above the popup viewport (tests/peek).
+    float scroll() const { return m_scroll; }
 
     virtual void onTick(float dt) override;
     virtual void onPointerMove(const Offset2D& p) override;
     virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
+    virtual void onPointerUp(MouseButton btn) override;
+    virtual void onPointerScroll(float, float dy) override;
+    virtual bool wantsScroll() const override { return true; }
     virtual void onDraw(Rasterizer& r) const override;
     virtual void onPopupDismissed() override { if (m_onDismiss) m_onDismiss(); }
     virtual bool isAnimating() const override { return m_fade.running(); }
@@ -1864,16 +1889,27 @@ private:
     void rebuildRows();                 // flatten current level into rows
     void pushLevel(const MenuEntry& e);
     void popLevel();
+    bool barVisible() const;            // rows overflow the popup
+    Rect barTrack() const;              // popup-local space
+    Rect barThumb() const;
+    void clampScroll();
 
     struct Level { std::string title; std::vector<MenuEntry> entries; };
 
     std::vector<Level> m_stack;
+    // Per pushed level (m_stack.size()-1 entries): the popup height and
+    // scroll restored when going back, so a short submenu does not shrink
+    // the parent level permanently.
+    std::vector<float> m_levelH, m_levelScroll;
     // Visible rows: separators are inert rows; sub entries map to their item.
     struct Row { const MenuEntry* entry = nullptr; bool separator = false;
                  bool back = false; };
     std::vector<Row> m_rows;
     int m_hover = -1;
     float m_rowH = 24.0f;
+    float m_scroll = 0.0f;              // px of rows above the viewport
+    bool m_barDrag = false;             // pointer is dragging the scrollbar
+    float m_barGrab = 0.0f;             // thumb-top offset of the drag press
     int m_fontSize = 13;
     Tween m_fade;                        // open-in fade, like ComboPopup
     std::function<void(const std::string&)> m_onSelect;

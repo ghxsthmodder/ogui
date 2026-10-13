@@ -200,6 +200,9 @@ opt in with `style="p"`; the named style provides the base and the element's
 `listbox`, `table`, `tree`, `scrollview` and `window` draw an overlay
 scrollbar (drag the thumb, or click the empty track to jump) whenever
 content exceeds the viewport. In `window` the bar sits below the title bar.
+The same bar appears inside dropdown, menu and context-menu popups; popups
+are always fitted to the screen (they flip above the anchor when there is
+no room below).
 
 ### Containers
 

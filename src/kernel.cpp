@@ -413,11 +413,13 @@ void Kernel::update() {
                         : (m_captured ? m_captured : m_hovered);
     if (moveTarget) moveTarget->onPointerMove(p);
 
-    // Wheel events: a drag in progress owns them, otherwise they go to the
-    // widget under the pointer and bubble up to the nearest ancestor that
-    // wants scrolling (a <scrollview> anywhere above a button, say).
+    // Wheel events: the popup layer owns them while the pointer is inside
+    // (a long combo list scrolls, not the tree under it); otherwise a drag
+    // in progress wins, then the widget under the pointer, bubbling up to
+    // the nearest ancestor that wants scrolling.
     if (m_input.scrollX != 0.0f || m_input.scrollY != 0.0f) {
-        Widget* target = m_captured ? m_captured : m_hovered;
+        Widget* target = popupHit ? popupHit
+                       : (m_captured ? m_captured : m_hovered);
         while (target && !target->wantsScroll()) target = target->parent();
         if (target) target->onPointerScroll(m_input.scrollX, m_input.scrollY);
     }

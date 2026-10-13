@@ -14,11 +14,49 @@ ComboPopup::~ComboPopup() = default;
 void ComboPopup::setItems(const std::vector<std::string>& items) {
     m_items = items;
     if (m_hover >= static_cast<int>(m_items.size())) m_hover = -1;
+    m_scroll = 0.0f;
 }
 
 void ComboPopup::setHover(int index) {
     m_hover = (index >= 0 && index < static_cast<int>(m_items.size()))
                   ? index : -1;
+    ensureHoverVisible();
+}
+
+void ComboPopup::refreshScroll() {
+    clampScroll();
+    ensureHoverVisible();
+}
+
+void ComboPopup::clampScroll() {
+    const float viewH = std::max(bounds().h, 0.0f);
+    const float maxScroll = std::max(contentH() - viewH, 0.0f);
+    m_scroll = std::clamp(m_scroll, 0.0f, maxScroll);
+}
+
+void ComboPopup::ensureHoverVisible() {
+    if (m_hover < 0) return;
+    const float viewH = std::max(bounds().h, 0.0f);
+    const float top = m_hover * m_rowH;
+    const float bot = top + m_rowH;
+    if (bot - m_scroll > viewH) m_scroll = bot - viewH;
+    if (top < m_scroll) m_scroll = top;
+    clampScroll();
+}
+
+bool ComboPopup::barVisible() const {
+    return contentH() - std::max(bounds().h, 0.0f) > 1.0f;
+}
+
+Rect ComboPopup::barTrack() const {
+    const Rect b = bounds();
+    return Rect{b.w - kBarW - kBarMargin, kBarMargin,
+                kBarW, std::max(b.h - 2.0f * kBarMargin, 0.0f)};
+}
+
+Rect ComboPopup::barThumb() const {
+    const float viewH = std::max(bounds().h, 0.0f);
+    return barThumbRect(barTrack(), viewH, contentH(), m_scroll);
 }
 
 void ComboPopup::fadeIn() {
@@ -31,20 +69,56 @@ void ComboPopup::onTick(float dt) {
 
 int ComboPopup::rowAt(float localY) const {
     if (m_rowH <= 0.0f || m_items.empty()) return -1;
-    const int row = static_cast<int>(localY / m_rowH);
+    const float viewH = std::max(bounds().h, 0.0f);
+    if (localY < 0.0f || localY > viewH) return -1;
+    const int row = static_cast<int>((localY + m_scroll) / m_rowH);
     return (row >= 0 && row < static_cast<int>(m_items.size())) ? row : -1;
 }
 
 void ComboPopup::onPointerMove(const Offset2D& p) {
     // p is screen-absolute (popup bounds are absolute).
     const Offset2D local{p.x - bounds().x, p.y - bounds().y};
+    if (m_barDrag) {
+        const float viewH = std::max(bounds().h, 0.0f);
+        m_scroll = barScrollAt(barTrack(), viewH, contentH(), local.y, m_barGrab);
+        clampScroll();
+        return;
+    }
     setHover(rowAt(local.y));
 }
 
 void ComboPopup::onPointerDown(MouseButton, const Offset2D& p) {
     const Offset2D local{p.x - bounds().x, p.y - bounds().y};
+    if (barVisible()) {
+        const Rect trk = barTrack();
+        if (local.x >= trk.x && local.x <= trk.x + trk.w &&
+            local.y >= trk.y && local.y <= trk.y + trk.h) {
+            m_barDrag = true;
+            const float viewH = std::max(bounds().h, 0.0f);
+            const Rect th = barThumb();
+            if (local.y >= th.y && local.y <= th.y + th.h) {
+                m_barGrab = local.y - th.y;
+            } else {
+                m_barGrab = th.h * 0.5f;
+                m_scroll = barScrollAt(trk, viewH, contentH(), local.y, m_barGrab);
+                clampScroll();
+            }
+            return;
+        }
+    }
     const int row = rowAt(local.y);
     if (row >= 0 && m_onSelect) m_onSelect(row);
+}
+
+void ComboPopup::onPointerUp(MouseButton) {
+    m_barDrag = false;
+}
+
+void ComboPopup::onPointerScroll(float, float dy) {
+    const float viewH = std::max(bounds().h, 0.0f);
+    const float maxScroll = std::max(contentH() - viewH, 0.0f);
+    m_scroll = std::clamp(m_scroll - dy * m_rowH * 3.0f, 0.0f, maxScroll);
+    if (Kernel* k = kernel()) k->invalidate();
 }
 
 void ComboPopup::onKeyDown(KeyCode key, uint32_t) {
@@ -89,8 +163,10 @@ void ComboPopup::onDraw(Rasterizer& r) const {
     r.drawRectBorder(box, tint(m_border), 1.0f, 4.0f);
 
     const Font* f = r.resolveFont(m_fontFam, m_fontSize);
+    r.beginFrame(box);   // scrolled rows clip to the popup box
     for (size_t i = 0; i < m_items.size(); ++i) {
-        const float y = b.y + static_cast<float>(i) * m_rowH;
+        const float y = b.y + static_cast<float>(i) * m_rowH - m_scroll;
+        if (y + m_rowH < b.y || y > b.y + b.h) continue;
         const Rect row{b.x, y, b.w, m_rowH};
         const bool hi = static_cast<int>(i) == m_hover;
         if (hi) r.drawRect(row, tint(m_highlight));
@@ -101,6 +177,11 @@ void ComboPopup::onDraw(Rasterizer& r) const {
                               tint(hi ? m_highlightText : m_rowText));
         }
     }
+    r.endFrame();
+
+    if (barVisible())
+        drawVerticalBar(r, offsetRect(barTrack(), b.x, b.y),
+                        offsetRect(barThumb(), b.x, b.y), m_barDrag);
 }
 
 ComboBox::ComboBox() = default;
@@ -165,8 +246,16 @@ void ComboBox::openPopup() {
 
     const Offset2D org = absoluteOrigin();
     const Rect b = bounds();
+    // Fit the list on screen: clamp the height, flip above when the space
+    // under the combo is too small (ComboPopup then shows a scrollbar).
+    float sw = 10000.0f, sh = 10000.0f;
+    if (Kernel* k = kernel()) {
+        if (auto scr = k->currentScreen()) { sw = scr->width; sh = scr->height; }
+    }
     const float ph = static_cast<float>(m_items.size()) * m_rowH;
-    m_popup->setBounds(Rect{org.x, org.y + b.h, b.w, ph});
+    m_popup->setBounds(placePopup(Offset2D{org.x, org.y}, org.y + b.h,
+                                  b.w, ph, sw, sh));
+    m_popup->refreshScroll();   // keep the selected row visible after sizing
     if (Kernel* k = kernel()) k->openPopup(m_popup);
 
     m_open = true;
@@ -358,8 +447,13 @@ void Tabs::openOverflow() {
     m_overflow->fadeIn();
     m_overflow->setVisible(true);
     const Offset2D o = absoluteOrigin();
-    m_overflow->setBounds(Rect{o.x + b.w - 170.0f, o.y + m_headerHeight,
-                               170.0f, m_overflow->contentHeight()});
+    float sw = 10000.0f, sh = 10000.0f;
+    if (Kernel* k = kernel()) {
+        if (auto scr = k->currentScreen()) { sw = scr->width; sh = scr->height; }
+    }
+    const float ox = o.x + b.w - 170.0f, oy = o.y + m_headerHeight;
+    m_overflow->setBounds(placePopup(Offset2D{ox, oy}, oy, 170.0f,
+                                     m_overflow->contentHeight(), sw, sh));
     m_overflow->setOnSelect([this](const std::string& cmd) {
         if (Kernel* k = kernel()) k->closePopup();
         if (m_overflow) m_overflow->setVisible(false);
@@ -1818,16 +1912,25 @@ void MenuPopup::rebuildRows() {
 void MenuPopup::setEntries(const std::vector<MenuEntry>& items) {
     m_stack.clear();
     m_stack.push_back(Level{{}, items});
+    m_levelH.clear();
+    m_levelScroll.clear();
     m_hover = -1;
+    m_scroll = 0.0f;
     rebuildRows();
 }
 
 void MenuPopup::pushLevel(const MenuEntry& e) {
+    // Remember this level's geometry so popLevel can restore it.
+    m_levelH.push_back(std::max(bounds().h, 0.0f));
+    m_levelScroll.push_back(m_scroll);
     m_stack.push_back(Level{e.label, e.sub});
     m_hover = -1;
+    m_scroll = 0.0f;
     rebuildRows();
     Rect b = bounds();
-    b.h = contentHeight();
+    // Keep the screen-fitted height when the submenu is longer; the bar
+    // then lets the rows be scrolled.
+    b.h = std::min(contentHeight(), b.h);
     setBounds(b);
 }
 
@@ -1835,20 +1938,56 @@ void MenuPopup::popLevel() {
     if (m_stack.size() <= 1) return;
     m_stack.pop_back();
     m_hover = -1;
+    if (!m_levelH.empty()) {
+        Rect b = bounds();
+        b.h = m_levelH.back();
+        m_levelH.pop_back();
+        m_scroll = m_levelScroll.empty() ? 0.0f : m_levelScroll.back();
+        if (!m_levelScroll.empty()) m_levelScroll.pop_back();
+        setBounds(b);
+    } else {
+        m_scroll = 0.0f;
+    }
     rebuildRows();
-    Rect b = bounds();
-    b.h = contentHeight();
-    setBounds(b);
+    clampScroll();
+}
+
+bool MenuPopup::barVisible() const {
+    return contentHeight() - std::max(bounds().h, 0.0f) > 1.0f;
+}
+
+Rect MenuPopup::barTrack() const {
+    const Rect b = bounds();
+    return Rect{b.w - kBarW - kBarMargin, kBarMargin,
+                kBarW, std::max(b.h - 2.0f * kBarMargin, 0.0f)};
+}
+
+Rect MenuPopup::barThumb() const {
+    const float viewH = std::max(bounds().h, 0.0f);
+    return barThumbRect(barTrack(), viewH, contentHeight(), m_scroll);
+}
+
+void MenuPopup::clampScroll() {
+    const float viewH = std::max(bounds().h, 0.0f);
+    m_scroll = std::clamp(m_scroll, 0.0f, std::max(contentHeight() - viewH, 0.0f));
 }
 
 int MenuPopup::rowAt(float localY) const {
     if (m_rowH <= 0.0f || m_rows.empty()) return -1;
-    const int row = static_cast<int>(localY / m_rowH);
+    const float viewH = std::max(bounds().h, 0.0f);
+    if (localY < 0.0f || localY > viewH) return -1;
+    const int row = static_cast<int>((localY + m_scroll) / m_rowH);
     return (row >= 0 && row < static_cast<int>(m_rows.size())) ? row : -1;
 }
 
 void MenuPopup::onPointerMove(const Offset2D& p) {
     const Offset2D local{p.x - bounds().x, p.y - bounds().y};
+    if (m_barDrag) {
+        const float viewH = std::max(bounds().h, 0.0f);
+        m_scroll = barScrollAt(barTrack(), viewH, contentHeight(), local.y, m_barGrab);
+        clampScroll();
+        return;
+    }
     const int row = rowAt(local.y);
     m_hover = (row >= 0 && !m_rows[static_cast<size_t>(row)].separator) ? row : -1;
 }
@@ -1856,6 +1995,23 @@ void MenuPopup::onPointerMove(const Offset2D& p) {
 void MenuPopup::onPointerDown(MouseButton btn, const Offset2D& p) {
     if (btn != Mouse_Left) return;
     const Offset2D local{p.x - bounds().x, p.y - bounds().y};
+    if (barVisible()) {
+        const Rect trk = barTrack();
+        if (local.x >= trk.x && local.x <= trk.x + trk.w &&
+            local.y >= trk.y && local.y <= trk.y + trk.h) {
+            m_barDrag = true;
+            const float viewH = std::max(bounds().h, 0.0f);
+            const Rect th = barThumb();
+            if (local.y >= th.y && local.y <= th.y + th.h) {
+                m_barGrab = local.y - th.y;
+            } else {
+                m_barGrab = th.h * 0.5f;
+                m_scroll = barScrollAt(trk, viewH, contentHeight(), local.y, m_barGrab);
+                clampScroll();
+            }
+            return;
+        }
+    }
     const int row = rowAt(local.y);
     if (row < 0) return;
     const Row& r = m_rows[static_cast<size_t>(row)];
@@ -1865,6 +2021,17 @@ void MenuPopup::onPointerDown(MouseButton btn, const Offset2D& p) {
     if (!e) return;
     if (!e->sub.empty()) { pushLevel(*e); return; }
     if (m_onSelect) m_onSelect(e->command);
+}
+
+void MenuPopup::onPointerUp(MouseButton) {
+    m_barDrag = false;
+}
+
+void MenuPopup::onPointerScroll(float, float dy) {
+    const float viewH = std::max(bounds().h, 0.0f);
+    const float maxScroll = std::max(contentHeight() - viewH, 0.0f);
+    m_scroll = std::clamp(m_scroll - dy * m_rowH * 3.0f, 0.0f, maxScroll);
+    if (Kernel* k = kernel()) k->invalidate();
 }
 
 void MenuPopup::onDraw(Rasterizer& r) const {
@@ -1882,8 +2049,10 @@ void MenuPopup::onDraw(Rasterizer& r) const {
     r.drawRectBorder(b, tint(m_border), 1.0f, 4.0f);
 
     const Font* f = r.resolveFont("sans", m_fontSize);
+    r.beginFrame(b);   // scrolled rows clip to the popup box
     for (size_t i = 0; i < m_rows.size(); ++i) {
-        const float y = b.y + static_cast<float>(i) * m_rowH;
+        const float y = b.y + static_cast<float>(i) * m_rowH - m_scroll;
+        if (y + m_rowH < b.y || y > b.y + b.h) continue;
         const Rect row{b.x, y, b.w, m_rowH};
         const Row& rw = m_rows[i];
         if (rw.separator) {
@@ -1911,6 +2080,11 @@ void MenuPopup::onDraw(Rasterizer& r) const {
                            {cx + 4.0f, cy}, tint(m_text));
         }
     }
+    r.endFrame();
+
+    if (barVisible())
+        drawVerticalBar(r, offsetRect(barTrack(), b.x, b.y),
+                        offsetRect(barThumb(), b.x, b.y), m_barDrag);
 }
 
 // ------------------------------------------------------------------
@@ -1988,7 +2162,12 @@ void MenuBar::openMenu(size_t index) {
             if (tw + 44.0f > w) w = tw + 44.0f;
         }
     }
-    m_popup->setBounds(Rect{o.x + mx, o.y + b.h, w, m_popup->contentHeight()});
+    float sw = 10000.0f, sh = 10000.0f;
+    if (Kernel* k = kernel()) {
+        if (auto scr = k->currentScreen()) { sw = scr->width; sh = scr->height; }
+    }
+    m_popup->setBounds(placePopup(Offset2D{o.x + mx, o.y}, o.y + b.h, w,
+                                  m_popup->contentHeight(), sw, sh));
     m_popup->setOnSelect([this](const std::string& cmd) {
         if (Kernel* k = kernel()) k->closePopup();
         if (m_popup) m_popup->setVisible(false);
@@ -2066,7 +2245,14 @@ void ContextMenu::openAt(float x, float y) {
             if (tw + 44.0f > w) w = tw + 44.0f;
         }
     }
-    m_popup->setBounds(Rect{x, y, w, m_popup->contentHeight()});
+    float sw = 10000.0f, sh = 10000.0f;
+    if (Kernel* k = kernel()) {
+        if (auto scr = k->currentScreen()) { sw = scr->width; sh = scr->height; }
+    }
+    // Top-left at the cursor; clamped to the screen, and when the menu is
+    // taller than the space below it opens upwards instead.
+    m_popup->setBounds(placePopup(Offset2D{x, y}, y, w,
+                                  m_popup->contentHeight(), sw, sh));
     m_popup->setOnSelect([this](const std::string& cmd) {
         if (Kernel* k = kernel()) k->closePopup();
         if (m_popup) m_popup->setVisible(false);
