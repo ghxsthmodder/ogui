@@ -123,10 +123,14 @@ public:
     // priority when hit-testing. Its bounds are screen-absolute. A pointer
     // press outside it closes it and is swallowed. Managed by widgets like
     // ComboBox; usually called from a pointer handler.
-    void openPopup(std::shared_ptr<Widget> popup);
+    void openPopup(std::shared_ptr<Widget> popup) {
+        m_popup = std::move(popup);
+        invalidate();
+    }
     void closePopup() {
         if (m_popup) m_popup->onPopupDismissed();
         m_popup.reset();
+        invalidate();
     }
     bool popupOpen() const { return m_popup != nullptr; }
     std::shared_ptr<Widget> popup() const { return m_popup; }
@@ -137,10 +141,15 @@ public:
     enum class ToastKind : uint8_t { Info = 0, Warn = 1, Error = 2 };
     void showToast(const std::string& text, ToastKind kind = ToastKind::Info) {
         m_toasts.push_back(ToastItem{text, static_cast<uint8_t>(kind), 0.0f});
+        invalidate();
     }
 
     // ---- drawing ----
-    // Builds the draw list for the current screen (idempotent per frame).
+    // Builds the draw list for the current screen. Frames with unchanged
+    // input, no running animation and no popup/tooltip/toast activity reuse
+    // the previous list; call invalidate() after mutating the tree from
+    // outside the event flow (setText, host timers, screen edits).
+    void invalidate() { m_dirty = true; }
     const DrawList& buildDrawList();
     const DrawList& drawList() const { return m_drawList; }
 
@@ -211,6 +220,12 @@ private:
 
     std::map<std::string, std::function<void()>> m_bindings;
     DrawList m_drawList;
+    Rasterizer m_raster;          // persistent: keeps buffers between frames
+
+    // redraw bookkeeping (see invalidate/buildDrawList)
+    bool m_dirty = true;
+    InputState m_prevInput{};
+    float m_builtW = -1.0f, m_builtH = -1.0f;   // screen size at last build
 
     // popup layer
     std::shared_ptr<Widget> m_popup;

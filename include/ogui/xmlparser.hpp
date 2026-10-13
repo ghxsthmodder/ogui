@@ -42,6 +42,11 @@ private:
     size_t m_pos = 0;
     size_t m_len = 0;
 
+    // Cached cursor for where() (see its incremental scan).
+    mutable size_t m_wcPos = 0;
+    mutable size_t m_wcLine = 1;
+    mutable size_t m_wcCol = 1;
+
     // Element stack; the top is the widget currently being filled.
     struct ParseState {
         std::shared_ptr<Widget> widget;

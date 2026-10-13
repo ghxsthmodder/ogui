@@ -31,6 +31,7 @@ using GLuint = unsigned int;
 using GLfloat = float;
 using GLchar = char;
 using GLsizeiptr = std::ptrdiff_t;
+using GLintptr = std::ptrdiff_t;
 
 namespace {
 constexpr GLenum GL_BLEND              = 0x00BE2;
@@ -56,6 +57,11 @@ constexpr GLenum GL_TEXTURE_WRAP_S     = 0x2802;
 constexpr GLenum GL_TEXTURE_WRAP_T     = 0x2803;
 constexpr GLenum GL_LINEAR             = 0x2601;
 constexpr GLenum GL_CLAMP_TO_EDGE      = 0x812F;
+constexpr GLenum GL_ONE                = 1;
+constexpr GLenum GL_R8                 = 0x8229;
+constexpr GLenum GL_RED                = 0x1903;
+constexpr GLenum GL_UNPACK_ALIGNMENT   = 0x0CF5;
+constexpr GLenum GL_TEXTURE_SWIZZLE_RGBA = 0x8E46;
 constexpr GLenum GL_SRC_ALPHA          = 0x0302;
 constexpr GLenum GL_ONE_MINUS_SRC_ALPHA = 0x0303;
 constexpr GLboolean GL_FALSE_          = 0;
@@ -94,6 +100,7 @@ struct GlBackend::Api {
     void (*GenBuffers)(GLsizei, GLuint*) = nullptr;
     void (*BindBuffer)(GLenum, GLuint) = nullptr;
     void (*BufferData)(GLenum, GLsizeiptr, const void*, GLenum) = nullptr;
+    void (*BufferSubData)(GLenum, GLintptr, GLsizeiptr, const void*) = nullptr;
     void (*DeleteBuffers)(GLsizei, const GLuint*) = nullptr;
     void (*DeleteVertexArrays)(GLsizei, const GLuint*) = nullptr;
     // attributes
@@ -121,6 +128,8 @@ struct GlBackend::Api {
     void (*BindTexture)(GLenum, GLuint) = nullptr;
     void (*TexImage2D)(GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, const void*) = nullptr;
     void (*TexParameteri)(GLenum, GLenum, GLint) = nullptr;
+    void (*TexParameteriv)(GLenum, GLenum, const GLint*) = nullptr;
+    void (*PixelStorei)(GLenum, GLint) = nullptr;
     void (*DeleteTextures)(GLsizei, const GLuint*) = nullptr;
     void (*ActiveTexture)(GLenum) = nullptr;
     // draw
@@ -212,6 +221,7 @@ bool GlBackend::loadFunctions(GetProcFn getProc) {
     need(a.GenBuffers, "glGenBuffers");
     need(a.BindBuffer, "glBindBuffer");
     need(a.BufferData, "glBufferData");
+    need(a.BufferSubData, "glBufferSubData");
     need(a.DeleteBuffers, "glDeleteBuffers");
     need(a.DeleteVertexArrays, "glDeleteVertexArrays");
     // attributes
@@ -239,6 +249,8 @@ bool GlBackend::loadFunctions(GetProcFn getProc) {
     need(a.BindTexture, "glBindTexture");
     need(a.TexImage2D, "glTexImage2D");
     need(a.TexParameteri, "glTexParameteri");
+    need(a.TexParameteriv, "glTexParameteriv");
+    need(a.PixelStorei, "glPixelStorei");
     need(a.DeleteTextures, "glDeleteTextures");
     need(a.ActiveTexture, "glActiveTexture");
     // draw
@@ -383,10 +395,42 @@ bool GlBackend::ensureFontTexture(Font& font) {
     if (slot == 0) return false;              // atlas never built
     if (m_fontTexs.count(slot) != 0) return true;
     const uint8_t* px = font.atlas();
-    const int tex = createTexture(px, font.atlasWidth(), font.atlasHeight());
+    const int tex = createTextureA8(px, font.atlasWidth(), font.atlasHeight());
     if (tex == 0) return false;
     m_fontTexs[slot] = static_cast<unsigned>(tex);
     return true;
+}
+
+// A8 coverage atlas -> GL_R8 texture whose swizzle turns samples into
+// (1,1,1,coverage): the same value the old RGBA8 white atlas produced, at a
+// quarter of the upload size and with no shader change.
+int GlBackend::createTextureA8(const uint8_t* alpha, int w, int h) {
+    if (!m_api || !alpha || w <= 0 || h <= 0) return 0;
+    Api& a = *m_api;
+
+    GLint prevTex = 0;
+    a.GetIntegerv(GL_TEXTURE_BINDING_2D, &prevTex);
+
+    GLuint tex = 0;
+    a.GenTextures(1, &tex);
+    a.BindTexture(GL_TEXTURE_2D, tex);
+    // A8 rows are tightly packed (rowBytes == w); the default unpack alignment
+    // of 4 would pad every row on upload and shear the atlas whenever w % 4.
+    GLint prevAlign = 4;
+    a.GetIntegerv(GL_UNPACK_ALIGNMENT, &prevAlign);
+    a.PixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    a.TexImage2D(GL_TEXTURE_2D, 0, static_cast<GLint>(GL_R8), w, h, 0,
+                 GL_RED, GL_UNSIGNED_BYTE, alpha);
+    a.PixelStorei(GL_UNPACK_ALIGNMENT, prevAlign);
+    const GLint swizzle[4] = {static_cast<GLint>(GL_ONE), static_cast<GLint>(GL_ONE),
+                              static_cast<GLint>(GL_ONE), static_cast<GLint>(GL_RED)};
+    a.TexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzle);
+    a.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, static_cast<GLint>(GL_LINEAR));
+    a.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, static_cast<GLint>(GL_LINEAR));
+    a.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, static_cast<GLint>(GL_CLAMP_TO_EDGE));
+    a.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, static_cast<GLint>(GL_CLAMP_TO_EDGE));
+    a.BindTexture(GL_TEXTURE_2D, static_cast<GLuint>(prevTex));
+    return static_cast<int>(tex);
 }
 
 bool GlBackend::syncFonts() {
@@ -487,14 +531,23 @@ void GlBackend::render(const DrawList& list, int fbWidth, int fbHeight, bool fli
     a.ActiveTexture(GL_TEXTURE0);
     a.BindVertexArray(m_vao);
 
+    // Upload only when the frame outgrew the allocated capacity; steady
+    // frames take a cheap glBufferSubData into the existing store instead of
+    // reallocating the whole buffer every time.
+    const auto vbytes = static_cast<GLsizeiptr>(list.vertices.size() * sizeof(Vertex));
+    const auto ibytes = static_cast<GLsizeiptr>(list.indices.size() * sizeof(uint32_t));
     a.BindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    a.BufferData(GL_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(list.vertices.size() * sizeof(Vertex)),
-                 list.vertices.data(), GL_STREAM_DRAW);
+    if (vbytes > static_cast<GLsizeiptr>(m_vboCap)) {
+        a.BufferData(GL_ARRAY_BUFFER, vbytes, nullptr, GL_STREAM_DRAW);
+        m_vboCap = vbytes;
+    }
+    if (vbytes > 0) a.BufferSubData(GL_ARRAY_BUFFER, 0, vbytes, list.vertices.data());
     a.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ebo);
-    a.BufferData(GL_ELEMENT_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(list.indices.size() * sizeof(uint32_t)),
-                 list.indices.data(), GL_STREAM_DRAW);
+    if (ibytes > static_cast<GLsizeiptr>(m_eboCap)) {
+        a.BufferData(GL_ELEMENT_ARRAY_BUFFER, ibytes, nullptr, GL_STREAM_DRAW);
+        m_eboCap = ibytes;
+    }
+    if (ibytes > 0) a.BufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, ibytes, list.indices.data());
 
     for (const DrawCmd& cmd : list.cmds) {
         if (cmd.indexCount == 0) continue;
@@ -569,6 +622,7 @@ void GlBackend::shutdown() {
     Api& a = *m_api;
     if (m_vbo) { a.DeleteBuffers(1, &m_vbo); m_vbo = 0; }
     if (m_ebo) { a.DeleteBuffers(1, &m_ebo); m_ebo = 0; }
+    m_vboCap = m_eboCap = 0;
     if (m_vao) { a.DeleteVertexArrays(1, &m_vao); m_vao = 0; }
     if (m_program) { a.DeleteProgram(m_program); m_program = 0; }
     if (m_whiteTex) {

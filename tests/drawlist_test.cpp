@@ -146,7 +146,7 @@ static void testFontAndText() {
     CHECK(f->loaded());
     CHECK(f->atlasWidth() > 0);
     CHECK(f->atlasHeight() > 0);
-    CHECK(f->atlasRowBytes() == f->atlasWidth() * 4);
+    CHECK(f->atlasRowBytes() == f->atlasWidth());   // A8 coverage atlas
     CHECK(f->ascent() > 0);
 
     // Every ASCII glyph must have a sane atlas rect.
@@ -158,10 +158,11 @@ static void testFontAndText() {
         CHECK(uv.y + uv.h <= 1.0f + 1e-6f);
     }
 
-    // The atlas must actually contain ink.
+    // The atlas must actually contain ink. A8: every byte is coverage.
     const uint8_t* px = f->atlas();
     size_t inked = 0;
-    for (size_t i = 3; i < static_cast<size_t>(f->atlasWidth()) * f->atlasHeight() * 4; i += 4) {
+    const size_t atlasBytes = static_cast<size_t>(f->atlasWidth()) * f->atlasHeight();
+    for (size_t i = 0; i < atlasBytes; ++i) {
         if (px[i] > 0) ++inked;
     }
     CHECK(inked > 100);

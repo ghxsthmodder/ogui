@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <chrono>
+#include <cstring>
 
 namespace ogui {
 
@@ -103,6 +104,9 @@ void Kernel::init() {
     m_popup.reset();
     m_tipFade = 0.0f;
     m_prevTime = 0.0f;
+    m_dirty = true;
+    m_prevInput = InputState{};
+    m_builtW = m_builtH = -1.0f;
 }
 
 void Kernel::run(const InputSource& input, const std::function<void()>& draw) {
@@ -143,12 +147,14 @@ void Kernel::pushScreen(std::shared_ptr<Screen> screen) {
     if (!screen) return;
     m_screenStack.push_back(screen);
     setFocus(m_focus, nullptr);
+    invalidate();
 }
 
 void Kernel::popScreen() {
     if (m_screenStack.size() > 1) {
         m_screenStack.pop_back();
         setFocus(m_focus, nullptr);
+        invalidate();
     }
 }
 
@@ -164,16 +170,13 @@ void Kernel::switchScreen(std::shared_ptr<Screen> screen) {
         }
         m_screenStack.back() = screen;
         setFocus(m_focus, nullptr);
+        invalidate();
     }
 }
 
-void Kernel::setTheme(const Theme* theme) { m_theme = theme; }
+void Kernel::setTheme(const Theme* theme) { m_theme = theme; invalidate(); }
 
 void Kernel::processInput(const InputState& st) { m_input = st; }
-
-void Kernel::openPopup(std::shared_ptr<Widget> popup) {
-    m_popup = std::move(popup);
-}
 
 Widget* Kernel::popupHitTest(const Offset2D& p) const {
     if (!m_popup) return nullptr;
@@ -187,14 +190,20 @@ void Kernel::advanceAnimations(float dt) {
     forEachWidget(screen->widgets, [&](const Widget::Ptr& w) {
         if (w) {
             w->setKernel(this);
-            if (dt > 0.0f) w->onTick(dt);
+            if (dt > 0.0f) {
+                w->onTick(dt);
+                if (w->isAnimating()) m_dirty = true;
+            }
         }
     });
     // The popup lives outside the tree (drawn above it); it still ticks so
     // its open-in fade/slide runs on the same clock.
     if (m_popup) {
         m_popup->setKernel(this);
-        if (dt > 0.0f) m_popup->onTick(dt);
+        if (dt > 0.0f) {
+            m_popup->onTick(dt);
+            if (m_popup->isAnimating()) m_dirty = true;
+        }
     }
 }
 
@@ -236,10 +245,12 @@ Widget* Kernel::findWidget(const std::string& id) {
 bool Kernel::setText(const std::string& id, const std::string& text) {
     Widget* w = findWidget(id);
     if (!w) return false;
-    if (auto* l = dynamic_cast<Label*>(w)) { l->setText(text); return true; }
-    if (auto* b = dynamic_cast<Button*>(w)) { b->setText(text); return true; }
-    if (auto* t = dynamic_cast<TextInput*>(w)) { t->setText(text); return true; }
-    return false;
+    bool changed = false;
+    if (auto* l = dynamic_cast<Label*>(w)) { l->setText(text); changed = true; }
+    else if (auto* b = dynamic_cast<Button*>(w)) { b->setText(text); changed = true; }
+    else if (auto* t = dynamic_cast<TextInput*>(w)) { t->setText(text); changed = true; }
+    if (changed) invalidate();
+    return changed;
 }
 
 std::string Kernel::getText(const std::string& id) const {
@@ -269,6 +280,23 @@ void Kernel::update() {
     auto screen = currentScreen();
     if (!screen || screen->widgets.empty()) return;
 
+    // Redraw trigger #1: anything in the input except the clock changed
+    // (the host advances `time` every frame even when idle).
+    {
+        const InputState& a = m_input;
+        const InputState& b = m_prevInput;
+        if (a.mouseX != b.mouseX || a.mouseY != b.mouseY ||
+            a.mouseButton != b.mouseButton ||
+            a.scrollX != b.scrollX || a.scrollY != b.scrollY ||
+            a.lastChar != b.lastChar ||
+            std::memcmp(a.mouseDown, b.mouseDown, sizeof(a.mouseDown)) != 0 ||
+            std::memcmp(a.keyDown, b.keyDown, sizeof(a.keyDown)) != 0 ||
+            std::memcmp(a.keyRepeat, b.keyRepeat, sizeof(a.keyRepeat)) != 0) {
+            m_dirty = true;
+        }
+        m_prevInput = a;
+    }
+
     // Graphics/HScript-free animation clock: every widget ticks with the host
     // input clock; a stalled host (dt clamped) just freezes the tweens.
     const float dt = std::clamp(m_input.time - m_prevTime, 0.0f, 0.25f);
@@ -276,8 +304,11 @@ void Kernel::update() {
     advanceAnimations(dt);
 
     for (auto& t : m_toasts) t.age += dt;
-    while (!m_toasts.empty() && m_toasts.front().age > 3.5f)
+    if (!m_toasts.empty()) m_dirty = true;   // fading/aging banners
+    while (!m_toasts.empty() && m_toasts.front().age > 3.5f) {
         m_toasts.erase(m_toasts.begin());
+        m_dirty = true;
+    }
     if (m_toasts.size() > 4)
         m_toasts.erase(m_toasts.begin(),
                        m_toasts.begin() + static_cast<long>(m_toasts.size() - 4));
@@ -322,8 +353,10 @@ void Kernel::update() {
 
     // Tooltip fades in when it shows, out once the pointer leaves.
     const bool tipShowing = tooltipVisible();
+    const float prevFade = m_tipFade;
     if (tipShowing) m_tipFade = std::min(1.0f, m_tipFade + dt / 0.12f);
     else m_tipFade = std::max(0.0f, m_tipFade - dt * 6.0f);
+    if (m_tipFade != prevFade) m_dirty = true;
 
     if (pressedEdge) {
         // Multi-click: same button, same spot (6px) inside 0.5s counts up.
@@ -435,11 +468,17 @@ void Kernel::update() {
 
 // ---- drawing --------------------------------------------------------------
 const DrawList& Kernel::buildDrawList() {
-    m_drawList.clear();
     auto screen = currentScreen();
-    if (!screen) return m_drawList;
+    if (!screen) {
+        m_drawList.clear();
+        return m_drawList;
+    }
+    if (screen->width != m_builtW || screen->height != m_builtH) {
+        m_dirty = true;   // host resized the viewport
+    }
+    if (!m_dirty) return m_drawList;   // nothing changed: reuse last frame
 
-    Rasterizer r;
+    Rasterizer& r = m_raster;
     r.reset();
     r.beginFrame(Rect{0, 0, screen->width, screen->height});
     for (const auto& w : screen->widgets) {
@@ -475,16 +514,17 @@ const DrawList& Kernel::buildDrawList() {
         if (ty < 0.0f) ty = 0.0f;
         const Rect box{tx, ty, bw, bh};
         const float fade = std::max(m_tipFade, 0.02f);
-        auto tinted = [&](const char* hex) {
-            Color c = hexColor(hex);
+        auto tinted = [&](const Color& base) {
+            Color c = base;
             c.a = static_cast<uint8_t>(static_cast<float>(c.a) * fade);
             return c;
         };
-        r.drawRect(box, tinted("#262626"));
-        r.drawRectBorder(box, tinted("#555555"), 1.0f, 4.0f);
+        const Palette& pal = palette();
+        r.drawRect(box, tinted(pal.surface));
+        r.drawRectBorder(box, tinted(pal.borderStrong), 1.0f, 4.0f);
         if (f) {
             r.drawTextShifted(tip.c_str(), tx + kPad, ty + kPad, kTipFontSize,
-                              *f, tinted("#eeeeee"));
+                              *f, tinted(pal.textBright));
         }
     }
 
@@ -496,33 +536,40 @@ const DrawList& Kernel::buildDrawList() {
             const ToastItem& t = m_toasts[i];
             const float fade = t.age > 3.0f ? (3.5f - t.age) * 2.0f : 1.0f;
             const float a = std::clamp(fade, 0.0f, 1.0f);
-            static const char* kKindColor[3] = {"#2b78e4", "#e4a12b", "#e44b2b"};
+            const Palette& pal = palette();
+            const Color kKindColor[3] = {pal.info, pal.warn, pal.error};
             const Font* f = r.resolveFont("sans", 13);
             const float tw = f ? r.textWidth(t.text.c_str(), *f) : 120.0f;
             const float bw = tw + kPad * 2.0f + 4.0f;
             const float bh = 28.0f;
             const Rect box{screen->width - bw - 8.0f, y - bh, bw, bh};
-            auto tint = [&](const char* hex) {
-                Color c = hexColor(hex);
+            auto tint = [&](const Color& base) {
+                Color c = base;
                 c.a = static_cast<uint8_t>(static_cast<float>(c.a) * a);
                 return c;
             };
-            r.drawRect(box, tint("#1e1f24"));
+            r.drawDropShadow(box, 4.0f, pal.shadow, 5.0f, 0.0f, 2.0f);
+            r.drawRect(box, tint(pal.surface));
             r.drawRect(Rect{box.x, box.y, 3.0f, box.h},
                        tint(kKindColor[t.kind % 3]));
-            r.drawRectBorder(box, tint("#44464f"), 1.0f, 4.0f);
+            r.drawRectBorder(box, tint(pal.border), 1.0f, 4.0f);
             if (f) {
                 r.drawTextShifted(t.text.c_str(), box.x + kPad + 2.0f,
                                   box.y + (box.h - 13.0f) * 0.5f, 13, *f,
-                                  tint("#eeeeee"));
+                                  tint(pal.textBright));
             }
             y -= bh + 6.0f;
         }
     }
 
     r.endFrame();
-    m_drawList = std::move(r.drawList());
+    // Swap instead of move: the rasterizer keeps the previous frame's
+    // reserved vectors and refills them without reallocating.
+    m_drawList.swap(r.drawList());
     r.drawList().clear();
+    m_dirty = false;
+    m_builtW = screen->width;
+    m_builtH = screen->height;
     return m_drawList;
 }
 
@@ -534,6 +581,11 @@ void Kernel::drawTree(Rasterizer& r, Widget* w, float ox, float oy) const {
     Rect b = w->bounds();
     Rect saved = b;
     w->setBounds(Rect{b.x + ox, b.y + oy, b.w, b.h});
+    const Style& st = w->style();
+    if (st.shadowBlur > 0.0f) {
+        r.drawDropShadow(w->bounds(), st.radius, st.shadowColor,
+                         st.shadowBlur, st.shadowDx, st.shadowDy);
+    }
     w->onDraw(r);
     w->setBounds(saved);
 

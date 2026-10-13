@@ -58,10 +58,11 @@ int main() {
     // ---- window (library-owned) ------------------------------------------
     ogui::Host host({.title = "ogui - GUI para OpenGL via XML",
                      .width = 800, .height = 600});
-    host.setClearColor(0.06f, 0.06f, 0.07f);
+    const ogui::Color win = ogui::palette().window;
+    host.setClearColor(win.r / 255.0f, win.g / 255.0f, win.b / 255.0f);
 
     int navIndex = 0;
-    gallery::install(kernel, g, navIndex);   // pushes screen 0 + wires navPrev/Next
+    gallery::install(kernel, g, navIndex, 0, W, H);   // pushes screen 0 + wires navPrev/Next
 
     // ---- handlers --------------------------------------------------------
     kernel.bind("onStart", [&] {

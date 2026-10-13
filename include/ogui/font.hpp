@@ -2,6 +2,7 @@
 #include "ogui/api.hpp"
 #include <vector>
 #include <map>
+#include <unordered_map>
 #include <string>
 #include <memory>
 #include <cstdint>
@@ -42,7 +43,9 @@ struct GlyphInfo {
     int atlasY = 0;
 };
 
-// RGBA8 glyph atlas (single texture, grid packed).
+// A8 glyph atlas (single texture, grid packed). Texels carry coverage only;
+// the GL backend maps them to (1,1,1,r) through a texture swizzle, and the
+// CPU rasterizer does the same when sampling.
 class Font {
 public:
     Font() = default;
@@ -60,10 +63,15 @@ public:
 
     const GlyphInfo& glyph(uint32_t ch) const;
 
+    // Kerning adjustment (atlas pixels) applied between two adjacent code
+    // points; 0 when the pair has none. Baked from the font's kern table at
+    // load time for the printable-ASCII grid.
+    int kern(uint32_t prev, uint32_t cur) const;
+
     // Normalized UV rect of a glyph inside the atlas.
     Rect glyphUV(uint32_t ch) const;
 
-    // Atlas access (RGBA8). Returns nullptr when not loaded.
+    // Atlas access (A8 coverage). Returns nullptr when not loaded.
     const uint8_t* atlas() const { return m_pixels.data(); }
     int atlasWidth() const { return m_w; }
     int atlasHeight() const { return m_h; }
@@ -101,8 +109,9 @@ private:
     int m_descent = 0;
     int m_atlasTex = 0;
     std::map<uint32_t, GlyphInfo> m_glyphs;
+    std::unordered_map<uint32_t, int8_t> m_kern;  // prev*128+cur -> px
 
-    std::vector<uint8_t> m_pixels;   // RGBA flat: w*h*4
+    std::vector<uint8_t> m_pixels;   // A8 flat: w*h
     int m_w = 0, m_h = 0;
     int m_rowBytes = 0;
 

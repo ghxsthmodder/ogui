@@ -21,6 +21,9 @@ namespace ogui {
 struct TexInfo {
     const uint8_t* data = nullptr;
     int w = 0, h = 0, rowBytes = 0;
+    // Font atlases store A8 coverage; sampling them yields (1,1,1,a), the
+    // same value the GL backend's swizzled GL_R8 texture produces.
+    bool alphaOnly = false;
 };
 
 // ------------------------------------------------------------------

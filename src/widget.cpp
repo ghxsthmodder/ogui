@@ -38,6 +38,7 @@ void Widget::setParent(Widget* parent) {
 void Widget::addChild(Ptr child) {
     if (!child) return;
     child->setParent(this);
+    if (m_kernel) m_kernel->invalidate();
 }
 
 void Widget::removeChild(Ptr child) {
@@ -46,6 +47,7 @@ void Widget::removeChild(Ptr child) {
         if (it->get() == child.get()) {
             if (child->m_parent == this) child->m_parent = nullptr;
             m_children.erase(it);
+            if (m_kernel) m_kernel->invalidate();
             break;
         }
     }

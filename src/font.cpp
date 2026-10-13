@@ -24,10 +24,14 @@ namespace ogui {
 
 namespace {
     // Code points baked into the atlas: printable ASCII plus Latin-1
-    // Supplement, so accented text (ç ã õ á é, ...) gets a real glyph
-    // instead of a zero advance that collapses the words behind it.
+    // Supplement (ç ã õ á é...), Latin Extended-A (Polish/Czech/Turkish...),
+    // general punctuation (— ‘’“” •…) and the currency block (€ £ ₹…), so
+    // accented and typographic text gets a real glyph instead of a zero
+    // advance that collapses the words behind it.
     struct CpRange { int lo; int hi; };
-    static constexpr CpRange ATLAS_RANGES[] = {{32, 126}, {160, 255}};
+    static constexpr CpRange ATLAS_RANGES[] = {
+        {32, 126}, {160, 255}, {256, 439}, {8192, 8305}, {8352, 8368}
+    };
 
     template <typename Fn>
     void forEachAtlasCp(Fn&& fn) {
@@ -81,6 +85,7 @@ Font::Font(Font&& other) noexcept
       m_descent(other.m_descent),
       m_atlasTex(other.m_atlasTex),
       m_glyphs(std::move(other.m_glyphs)),
+      m_kern(std::move(other.m_kern)),
       m_pixels(std::move(other.m_pixels)),
       m_w(other.m_w), m_h(other.m_h),
       m_rowBytes(other.m_rowBytes),
@@ -99,6 +104,7 @@ Font& Font::operator=(Font&& other) noexcept {
         m_descent = other.m_descent;
         m_atlasTex = other.m_atlasTex;
         m_glyphs = std::move(other.m_glyphs);
+        m_kern = std::move(other.m_kern);
         m_pixels = std::move(other.m_pixels);
         m_w = other.m_w; m_h = other.m_h;
         m_rowBytes = other.m_rowBytes;
@@ -172,17 +178,8 @@ bool Font::load(const std::string& path, int pixelHeight, int /*dpi*/) {
 
     m_w = cols * cellW;
     m_h = rows * cellH;
-    m_rowBytes = m_w * 4;
-    m_pixels.assign(static_cast<size_t>(m_w) * static_cast<size_t>(m_h) * 4, 0);
-
-    // Start every texel white with alpha 0. Leaving RGB at 0 would pull the
-    // colour toward black wherever LINEAR filtering samples across a glyph
-    // edge, and straight-alpha blending darkens that fringe even further.
-    for (size_t i = 0; i < m_pixels.size(); i += 4) {
-        m_pixels[i + 0] = 255;
-        m_pixels[i + 1] = 255;
-        m_pixels[i + 2] = 255;
-    }
+    m_rowBytes = m_w;
+    m_pixels.assign(static_cast<size_t>(m_w) * static_cast<size_t>(m_h), 0);
 
     // Second pass: rasterize into grid cells. Metrics are recorded for every
     // covered code point *before* the ink test: inkless glyphs (space) must
@@ -227,11 +224,8 @@ bool Font::load(const std::string& path, int pixelHeight, int /*dpi*/) {
                 int ix = px + x;
                 int iy = py + y;
                 if (ix < 0 || iy < 0 || ix >= m_w || iy >= m_h) continue;
-                size_t off = static_cast<size_t>(iy) * m_rowBytes + static_cast<size_t>(ix) * 4;
-                m_pixels[off + 0] = 255;
-                m_pixels[off + 1] = 255;
-                m_pixels[off + 2] = 255;
-                m_pixels[off + 3] = alpha;
+                m_pixels[static_cast<size_t>(iy) * m_rowBytes +
+                         static_cast<size_t>(ix)] = alpha;
             }
         }
 
@@ -242,6 +236,21 @@ bool Font::load(const std::string& path, int pixelHeight, int /*dpi*/) {
     });
 
     if (m_pixels.empty()) return false;
+
+    // Bake kerning for the printable-ASCII grid: pair lookups at draw time
+    // are then a single hash probe, and accented/CJK pairs (rare) simply
+    // keep their default advance.
+    for (int a = 32; a <= 126; ++a) {
+        for (int b = 32; b <= 126; ++b) {
+            const int k = stbtt_GetCodepointKernAdvance(&fi, a, b);
+            if (!k) continue;
+            const int px = static_cast<int>(std::lround(k * scale));
+            if (!px) continue;
+            m_kern[static_cast<uint32_t>(a) * 128u + static_cast<uint32_t>(b)] =
+                static_cast<int8_t>(std::clamp(px, -128, 127));
+        }
+    }
+
     // Stable, never-reused slot for this atlas; the backend maps it to a GPU
     // texture on first use (see GlBackend::syncFonts()).
     m_atlasTex = -s_nextAtlasSlot.fetch_add(1);
@@ -251,6 +260,7 @@ bool Font::load(const std::string& path, int pixelHeight, int /*dpi*/) {
 bool Font::unload() {
     m_pixels.clear();
     m_glyphs.clear();
+    m_kern.clear();
     m_w = 0; m_h = 0; m_rowBytes = 0;
     m_atlasTex = 0;
     m_buffer.clear();
@@ -280,6 +290,12 @@ Rect Font::glyphUV(uint32_t ch) const {
     };
 }
 
+int Font::kern(uint32_t prev, uint32_t cur) const {
+    if (m_kern.empty() || prev > 126 || cur > 126) return 0;
+    auto it = m_kern.find(prev * 128u + cur);
+    return it == m_kern.end() ? 0 : static_cast<int>(it->second);
+}
+
 float Font::measure(const char* text) const {
     if (!text) return 0.0f;
     return measureRange(text, std::strlen(text));
@@ -290,10 +306,13 @@ float Font::measureRange(const char* text, size_t bytes) const {
     float w = 0.0f;
     const unsigned char* p = reinterpret_cast<const unsigned char*>(text);
     const unsigned char* end = p + bytes;
+    uint32_t prev = 0;
     while (p < end) {
         uint32_t ch = utf8Next(p);
         if (p > end) break;   // code point cut in half by the range
+        if (prev) w += static_cast<float>(kern(prev, ch));
         w += static_cast<float>(glyph(ch).advanceX);
+        prev = ch;
     }
     return w;
 }
@@ -303,12 +322,15 @@ size_t Font::indexFromX(const char* text, float x) const {
     const unsigned char* p = reinterpret_cast<const unsigned char*>(text);
     const unsigned char* base = p;
     float acc = 0.0f;
+    uint32_t prev = 0;
     while (*p) {
         size_t idx = static_cast<size_t>(p - base);
         uint32_t ch = utf8Next(p);
+        if (prev) acc += static_cast<float>(kern(prev, ch));
         const float adv = static_cast<float>(glyph(ch).advanceX);
         if (x < acc + adv * 0.5f) return idx;   // closer to this boundary
         acc += adv;
+        prev = ch;
     }
     return static_cast<size_t>(p - base);
 }

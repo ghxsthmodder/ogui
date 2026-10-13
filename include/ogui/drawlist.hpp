@@ -28,6 +28,11 @@ public:
     void clear();
     bool empty() const { return indices.empty(); }
 
+    // Exchanges buffers with `o` (capacity travels with the data). Lets the
+    // Kernel hand a fresh frame to the host while the Rasterizer keeps the
+    // previous frame's reserved vectors for the next rebuild.
+    void swap(DrawList& o) noexcept;
+
     // Appends a quad (2 triangles). Starts a new cmd when clip/tex differ.
     void addQuad(const Vertex& v0, const Vertex& v1, const Vertex& v2,
                  const Vertex& v3, const Rect& clip, int texId);

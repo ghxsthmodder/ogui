@@ -88,6 +88,105 @@ void Rasterizer::drawRoundedRect(const Rect& r, const Color& col, float radius) 
     fillRoundedRect(r, radius, col, clip);
 }
 
+void Rasterizer::drawVerticalGradient(const Rect& r, const Color& top,
+                                      const Color& bottom) {
+    if (r.w <= 0.0f || r.h <= 0.0f) return;
+    Rect clip = currentClip(r);
+    if (clip.w <= 0.0f || clip.h <= 0.0f) return;
+
+    float x0 = r.x, y0 = r.y, x1 = r.x + r.w, y1 = r.y + r.h;
+    addQuad(mk(x0, y0, 0, 0, top), mk(x1, y0, 1, 0, top),
+            mk(x1, y1, 1, 1, bottom), mk(x0, y1, 0, 1, bottom),
+            clip, m_texId);
+}
+
+void Rasterizer::drawRoundedGradient(const Rect& r, const Color& top,
+                                     const Color& bottom, float radius) {
+    if (r.w <= 0.0f || r.h <= 0.0f) return;
+    if (radius <= 0.0f) { drawVerticalGradient(r, top, bottom); return; }
+    Rect clip = currentClip(r);
+    if (clip.w <= 0.0f || clip.h <= 0.0f) return;
+
+    const float y0 = r.y, y1 = r.y + r.h;
+    auto colAt = [&](float y) {
+        float t = (y - y0) / std::max(y1 - y0, 0.0001f);
+        return lerpColor(top, bottom, std::clamp(t, 0.0f, 1.0f));
+    };
+
+    float x0 = r.x, x1 = r.x + r.w;
+    float cx = (x0 + x1) * 0.5f, cy = (y0 + y1) * 0.5f;
+    float maxR = std::min(r.w, r.h) * 0.5f;
+    float rad = std::min(radius, maxR);
+
+    const int seg = std::max(3, curveSegments);
+    auto& fan = m_scratchV;
+    auto& idx = m_scratchI;
+    fan.clear();
+    idx.clear();
+    fan.reserve(static_cast<size_t>(seg) * 2 + 8);
+
+    auto emitCorner = [&](float ccx, float ccy, float a0, float a1) {
+        size_t start = fan.size();
+        for (int i = 0; i <= seg; ++i) {
+            float t = static_cast<float>(i) / static_cast<float>(seg);
+            float a = a0 + (a1 - a0) * t;
+            float px = ccx + std::cos(a) * rad;
+            float py = ccy + std::sin(a) * rad;
+            fan.push_back(mk(px, py, 0.5f, 0.5f, colAt(py)));
+        }
+        for (int i = 0; i < seg; ++i) {
+            idx.push_back(0);
+            idx.push_back(static_cast<uint32_t>(start + i));
+            idx.push_back(static_cast<uint32_t>(start + i + 1));
+        }
+    };
+
+    fan.push_back(mk(cx, cy, 0.5f, 0.5f, colAt(cy)));
+    const float PI = 3.14159265358979f;
+    emitCorner(x1 - rad, y0 + rad, -PI * 0.5f, 0.0f);
+    emitCorner(x1 - rad, y1 - rad, 0.0f, PI * 0.5f);
+    emitCorner(x0 + rad, y1 - rad, PI * 0.5f, PI);
+    emitCorner(x0 + rad, y0 + rad, PI, PI * 1.5f);
+
+    auto quad = [&](float ax, float ay, float bx, float by,
+                    float dx2, float dy2, float ex, float ey) {
+        addQuad(mk(ax, ay, 0, 0, colAt(ay)), mk(bx, by, 0, 0, colAt(by)),
+                mk(dx2, dy2, 0, 0, colAt(dy2)), mk(ex, ey, 0, 0, colAt(ey)),
+                clip, m_texId);
+    };
+    quad(x0 + rad, y0,     x1 - rad, y0,     x1 - rad, y0 + rad, x0 + rad, y0 + rad);
+    quad(x0 + rad, y1 - rad, x1 - rad, y1 - rad, x1 - rad, y1,   x0 + rad, y1);
+    quad(x0, y0 + rad,  x0 + rad, y0 + rad,  x0 + rad, y1 - rad, x0, y1 - rad);
+    quad(x1 - rad, y0 + rad, x1, y0 + rad,   x1, y1 - rad,       x1 - rad, y1 - rad);
+    quad(x0 + rad, y0 + rad, x1 - rad, y0 + rad, x1 - rad, y1 - rad, x0 + rad, y1 - rad);
+
+    m_list.addTriangles(fan.data(), fan.size(), idx.data(), idx.size(),
+                        clip, m_texId);
+}
+
+void Rasterizer::drawDropShadow(const Rect& r, float radius, const Color& col,
+                                float blur, float dx, float dy) {
+    if (blur <= 0.0f || col.a == 0 || r.w <= 0.0f || r.h <= 0.0f) return;
+    const Rect src{r.x + dx, r.y + dy, r.w, r.h};
+    // ~2 rings per blur pixel keeps the falloff smooth (no visible steps).
+    const int steps = std::clamp(static_cast<int>(blur * 2.0f + 0.5f), 4, 28);
+    const float sigma = blur * 0.55f;
+    // Outermost ring first; per-ring alpha follows a Gaussian in the distance
+    // from the shape edge, normalised so the stack composites to ~60% of col.
+    const float norm = 1.2f / static_cast<float>(steps);
+    for (int i = 0; i < steps; ++i) {
+        const float grow = blur * static_cast<float>(steps - i) /
+                           static_cast<float>(steps);
+        const float w = std::exp(-(grow * grow) / (2.0f * sigma * sigma));
+        Color c = col;
+        c.a = static_cast<uint8_t>(static_cast<float>(col.a) * w * norm + 0.5f);
+        if (c.a == 0) continue;
+        const Rect ring{src.x - grow, src.y - grow,
+                        src.w + grow * 2.0f, src.h + grow * 2.0f};
+        drawRoundedRect(ring, c, radius + grow);
+    }
+}
+
 void Rasterizer::drawRectUV(const Rect& r, const Rect& uv, const Color& col,
                             int texId) {
     if (r.w <= 0.0f || r.h <= 0.0f || col.a == 0) return;
@@ -111,12 +210,14 @@ void Rasterizer::fillRoundedRect(const Rect& r, float radius, const Color& col,
     // Two fans (one per horizontal half) keep the winding consistent for a
     // y-down coordinate system while covering the full rect.
     const int seg = std::max(3, curveSegments);
-    std::vector<Vertex> fan;
+    auto& fan = m_scratchV;
+    fan.clear();
     fan.reserve(static_cast<size_t>(seg) * 2 + 8);
 
     // Center vertex.
     Vertex center = mk(cx, cy, 0.5f, 0.5f, col);
-    std::vector<uint32_t> idx;
+    auto& idx = m_scratchI;
+    idx.clear();
 
     auto emitCorner = [&](float ccx, float ccy, float a0, float a1) {
         size_t start = fan.size();
@@ -195,8 +296,10 @@ void Rasterizer::strokeRoundedRect(const Rect& r, float outerRadius,
 
     // Corner rings: strip between outer and inner arc.
     const int seg = std::max(3, curveSegments);
-    std::vector<Vertex> verts;
-    std::vector<uint32_t> idx;
+    auto& verts = m_scratchV;
+    auto& idx = m_scratchI;
+    verts.clear();
+    idx.clear();
     verts.reserve(static_cast<size_t>(seg + 1) * 4 * 2);
 
     const float PI = 3.14159265358979f;
@@ -320,11 +423,13 @@ bool Rasterizer::drawTextShifted(const char* text, float x, float y, int /*size*
 
     const int texId = font.atlasTexture();
     float penX = drawX;
+    uint32_t prev = 0;
 
     const unsigned char* p = reinterpret_cast<const unsigned char*>(text);
     while (*p) {
         uint32_t ch = utf8Next(p);
         const GlyphInfo& gi = font.glyph(ch);
+        if (prev) penX += static_cast<float>(font.kern(prev, ch));
 
         if (gi.width > 0 && gi.height > 0) {
             Rect uv = font.glyphUV(ch);
@@ -340,6 +445,7 @@ bool Rasterizer::drawTextShifted(const char* text, float x, float y, int /*size*
             }
         }
         penX += static_cast<float>(gi.advanceX);
+        prev = ch;
     }
     return true;
 }

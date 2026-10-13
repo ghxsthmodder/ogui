@@ -1,17 +1,19 @@
 <screen id="containers">
-  <panel id="bg" x="0" y="0" w="100%" h="100%" bg="#161616"/>
+  <panel id="bg" x="0" y="0" w="100%" h="100%" bg="@screen"/>
   <label id="lbl_group" x="1.25%" y="52" w="97.5%" h="20" text="Containers: janela, grupo, splitter, scroll e abas"
          font sans 16 color="#66ee66"/>
 
   <window id="win_demo" x="1.25%" y="84" w="45%" h="25%" title="Janela"
-          bg="#202020" border="#4488ff" color="#ccc">
+          bg="#202020" border="@accent" color="@text"
+          gradient="#141414" shadow="8,4" shadowcolor="#000000">
     <label x="10" y="34" w="90%" h="20" text="Filhos dentro de uma Window."/>
-    <button x="10" y="62" w="120" h="28" text="Ok" bg="#4488ff" color="#fff" radius="6"/>
+    <button x="10" y="62" w="120" h="28" text="Ok" bg="@accent" color="#fff" radius="6"/>
     <checkbox x="150" y="64" w="120" h="22" text="Opcao" checked="true"/>
+    <panel x="200" y="58" w="100" h="34" bg="@surfaceHi" radius="6" shadow="6,2"/>
   </window>
 
   <group id="gp_demo" name="Grupo" x="48.75%" y="84" w="50%" h="25%"
-         bg="#141414" border="#4488ff">
+         bg="@window" border="@accent">
     <label x="12" y="26" w="90%" h="20" text="Um Group com borda e titulo."/>
     <row x="12" y="56" w="90%" h="24">
       <radiobutton text="1" x="0" y="0" w="40" h="24" group="g2" checked="true"/>
@@ -25,15 +27,15 @@
                min="0" max="100" low="20" high="80" color="#66ee66"/>
 
   <label x="48.75%" y="41.3%" w="50%" h="18" text="Splitter (arraste a barra azul)"/>
-  <splitter id="sp_split" x="48.75%" y="45%" w="50%" h="25%" split="0.5" handlecolor="#4488ff">
+  <splitter id="sp_split" x="48.75%" y="45%" w="50%" h="25%" split="0.5" handlecolor="@accent">
     <panel x="0" y="0" w="200" h="150" bg="#22344a" border="#4a6c96"/>
     <panel x="0" y="0" w="200" h="150" bg="#3d2246" border="#7a4a96"/>
   </splitter>
 
   <label x="1.25%" y="50%" w="45%" h="18" text="ScrollView (role a roda)"/>
   <scrollview id="sv_demo" x="1.25%" y="53.7%" w="45%" h="25%" scrollstep="30"
-              bg="#111" border="#4488ff">
-    <label x="8" y="8" w="91%" h="360" wrap="true" color="#ccc"
+              bg="@window" border="@accent">
+    <label x="8" y="8" w="91%" h="360" wrap="true" color="@text"
            text="Um paragrafo comprido que ultrapassa a altura da viewport, por isso mora dentro de um ScrollView. Continue rolando para ver o resto do texto aparecer linha a linha conforme o conteudo se desloca para cima."/>
   </scrollview>
 
@@ -44,7 +46,7 @@
     </tab>
     <tab label="Aba 2">
       <label x="12" y="8" w="95%" h="20" text="Conteudo da segunda aba."/>
-      <button x="12" y="34" w="120" h="26" text="Botao" bg="#555" color="#fff" radius="6"/>
+      <button x="12" y="34" w="120" h="26" text="Botao" bg="@borderStrong" color="#fff" radius="6"/>
     </tab>
     <tab label="Texturas">
       <label x="12" y="8" w="95%" h="20" text="Pagina escondida no menu de overflow (...)."/>

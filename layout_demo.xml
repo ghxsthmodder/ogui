@@ -1,5 +1,5 @@
 <screen id="basics">
-  <panel id="bg" x="0" y="0" w="100%" h="100%" bg="#161616"/>
+  <panel id="bg" x="0" y="0" w="100%" h="100%" bg="@screen"/>
   <!-- The gallery injects a Prev/Title/Next nav bar across the top; content
        starts at y=52 so nothing hides behind it. -->
   <label id="lbl_group" x="1.25%" y="52" w="97.5%" h="20" text="Basico: controles comuns"
@@ -7,14 +7,14 @@
 
   <row id="r_btns" x="1.25%" y="82" w="92.5%" h="40">
     <button id="btn_start" onclick="onStart" text="Iniciar" x="0" y="0" w="200" h="40"
-            bg="#4488ff" color="#ffffff" radius="6" tooltip="Dispara onStart"/>
+            bg="@accent" color="#ffffff" radius="6" tooltip="Dispara onStart"/>
     <button id="btn_load" onclick="onLoad" text="Carregar" x="0" y="0" w="200" h="40"
-            bg="#555" color="#fff" radius="6" tooltip="Dispara onLoad"/>
+            bg="@borderStrong" color="#fff" radius="6" tooltip="Dispara onLoad"/>
   </row>
 
   <textinput id="txt_log" x="1.25%" y="130" w="92.5%" h="28"
              placeholder="Digite algo..."
-             bg="#111" color="#ccc" border="#4488ff" radius="6"/>
+             bg="@window" color="@text" border="@accent" radius="6"/>
   <label id="lbl_status" x="1.25%" y="166" w="92.5%" h="20" text="Boas-vindas!"
          font sans 16 color="#66ee66"/>
 
@@ -35,9 +35,9 @@
   <label id="lbl_img_t" x="1.25%" y="316" w="92.5%" h="16"
          text="Image: ajustado (esq.), tileado (dir.)"/>
   <image id="img_demo" src="assets/checker.png" x="1.25%" y="336" w="180" h="90"
-         border="#4488ff"/>
+         border="@accent"/>
   <image id="img_tile" src="assets/checker.png" x="25%" y="336" w="300" h="90"
-         tile="true" border="#4488ff"/>
+         tile="true" border="@accent"/>
   <label id="lbl_img" x="63.75%" y="336" w="35%" h="90" wrap="true"
          text="src aponta para o arquivo RGBA (PNG via stb). tile repete a textura; sem tile ela e esticada ao bounds."/>
 </screen>

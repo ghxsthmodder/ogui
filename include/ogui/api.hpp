@@ -113,4 +113,13 @@ inline Color withAlpha(const Color& c, uint8_t a) {
     return Color{c.r, c.g, c.b, a};
 }
 
+// Blend two colours, t in [0,1] (animated state transitions).
+inline Color lerpColor(const Color& a, const Color& b, float t) {
+    auto mix = [t](uint8_t x, uint8_t y) {
+        return static_cast<uint8_t>(static_cast<float>(x) +
+                                    (static_cast<float>(y) - static_cast<float>(x)) * t + 0.5f);
+    };
+    return Color{mix(a.r, b.r), mix(a.g, b.g), mix(a.b, b.b), mix(a.a, b.a)};
+}
+
 } // namespace ogui

@@ -9,6 +9,12 @@ void DrawList::clear() {
     cmds.clear();
 }
 
+void DrawList::swap(DrawList& o) noexcept {
+    vertices.swap(o.vertices);
+    indices.swap(o.indices);
+    cmds.swap(o.cmds);
+}
+
 DrawCmd* DrawList::currentCmd(const Rect& clip, int texId) {
     if (!cmds.empty()) {
         DrawCmd& last = cmds.back();

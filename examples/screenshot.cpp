@@ -97,6 +97,11 @@ int main(int argc, char** argv) {
     const int outH = argc > 3 ? std::atoi(argv[3]) : 600;
     const int ssaa = 2;
 
+    // Manifest theme first, so an explicit "light" arg below overrides it.
+    gallery::applyManifestTheme();
+    for (int i = 1; i < argc; ++i)
+        if (std::string(argv[i]) == "light") ogui::setActiveTheme(ogui::lightTheme());
+
     // ---- 1. gallery + kernel ---------------------------------------------
     // An optional 4th arg selects which grouped screen to render (default 0).
     int screenIndex = argc > 4 ? std::atoi(argv[4]) : 0;
@@ -113,7 +118,8 @@ int main(int argc, char** argv) {
     ogui::Kernel kernel;
     kernel.init();
     int navIndex = 0;
-    gallery::install(kernel, g, navIndex, screenIndex);
+    gallery::install(kernel, g, navIndex, screenIndex,
+                     static_cast<float>(outW), static_cast<float>(outH));
 
     kernel.bind("onStart", [&] {
         kernel.setText("lbl_status", "Iniciar pressionado!");
@@ -294,9 +300,13 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // Sanity: the bg panel must cover the whole frame.
+    // Sanity: the bg panel must cover the whole frame; compare against the
+    // active theme so a light-theme render passes too.
     const uint8_t* corner = out.at(2, 2);
-    const bool bgOk = corner[0] > 8 && corner[0] < 40;
+    const ogui::Color bgWant = ogui::palette().screen;
+    const auto near = [](int a, int b) { return a > b - 12 && a < b + 12; };
+    const bool bgOk = near(corner[0], bgWant.r) && near(corner[1], bgWant.g) &&
+                      near(corner[2], bgWant.b);
 
     std::printf("screenshot: %s (%dx%d, ssaa %dx)\n", outPath.c_str(), out.w,
                 out.h, ssaa);

@@ -63,6 +63,11 @@ add_library(ogui STATIC
     src/imagemanager.cpp
     src/widget.cpp
     src/widgets.cpp
+    src/widgets_text.cpp
+    src/widgets_container.cpp
+    src/widgets_input.cpp
+    src/widgets_list.cpp
+    src/widgets_editor.cpp
     src/clipboard.cpp
     src/software.cpp
     src/kernel.cpp
@@ -131,6 +136,12 @@ if(OGUI_BUILD_TESTS)
     target_compile_definitions(ogui_kernel_test PRIVATE
         OGUI_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets")
 
+    # Every manifest screen must parse and keep the ids the gallery binds to.
+    add_executable(ogui_screens_test tests/screens_test.cpp)
+    target_link_libraries(ogui_screens_test PRIVATE ogui)
+    target_compile_definitions(ogui_screens_test PRIVATE
+        OGUI_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+
     # Golden-image test: renders a fixed layout and diffs it against
     # tests/golden/basic.png (regenerate with OGUI_UPDATE_GOLDEN=1).
     if(OGUI_USE_STATIC_STB)
@@ -145,6 +156,7 @@ if(OGUI_BUILD_TESTS)
     add_test(NAME parser COMMAND ogui_parser_test)
     add_test(NAME drawlist COMMAND ogui_drawlist_test)
     add_test(NAME kernel COMMAND ogui_kernel_test)
+    add_test(NAME screens COMMAND ogui_screens_test)
     if(TARGET ogui_golden_test)
         add_test(NAME golden COMMAND ogui_golden_test)
     endif()
@@ -165,7 +177,7 @@ install(TARGETS ogui
 
 # Examples and tests are only installed when explicitly built, and the
 # targets may not exist in a partial build configuration.
-foreach(t ogui_demo ogui_demo_win32 ogui_screenshot ogui_parser_test ogui_drawlist_test ogui_kernel_test ogui_golden_test)
+foreach(t ogui_demo ogui_demo_win32 ogui_screenshot ogui_parser_test ogui_drawlist_test ogui_kernel_test ogui_screens_test ogui_golden_test)
     if(TARGET ${t})
         install(TARGETS ${t} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
     endif()

@@ -1,0 +1,35 @@
+<screen id="filetree">
+  <panel id="bg" x="0" y="0" w="100%" h="100%" bg="@screen"/>
+  <label id="lbl_title" x="1.25%" y="52" w="97.5%" h="20"
+         text="Arvore de arquivos: icones, checkboxes e linhas-guia"
+         font sans 16 color="#66ee66"/>
+
+  <label x="1.25%" y="84" w="45%" h="18" text="Diretorio real (dir=.): pastas carregam ao expandir"
+         font sans 12 color="@dim"/>
+  <tree id="tr_disk" x="1.25%" y="110" w="45%" h="72%" autoheight="false"
+        rowheight="24" icons="true" guides="true"
+        bg="@window" border="@border" dir=".">
+  </tree>
+
+  <label id="lbl_tree" x="48.75%" y="84" w="50%" h="18" text="2 itens marcados"
+         font sans 12 color="@dim"/>
+  <tree id="tr_files" x="48.75%" y="110" w="50%" h="72%" autoheight="false"
+        rowheight="24" icons="true" checks="true" guides="true"
+        bg="@window" border="@accent" bind="tree_change">
+    <treeitem label="temp_test_backup" folder="true" expanded="true">
+      <treeitem label="ProjTest1.sln" file="true" checked="true"/>
+      <treeitem label="ProjTest3.zip" file="true"/>
+      <treeitem label="DisplayDirectoryTreeview" folder="true" expanded="true">
+        <treeitem label="LoadDirectoryPrev.cs" file="true" checked="true"/>
+        <treeitem label="ProjTest1.csproj" file="true"/>
+        <treeitem label="source.extension.vsixmanifest" file="true"/>
+      </treeitem>
+      <treeitem label="bin" folder="true"/>
+      <treeitem label="obj" folder="true"/>
+    </treeitem>
+    <treeitem label="docs" folder="true" expanded="true">
+      <treeitem label="file-tree-view.png" file="true"/>
+      <treeitem label="README.md" file="true"/>
+    </treeitem>
+  </tree>
+</screen>

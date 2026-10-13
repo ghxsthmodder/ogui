@@ -22,12 +22,21 @@ void sampleBilinear(const TexInfo& t, float u, float v, float out[4]) {
 
     auto fetch = [&](int x, int y) {
         return t.data + static_cast<size_t>(y) * t.rowBytes +
-               static_cast<size_t>(x) * 4;
+               static_cast<size_t>(x) * (t.alphaOnly ? 1 : 4);
     };
     const uint8_t* p00 = fetch(x0, y0);
     const uint8_t* p10 = fetch(x1, y0);
     const uint8_t* p01 = fetch(x0, y1);
     const uint8_t* p11 = fetch(x1, y1);
+
+    if (t.alphaOnly) {
+        // Single channel: white with interpolated coverage as alpha.
+        const float top = p00[0] + (p10[0] - p00[0]) * tx;
+        const float bot = p01[0] + (p11[0] - p01[0]) * tx;
+        out[0] = out[1] = out[2] = 1.0f;
+        out[3] = (top + (bot - top) * ty) / 255.0f;
+        return;
+    }
 
     for (int c = 0; c < 4; ++c) {
         const float top = p00[c] + (p10[c] - p00[c]) * tx;
@@ -144,7 +153,8 @@ void SoftwareRenderer::syncFonts() {
     FontManager::instance().forEach([this](Font& f) {
         if (!f.loaded() || !f.atlas()) return;
         m_tex[f.atlasTexture()] =
-            TexInfo{f.atlas(), f.atlasWidth(), f.atlasHeight(), f.atlasRowBytes()};
+            TexInfo{f.atlas(), f.atlasWidth(), f.atlasHeight(),
+                    f.atlasRowBytes(), true};
     });
 }
 

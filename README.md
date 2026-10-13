@@ -151,7 +151,7 @@ Which screens exist is **data, not code**: `manifest.xml` in the working
 directory lists them in navigation order —
 
 ```xml
-<manifest>
+<manifest theme="dark">
   <screen title="Basico" path="layout_demo.xml"/>
   <screen title="Texto"  path="layouts/layout_text.xml"/>
   ...
@@ -159,13 +159,17 @@ directory lists them in navigation order —
 ```
 
 — so adding or removing a screen needs no recompile (a built-in list is the
-fallback when the file is missing). `examples/gallery.hpp` parses it with the
+fallback when the file is missing). `theme="dark|light"` (`escuro`/`claro`
+also accepted) picks the initial palette; the nav bar toggle still flips it
+at runtime. `examples/gallery.hpp` parses it with the
 library's own `XmlParser` (`<manifest>` is a data-only root tag; every widget
 keeps the attributes it was authored with in `Widget::rawAttributes()`),
-injects a shared `< Voltar` / `Avancar >` nav bar into each root and swaps
+injects a shared `< Voltar` / `Avancar >` nav bar (plus a `Tema claro`
+switch that flips `darkTheme()`/`lightTheme()` and re-parses every screen)
+into each root and swaps
 screens with `Kernel::switchScreen` (bindings key off widget ids, so the nav
-works on every screen). `ogui_screenshot out.png W H [screenIndex]` renders
-any one of those screens headless.
+works on every screen). `ogui_screenshot out.png W H [screenIndex] [light]`
+renders any one of those screens headless, optionally with the light theme.
 
 ## Animations
 
@@ -222,8 +226,37 @@ borders accent and the arrow flips while open, and text inputs/spinboxes get a
 | `visible` | `true/false` — an invisible widget (and its subtree) is skipped by drawing *and* input |
 | `style` | name of a `<style>` declared earlier in the document |
 | `bg` `color` `border` `bordercolor` `borderwidth` `radius` | colors/metrics |
+| `shadow` | soft drop shadow: `blur` or `blur,dy` or `blur,dx,dy` (pixels) |
+| `shadowcolor` | shadow color (default `#000000`), e.g. `shadowcolor="#000000"` |
+| `gradient` | vertical background gradient end color: `bg` stays the top color |
 | `padding` `margin` | layout knobs (`<column>` uses both) |
 | `font` `fontsize` | `font="sans 20"` or the legacy `font sans 20 color "#66ee66"` |
+
+### Theme & palette
+
+Widget chrome resolves through a `Palette` token set (surface, border, text,
+accent, …) instead of fixed colors: pass a `Theme` to `XmlParser::parse/parseFile`
+and it becomes the active theme (`ogui::setActiveTheme`), so the whole tree —
+including tooltips, toasts and popups — picks up the new look. The theme's
+`defaultStyle` seeds every widget before its own attributes are applied.
+
+Any colour attribute also accepts `@token` instead of a hex literal — the
+token is resolved against the active palette at parse time:
+
+```xml
+<panel id="bg" x="0" y="0" w="100%" h="100%" bg="@screen"/>
+<label text="Title" color="@textBright"/>
+```
+
+Tokens: `window screen surface surfaceHi surfaceLo border borderStrong track
+guide text textBright white dim focus accent danger info warn error overlay
+shadow` (case-insensitive; unknown names fall back to `window`).
+
+Two presets ship with the library: `ogui::darkTheme()` (the default palette)
+and `ogui::lightTheme()`. Because `@tokens` and widget defaults are resolved
+while parsing, switching themes at runtime means re-installing the preset and
+re-parsing the layouts; the demo's nav bar does exactly that with its
+"Tema claro" toggle (binding `navTheme`).
 
 ### Relative geometry (resize / maximize)
 
@@ -269,7 +302,7 @@ theme default.
 | Tag | Purpose | Extra attributes |
 | --- | --- | --- |
 | `screen` | document root (one per file) | — |
-| `manifest` | data-only root listing gallery screens (`<screen title path/>` children) | — |
+| `manifest` | data-only root listing gallery screens (`<screen title path/>` children) | `theme` (`dark`/`light`, initial palette) |
 | `style` | named style definition | `name` |
 | `panel` | plain rectangle container | — |
 | `window` | bordered panel with a title bar (children are offset by it) | `title`, `title_visible` |
@@ -286,9 +319,9 @@ theme default.
 | `th` | a `table` column | `label` / `text`, `w` (0 = share leftover width), `resizable`, `editable`, `scrollingtext` (`automatic` / `onmouseenter`) |
 | `tr` | a `table` row: cells from `cells="a;b"` or nested `<cell>` children | `cells` (`;`-separated), `value`, `editablecells` (`;`-separated column labels), `resizable`, `scrollingtext` |
 | `cell` | a `tr` cell written as an element (`<cell>text</cell>`) | text content; `editable`, `resizable`, `scrollingtext` (override the column) |
-| `tree` | hierarchical tree: triangle toggles expansion (rows compress/slide instead of blinking away), click selects, Left/Right collapse/expand; auto-shrinks to its visible rows when collapsed. `icons`/`checks`/`guides` turn it into a file-tree view (folder/file glyphs, a per-node checkbox that fires the widget `bind()`, and dotted parent connectors) | `selected`, `rowheight`, `indent`, `autoheight` (default true), `accent`, `highlight`, `icons`, `checks`, `guides` + nested `<treeitem>` children |
+| `tree` | hierarchical tree: triangle toggles expansion (rows compress/slide instead of blinking away), click selects, Left/Right collapse/expand; auto-shrinks to its visible rows when collapsed. `icons`/`checks`/`guides` turn it into a file-tree view (folder/file glyphs, a per-node checkbox that fires the widget `bind()`, and dotted parent connectors). With `dir`, the tree mirrors a real filesystem folder: children are read lazily on first expand (dotfiles hidden, dirs first), `<treeitem>` children are ignored | `selected`, `rowheight`, `indent`, `autoheight` (default true), `accent`, `highlight`, `icons`, `checks`, `guides`, `dir` + nested `<treeitem>` children |
 | `treeitem` | a `tree` node (may nest further `<treeitem>`s) | `label` / `text`, `value`, `expanded`, `folder`/`file`, `checked` |
-| `toggleswitch` / `toggle` | compact ON/OFF pill for a binary mode: click slides the knob and flips the highlighted half, firing `onChanged(bool)` and the widget `bind()` | `checked`/`on`, `text` (trailing label), `onlabel`/`offlabel` |
+| `toggleswitch` / `toggle` | compact pill switch for a binary mode: click slides the knob over an accent-tinted track, firing `onChanged(bool)` and the widget `bind()` | `checked`/`on`, `text` (trailing label) |
 | `checkbox` | toggle + label | `text`, `checked` |
 | `radiobutton` | radio toggle in group | `text`, `checked`, `group` |
 | `combobox` | dropdown: current value shown, popup lists `<option>` children (keyboard Up/Down/Enter, autoclose on outside press) | `selected` (index or `label=`), `rowheight`, `panel` (popup bg), `highlight`, `highlighttext`, `arrow` |
@@ -323,6 +356,12 @@ XML element: `Kernel::showToast("saved", Kernel::ToastKind::Info)` stacks a
 banner bottom-right that fades out after ~3.5 s (`Info` / `Warn` / `Error`
 pick the accent bar colour). `Modal` open state is driven from C++
 (`Modal::setOpen`) or a `bind()` handler.
+
+The gallery's **FileTree** screen (`layouts/layout_filetree.xml`) shows the
+tree as a file browser: a `dir="."` tree mirroring the real folder next to a
+static tree with per-node checkboxes feeding a `bind()` counter.
+
+![File tree view](docs/file-tree-view.png)
 
 ## Fonts
 

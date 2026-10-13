@@ -75,7 +75,7 @@ private:
     std::string m_text;
     std::string m_fontFamily;
     int m_fontSize = 14;
-    Color m_textColor{ogui::hexColor("#ccc")};
+    Color m_textColor{ogui::palette().text};
     Align m_hAlign = Align::Left;
     VertAlign m_vAlign = VertAlign::Top;
     bool m_wrap = false;
@@ -112,8 +112,8 @@ private:
     std::string m_text;
     std::string m_fontFamily;
     int m_fontSize = 14;
-    Color m_textColor{ogui::hexColor("#ffffff")};
-    Color m_bgColor{ogui::hexColor("#4488ff")};
+    Color m_textColor{ogui::palette().white};
+    Color m_bgColor{ogui::palette().accent};
     Color m_borderColor{ogui::hexColor("#3366cc")};
     float m_borderWidth = 1.0f;
     float m_radius = 4.0f;
@@ -161,8 +161,8 @@ public:
     virtual void onDraw(Rasterizer& r) const override;
 
 protected:
-    Color m_bgColor{ogui::hexColor("#111")};
-    Color m_borderColor{ogui::hexColor("#4488ff")};
+    Color m_bgColor{ogui::palette().window};
+    Color m_borderColor{ogui::palette().accent};
     float m_borderWidth = 0.0f;
     float m_radius = 0.0f;
 };
@@ -182,6 +182,14 @@ public:
 
     // Positions children below the title bar.
     virtual void layout(float parentWidth, float parentHeight) override;
+    // Children never paint past the window body: clip to the content area.
+    virtual bool clipsChildren(Rect& outRect) const override;
+
+    // When the children overflow the body, the wheel scrolls them back into
+    // view (the delta rides on childOffset(), like ScrollView).
+    virtual Offset2D childOffset() const override { return Offset2D{0.0f, -m_scrollY}; }
+    virtual bool wantsScroll() const override { return true; }
+    virtual void onPointerScroll(float, float dy) override;
 
     virtual void onDraw(Rasterizer& r) const override;
 
@@ -194,6 +202,9 @@ private:
     // before computing the new one.
     float m_childrenOffsetY = 0.0f;
     bool m_dragging = false;
+    float m_scrollY = 0.0f;     // wheel scroll of an overflowing body
+    float m_overflow = 0.0f;    // px the children extend past the body
+    float m_scrollStep = 24.0f;
 };
 
 // ------------------------------------------------------------------
@@ -243,8 +254,8 @@ private:
     Offset2D m_offset;      // scroll delta (<= 0 in both axes)
     float m_step = 40.0f;   // pixels per wheel notch
     float m_borderWidth = 0.0f;
-    Color m_bgColor{ogui::hexColor("#111")};
-    Color m_borderColor{ogui::hexColor("#4488ff")};
+    Color m_bgColor{ogui::palette().window};
+    Color m_borderColor{ogui::palette().accent};
 };
 
 // ------------------------------------------------------------------
@@ -307,9 +318,9 @@ protected:
 
     std::string m_text;
     std::string m_placeholder;
-    Color m_bgColor{ogui::hexColor("#111")};
-    Color m_fgColor{ogui::hexColor("#ccc")};
-    Color m_borderColor{ogui::hexColor("#4488ff")};
+    Color m_bgColor{ogui::palette().window};
+    Color m_fgColor{ogui::palette().text};
+    Color m_borderColor{ogui::palette().accent};
     float m_borderWidth = 1.0f;
     float m_radius = 4.0f;
     int m_fontSize = 14;
@@ -391,8 +402,8 @@ public:
 
 private:
     std::string m_groupName;
-    Color m_bgColor{ogui::hexColor("#111")};
-    Color m_borderColor{ogui::hexColor("#4488ff")};
+    Color m_bgColor{ogui::palette().window};
+    Color m_borderColor{ogui::palette().accent};
     float m_borderWidth = 0.0f;
 };
 
@@ -431,9 +442,9 @@ private:
     std::string m_text;
     std::string m_fontFamily;
     int m_fontSize = 14;
-    Color m_textColor{ogui::hexColor("#ccc")};
-    Color m_boxColor{ogui::hexColor("#4488ff")};
-    Color m_checkColor{ogui::hexColor("#4488ff")};
+    Color m_textColor{ogui::palette().text};
+    Color m_boxColor{ogui::palette().accent};
+    Color m_checkColor{ogui::palette().accent};
     bool m_checked = false;
     ValueCallback m_onChanged;
 };
@@ -455,7 +466,7 @@ public:
 
 private:
     float m_thickness = 1.0f;
-    Color m_lineColor{ogui::hexColor("#3a3a3a")};
+    Color m_lineColor{ogui::palette().border};
 };
 
 // ------------------------------------------------------------------
@@ -480,6 +491,9 @@ public:
 
     virtual void onTick(float dt) override;
     virtual void onDraw(Rasterizer& r) const override;
+    virtual bool isAnimating() const override {
+        return m_indeterminate || Widget::isAnimating();
+    }
 
 private:
     float m_value = 0.0f;
@@ -487,9 +501,9 @@ private:
     float m_borderWidth = 1.0f;
     bool m_indeterminate = false;
     float m_phase = 0.0f;
-    Color m_bgColor{ogui::hexColor("#111")};
-    Color m_barColor{ogui::hexColor("#4488ff")};
-    Color m_borderColor{ogui::hexColor("#3a3a3a")};
+    Color m_bgColor{ogui::palette().window};
+    Color m_barColor{ogui::palette().accent};
+    Color m_borderColor{ogui::palette().border};
 };
 
 // ------------------------------------------------------------------
@@ -532,9 +546,9 @@ private:
     bool m_dragging = false;
     float m_trackThickness = 4.0f;
     float m_thumbWidth = 12.0f;
-    Color m_trackColor{ogui::hexColor("#3a3a3a")};
-    Color m_barColor{ogui::hexColor("#4488ff")};
-    Color m_thumbColor{ogui::hexColor("#cccccc")};
+    Color m_trackColor{ogui::palette().border};
+    Color m_barColor{ogui::palette().accent};
+    Color m_thumbColor{ogui::palette().text};
     ValueCallback m_onChanged;
 };
 
@@ -587,10 +601,10 @@ private:
     bool m_wrap = false;
     std::string m_prefix;
     std::string m_suffix;
-    Color m_bgColor{ogui::hexColor("#111")};
-    Color m_textColor{ogui::hexColor("#ccc")};
-    Color m_buttonColor{ogui::hexColor("#333")};
-    Color m_borderColor{ogui::hexColor("#4488ff")};
+    Color m_bgColor{ogui::palette().window};
+    Color m_textColor{ogui::palette().text};
+    Color m_buttonColor{ogui::palette().track};
+    Color m_borderColor{ogui::palette().accent};
     float m_radius = 4.0f;
     std::string m_fontFam = "sans";
     int m_fontSize = 14;
@@ -637,10 +651,10 @@ private:
     std::vector<std::string> m_options;
     int m_index = 0;
     bool m_wrap = true;
-    Color m_bgColor{ogui::hexColor("#111")};
-    Color m_textColor{ogui::hexColor("#ccc")};
-    Color m_buttonColor{ogui::hexColor("#333")};
-    Color m_borderColor{ogui::hexColor("#4488ff")};
+    Color m_bgColor{ogui::palette().window};
+    Color m_textColor{ogui::palette().text};
+    Color m_buttonColor{ogui::palette().track};
+    Color m_borderColor{ogui::palette().accent};
     float m_radius = 4.0f;
     std::string m_fontFam = "sans";
     int m_fontSize = 14;
@@ -690,9 +704,9 @@ private:
     int m_drag = -1;                             // 0 = low, 1 = high, -1 none
     float m_trackThickness = 4.0f;
     float m_thumbWidth = 12.0f;
-    Color m_trackColor{ogui::hexColor("#3a3a3a")};
-    Color m_barColor{ogui::hexColor("#4488ff")};
-    Color m_thumbColor{ogui::hexColor("#cccccc")};
+    Color m_trackColor{ogui::palette().border};
+    Color m_barColor{ogui::palette().accent};
+    Color m_thumbColor{ogui::palette().text};
     RangeCallback m_onChanged;
 };
 
@@ -724,7 +738,7 @@ private:
     float m_split = 0.5f;        // fraction of the track before the divider
     float m_handle = 6.0f;       // divider thickness in pixels
     bool m_dragging = false;
-    Color m_handleColor{ogui::hexColor("#4488ff")};
+    Color m_handleColor{ogui::palette().accent};
 };
 
 // ------------------------------------------------------------------
@@ -788,6 +802,7 @@ public:
     virtual void onKeyDown(KeyCode key, uint32_t mods) override;
     virtual void onDraw(Rasterizer& r) const override;
     virtual void onPopupDismissed() override { if (m_onDismiss) m_onDismiss(); }
+    virtual bool isAnimating() const override { return m_fade.running(); }
 
 private:
     int rowAt(float localY) const;
@@ -799,11 +814,11 @@ private:
     int m_selected = -1;
     float m_rowH = 24.0f;
     float m_textPad = 8.0f;
-    Color m_panel{ogui::hexColor("#202428")};
-    Color m_border{ogui::hexColor("#4488ff")};
-    Color m_rowText{ogui::hexColor("#cccccc")};
+    Color m_panel{ogui::palette().surface};
+    Color m_border{ogui::palette().accent};
+    Color m_rowText{ogui::palette().text};
     Color m_highlight{ogui::hexColor("#334455")};
-    Color m_highlightText{ogui::hexColor("#ffffff")};
+    Color m_highlightText{ogui::palette().white};
     Tween m_fade;
     SelectCallback m_onSelect;
     std::function<void()> m_onDismiss;
@@ -866,14 +881,14 @@ private:
     bool m_resolved = false;
     float m_rowH = 24.0f;
     float m_arrowWidth = 24.0f;
-    Color m_bg{ogui::hexColor("#111")};
-    Color m_border{ogui::hexColor("#4488ff")};
-    Color m_text{ogui::hexColor("#cccccc")};
-    Color m_arrow{ogui::hexColor("#4488ff")};
+    Color m_bg{ogui::palette().window};
+    Color m_border{ogui::palette().accent};
+    Color m_text{ogui::palette().text};
+    Color m_arrow{ogui::palette().accent};
     Color m_highlight{ogui::hexColor("#334455")};
-    Color m_highlightText{ogui::hexColor("#ffffff")};
-    Color m_panel{ogui::hexColor("#202428")};
-    Color m_popupBorder{ogui::hexColor("#4488ff")};
+    Color m_highlightText{ogui::palette().white};
+    Color m_panel{ogui::palette().surface};
+    Color m_popupBorder{ogui::palette().accent};
     bool m_open = false;
     std::shared_ptr<ComboPopup> m_popup;
     ChangedCallback m_onChanged;
@@ -946,13 +961,13 @@ private:
     float m_cellPad = 10.0f;
     std::string m_fontFamily = "sans";
     int m_fontSize = 13;
-    Color m_headerColor{ogui::hexColor("#1a1a1a")};
+    Color m_headerColor{ogui::palette().surface};
     Color m_tabColor{ogui::hexColor("#2a2a2a")};
     Color m_activeColor{ogui::hexColor("#161616")};
-    Color m_accentColor{ogui::hexColor("#4488ff")};
+    Color m_accentColor{ogui::palette().accent};
     Color m_contentColor{ogui::hexColor("#161616")};
     Color m_textColor{ogui::hexColor("#999999")};
-    Color m_borderColor{ogui::hexColor("#4488ff")};
+    Color m_borderColor{ogui::palette().accent};
     float m_borderWidth = 1.0f;
     ChangedCallback m_onChanged;
     std::shared_ptr<MenuPopup> m_overflow;
@@ -997,9 +1012,9 @@ private:
     std::string m_group;
     int m_fontSize = 13;
     std::string m_fontFamily = "sans";
-    Color m_textColor{ogui::hexColor("#cccccc")};
-    Color m_dotColor{ogui::hexColor("#4488ff")};
-    Color m_circleColor{ogui::hexColor("#555555")};
+    Color m_textColor{ogui::palette().text};
+    Color m_dotColor{ogui::palette().accent};
+    Color m_circleColor{ogui::palette().borderStrong};
     ChangedCallback m_onChanged;
 };
 
@@ -1123,9 +1138,9 @@ private:
     int m_wantedSelected = -1;         // selected= attr applied on rebuild
     int m_hover = -1;
     bool m_resolved = false;
-    Color m_bg{ogui::hexColor("#111")};
-    Color m_border{ogui::hexColor("#4488ff")};
-    Color m_text{ogui::hexColor("#cccccc")};
+    Color m_bg{ogui::palette().window};
+    Color m_border{ogui::palette().accent};
+    Color m_text{ogui::palette().text};
     Color m_highlight{ogui::hexColor("#334455")};
     ChangedCallback m_onChanged;
 };
@@ -1292,6 +1307,11 @@ public:
     virtual void onFocus(bool focused) override;
     virtual void onTick(float dt) override;
     virtual void onDraw(Rasterizer& r) const override;
+    // The marquee clock only matters while a cell is actually scrolling;
+    // onDraw records that in m_marqueeActive.
+    virtual bool isAnimating() const override {
+        return m_marqueeActive || Widget::isAnimating();
+    }
     virtual bool wantsScroll() const override { return true; }
 
 private:
@@ -1341,11 +1361,12 @@ private:
 
     // Marquee clock for scrollingText.
     float m_phase = 0.0f;
+    mutable bool m_marqueeActive = false;  // set by onDraw when a cell scrolls
 
-    Color m_bg{ogui::hexColor("#111")};
-    Color m_headerBg{ogui::hexColor("#222222")};
-    Color m_border{ogui::hexColor("#4488ff")};
-    Color m_text{ogui::hexColor("#cccccc")};
+    Color m_bg{ogui::palette().window};
+    Color m_headerBg{ogui::palette().surface};
+    Color m_border{ogui::palette().accent};
+    Color m_text{ogui::palette().text};
     Color m_highlight{ogui::hexColor("#334455")};
     ChangedCallback m_onChanged;
 };
@@ -1371,6 +1392,12 @@ public:
     // Checkbox state, shown when the parent tree enables checks.
     void setChecked(bool c) { m_checked = c; }
     bool checked() const { return m_checked; }
+    // Backing filesystem path (set by TreeView::loadDirectory). A folder
+    // with an unloaded path fetches its entries lazily on first expand.
+    void setPath(const std::string& p) { m_path = p; }
+    const std::string& path() const { return m_path; }
+    bool childrenLoaded() const { return m_childrenLoaded; }
+    void setChildrenLoaded(bool v) { m_childrenLoaded = v; }
 
 private:
     std::string m_label;
@@ -1378,6 +1405,8 @@ private:
     bool m_expanded = true;
     bool m_folder = false;
     bool m_checked = false;
+    std::string m_path;
+    bool m_childrenLoaded = true;
 };
 
 // ------------------------------------------------------------------
@@ -1428,6 +1457,11 @@ public:
     // Comma-joined labels of the checked nodes (empty when none).
     std::string checkedLabels() const;
 
+    // Replace the tree content with a real filesystem view of `path`: one
+    // root folder node whose entries load lazily as folders expand (dirs
+    // first, alphabetical). Returns false when the path is not a directory.
+    bool loadDirectory(const std::string& path);
+
     virtual void layout(float parentWidth, float parentHeight) override;
     virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
     virtual void onPointerMove(const Offset2D& p) override;
@@ -1435,6 +1469,9 @@ public:
     virtual void onKeyDown(KeyCode key, uint32_t mods) override;
     virtual void onDraw(Rasterizer& r) const override;
     virtual void onTick(float dt) override;
+    virtual bool isAnimating() const override {
+        return m_anim.running() || Widget::isAnimating();
+    }
     virtual bool wantsScroll() const override { return true; }
 
 private:
@@ -1446,6 +1483,10 @@ private:
     int rowAt(float localY) const;
     bool toggleAt(float localX, const Row& row) const;  // click on triangle?
     void toggleRow(int row);
+    // A node can expand if it has children already, or a not-yet-scanned
+    // filesystem path behind it (lazy directory loading).
+    bool hasExpandable(const TreeItem* node) const;
+    void ensureLoaded(TreeItem* node);   // scan node->path() on first expand
     // Re-flatten and start the compression tween. `oldRows` must be the
     // pre-toggle layout (the caller clears m_rows right after snapshotting).
     void rebuildAnimated();
@@ -1468,11 +1509,11 @@ private:
     int m_wantedSelected = -1;         // selected= attr applied on flatten
     bool m_wantedApplied = false;
     int m_hover = -1;
-    Color m_bg{ogui::hexColor("#111")};
-    Color m_border{ogui::hexColor("#4488ff")};
-    Color m_text{ogui::hexColor("#cccccc")};
+    Color m_bg{ogui::palette().window};
+    Color m_border{ogui::palette().accent};
+    Color m_text{ogui::palette().text};
     Color m_highlight{ogui::hexColor("#334455")};
-    Color m_accent{ogui::hexColor("#4488ff")};
+    Color m_accent{ogui::palette().accent};
     ChangedCallback m_onChanged;
 
     bool m_showIcons = false;
@@ -1483,7 +1524,7 @@ private:
     Color m_folderColor{ogui::hexColor("#e6b455")};
     Color m_fileColor{ogui::hexColor("#9fb4d8")};
     Color m_checkBorder{ogui::hexColor("#8a8f9c")};
-    Color m_checkFill{ogui::hexColor("#4488ff")};
+    Color m_checkFill{ogui::palette().accent};
 
     // Compression animation. On a toggle we snapshot the pre-toggle rows
     // (node -> pixel y) and the row that was toggled; during the tween the
@@ -1513,14 +1554,14 @@ public:
 
     void setText(const std::string& t) { m_text = t; }
     const std::string& text() const { return m_text; }
-    void setOnLabel(const std::string& s) { m_onLabel = s; }
-    void setOffLabel(const std::string& s) { m_offLabel = s; }
 
     using ChangedCallback = std::function<void(bool)>;
     void setOnChanged(ChangedCallback cb) { m_onChanged = std::move(cb); }
 
     virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
     virtual void onDraw(Rasterizer& r) const override;
+    virtual void onTick(float dt) override;
+    virtual bool isAnimating() const override { return m_knobTween.running(); }
 
     // Layout/spacing
     float m_gap = 6.0f;
@@ -1530,14 +1571,14 @@ private:
     Rect trackRect() const;
 
     bool m_checked = false;
+    Tween m_knobTween{};  // 0 = off side, 1 = on side
+    float m_knob = 0.0f;
     std::string m_text;
-    std::string m_onLabel = "ON";
-    std::string m_offLabel = "OFF";
     int m_fontSize = 13;
     std::string m_fontFamily = "sans";
-    Color m_textColor{ogui::hexColor("#cccccc")};
-    Color m_bgColor{ogui::hexColor("#1a1a1a")};
-    Color m_dotColor{ogui::hexColor("#4488ff")};
+    Color m_textColor{ogui::palette().text};
+    Color m_bgColor{ogui::palette().surface};
+    Color m_dotColor{ogui::palette().accent};
     Color m_activeBgColor{ogui::hexColor("#161616")};
     ChangedCallback m_onChanged;
 };
@@ -1572,9 +1613,9 @@ private:
     int m_count = -1;             // <0: hidden
     bool m_removable = false;
     bool m_removeHot = false;     // pointer pressed on the [x]
-    Color m_bgColor{ogui::hexColor("#31323a")};
-    Color m_fgColor{ogui::hexColor("#dddddd")};
-    Color m_borderColor{ogui::hexColor("#4a4b56")};
+    Color m_bgColor{ogui::palette().surfaceHi};
+    Color m_fgColor{ogui::palette().textBright};
+    Color m_borderColor{ogui::palette().border};
     int m_fontSize = 12;
 };
 
@@ -1594,13 +1635,14 @@ public:
 
     virtual void onTick(float dt) override;
     virtual void onDraw(Rasterizer& r) const override;
+    virtual bool isAnimating() const override { return true; }
 
 private:
     std::string m_text;
     bool m_blocks = false;
     float m_speed = 8.0f;
     float m_phase = 0.0f;
-    Color m_fgColor{ogui::hexColor("#cccccc")};
+    Color m_fgColor{ogui::palette().text};
     int m_fontSize = 14;
 };
 
@@ -1651,8 +1693,8 @@ private:
     bool m_expanded = false;
     float m_headerH = 24.0f;
     float m_contentH = 0.0f;   // measured by the accordion
-    Color m_headerColor{ogui::hexColor("#2a2b31")};
-    Color m_fgColor{ogui::hexColor("#dddddd")};
+    Color m_headerColor{ogui::palette().surfaceHi};
+    Color m_fgColor{ogui::palette().textBright};
     int m_fontSize = 14;
 };
 
@@ -1728,7 +1770,7 @@ private:
     size_t m_max = 60;
     std::string m_label;
     Color m_lineColor{ogui::hexColor("#44dd88")};
-    Color m_bgColor{ogui::hexColor("#111111")};
+    Color m_bgColor{ogui::palette().window};
     Color m_gridColor{ogui::hexColor("#2a2a2a")};
     int m_fontSize = 12;
 };
@@ -1768,6 +1810,7 @@ public:
     virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
     virtual void onDraw(Rasterizer& r) const override;
     virtual void onPopupDismissed() override { if (m_onDismiss) m_onDismiss(); }
+    virtual bool isAnimating() const override { return m_fade.running(); }
 
 private:
     int rowAt(float localY) const;      // index into the visible rows
@@ -1788,11 +1831,11 @@ private:
     Tween m_fade;                        // open-in fade, like ComboPopup
     std::function<void(const std::string&)> m_onSelect;
     std::function<void()> m_onDismiss;
-    Color m_panel{ogui::hexColor("#1e1f24")};
-    Color m_border{ogui::hexColor("#4a4b56")};
-    Color m_text{ogui::hexColor("#dddddd")};
+    Color m_panel{ogui::palette().surface};
+    Color m_border{ogui::palette().border};
+    Color m_text{ogui::palette().textBright};
     Color m_highlight{ogui::hexColor("#2b3a55")};
-    Color m_sepColor{ogui::hexColor("#3a3b44")};
+    Color m_sepColor{ogui::palette().border};
 };
 
 // One <menuitem label command> (may nest more for a submenu) or <menuseparator/>.
@@ -1849,8 +1892,8 @@ private:
     std::function<void(const std::string&)> m_onCommand;
     float m_pad = 10.0f;
     int m_fontSize = 13;
-    Color m_bgColor{ogui::hexColor("#1a1b20")};
-    Color m_fgColor{ogui::hexColor("#cccccc")};
+    Color m_bgColor{ogui::palette().surface};
+    Color m_fgColor{ogui::palette().text};
 
     // Label widths from the last layout; <menu> children stay zero-sized so
     // they never steal the hit-test from the bar.
@@ -1911,8 +1954,8 @@ private:
     std::function<void(float, float, float)> m_onChanged;
     std::function<void()> m_onDismiss;
     int m_fontSize = 12;
-    Color m_panel{ogui::hexColor("#1e1f24")};
-    Color m_border{ogui::hexColor("#4a4b56")};
+    Color m_panel{ogui::palette().surface};
+    Color m_border{ogui::palette().border};
 };
 
 class ColorPicker : public Widget {
@@ -1934,7 +1977,7 @@ private:
     void applyHsv();
 
     float m_h = 0.0f, m_s = 0.0f, m_v = 0.0f;
-    Color m_color{ogui::hexColor("#4488ff")};
+    Color m_color{ogui::palette().accent};
     std::shared_ptr<ColorPopup> m_popup;
     std::function<void(const std::string&)> m_onChanged;
     int m_fontSize = 12;
@@ -1972,9 +2015,9 @@ private:
     std::shared_ptr<MenuPopup> m_popup;
     std::function<void(const std::string&)> m_onChanged;
     int m_fontSize = 13;
-    Color m_bgColor{ogui::hexColor("#111111")};
-    Color m_fgColor{ogui::hexColor("#dddddd")};
-    Color m_borderColor{ogui::hexColor("#3a3b44")};
+    Color m_bgColor{ogui::palette().window};
+    Color m_fgColor{ogui::palette().textBright};
+    Color m_borderColor{ogui::palette().border};
 };
 
 // ------------------------------------------------------------------
@@ -2010,8 +2053,8 @@ private:
     std::vector<Stop> m_stops;
     int m_drag = -1;             // index of the stop being dragged
     std::function<void()> m_onChanged;
-    Color m_borderColor{ogui::hexColor("#3a3b44")};
-    Color m_thumbColor{ogui::hexColor("#ffffff")};
+    Color m_borderColor{ogui::palette().border};
+    Color m_thumbColor{ogui::palette().white};
 };
 
 // ------------------------------------------------------------------
@@ -2043,11 +2086,12 @@ private:
 
     Point m_pts[4] = { {0.0f, 0.0f}, {0.33f, 1.0f}, {0.66f, 0.0f}, {1.0f, 1.0f} };
     int m_drag = -1;
+    int m_hover = -1;
     std::function<void()> m_onChanged;
-    Color m_bgColor{ogui::hexColor("#111114")};
-    Color m_gridColor{ogui::hexColor("#26272e")};
+    Color m_bgColor{ogui::palette().window};
+    Color m_gridColor{ogui::palette().surface};
     Color m_handleColor{ogui::hexColor("#444455")};
-    Color m_curveColor{ogui::hexColor("#ffffff")};
+    Color m_curveColor{ogui::palette().white};
     Color m_endColor{ogui::hexColor("#00e5ff")};
     Color m_ctrlColor{ogui::hexColor("#ffea00")};
 };

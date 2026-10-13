@@ -131,6 +131,11 @@ public:
     // but call it to keep bounds tweens alive.
     virtual void onTick(float dt);
 
+    // True while this widget's appearance changes on its own (running
+    // tween/marquee/spinner). The Kernel keeps the redraw dirty flag up while
+    // any widget reports this; static screens then skip the rebuild.
+    virtual bool isAnimating() const { return m_boundsAnimating; }
+
     // Tween this widget's bounds to `target` over `duration` seconds. The
     // base onTick() advances the animation; animateTo() snaps an in-flight
     // animation to its end state and starts the new one from the current

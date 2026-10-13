@@ -12,6 +12,7 @@
 #include "ogui/xmlparser.hpp"
 #include "ogui/widgets.hpp"
 
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -57,9 +58,30 @@ inline std::vector<std::pair<std::string, std::string>> manifest(
     };
 }
 
+// Applies <manifest theme="dark|light|claro|escuro"> once at startup; screens
+// re-parsed later (theme toggle) keep whatever theme is active then.
+inline void applyManifestTheme(const std::string& file = "manifest.xml") {
+    static bool applied = false;
+    if (applied) return;
+    applied = true;
+    std::ifstream f(file);
+    if (!f.good()) return;
+    std::stringstream ss;
+    ss << f.rdbuf();
+    ogui::XmlParser p;
+    auto res = p.parse(ss.str());
+    if (!res.root) return;
+    const std::string* t = res.root->rawAttribute("theme");
+    if (!t || t->empty()) return;
+    if (*t == "light" || *t == "claro") ogui::setActiveTheme(ogui::lightTheme());
+    else if (*t == "dark" || *t == "escuro") ogui::setActiveTheme(ogui::darkTheme());
+    else std::cerr << "gallery: unknown manifest theme \"" << *t << "\"\n";
+}
+
 // A Prev / Title / Next bar laid out as a Row across the top of a screen.
 // Returns the title label so the caller can stamp the group name on it.
-inline ogui::Label* addNavBar(const ogui::Widget::Ptr& root, float width) {
+inline ogui::Label* addNavBar(const ogui::Widget::Ptr& root, float width,
+                              bool light) {
     auto bar = std::make_shared<ogui::Row>();
     bar->setId("navbar");
     bar->setBounds(ogui::Rect{10.0f, 10.0f, width - 20.0f, 32.0f});
@@ -73,14 +95,14 @@ inline ogui::Label* addNavBar(const ogui::Widget::Ptr& root, float width) {
     prev->setText("< Voltar");
     prev->setBounds(ogui::Rect{0.0f, 0.0f, 120.0f, 32.0f});
     prev->setBinding("navPrev");
-    prev->setBgColor(ogui::hexColor("#333"));
-    prev->setTextColor(ogui::hexColor("#eee"));
+    prev->setBgColor(ogui::palette().surfaceHi);
+    prev->setTextColor(ogui::palette().textBright);
     prev->setRadius(6.0f);
 
     auto title = std::make_shared<ogui::Label>();
     title->setId("nav_title");
     title->setBounds(ogui::Rect{0.0f, 0.0f, 420.0f, 32.0f});
-    title->setTextColor(ogui::hexColor("#8fe"));
+    title->setTextColor(ogui::palette().text);
     title->setFontSize(16);
 
     auto next = std::make_shared<ogui::Button>();
@@ -88,13 +110,21 @@ inline ogui::Label* addNavBar(const ogui::Widget::Ptr& root, float width) {
     next->setText("Avancar >");
     next->setBounds(ogui::Rect{0.0f, 0.0f, 120.0f, 32.0f});
     next->setBinding("navNext");
-    next->setBgColor(ogui::hexColor("#333"));
-    next->setTextColor(ogui::hexColor("#eee"));
+    next->setBgColor(ogui::palette().surfaceHi);
+    next->setTextColor(ogui::palette().textBright);
     next->setRadius(6.0f);
+
+    auto theme = std::make_shared<ogui::ToggleSwitch>();
+    theme->setId("nav_theme");
+    theme->setBounds(ogui::Rect{0.0f, 0.0f, 110.0f, 32.0f});
+    theme->setText("Tema claro");
+    theme->setState(light);
+    theme->setBinding("navTheme");
 
     bar->addChild(prev);
     bar->addChild(title);
     bar->addChild(next);
+    bar->addChild(theme);
     root->addChild(bar);
     return title.get();
 }
@@ -105,10 +135,21 @@ inline ogui::Label* addNavBar(const ogui::Widget::Ptr& root, float width) {
 struct Gallery {
     std::vector<std::string> titles;
     std::vector<std::shared_ptr<ogui::Screen>> screens;
+    bool light = false;  // current theme, kept across re-parses
 };
 
+// setActiveTheme() copies the preset, so identity must be checked by palette
+// value, not pointer.
+inline bool activeThemeIsLight() {
+    const ogui::Color& a = ogui::activeTheme().palette.screen;
+    const ogui::Color& b = ogui::lightTheme().palette.screen;
+    return a.r == b.r && a.g == b.g && a.b == b.b;
+}
+
 inline Gallery loadAll(float width, float height) {
+    applyManifestTheme();
     Gallery g;
+    g.light = activeThemeIsLight();
     ogui::XmlParser parser;
     for (const auto& [title, path] : manifest()) {
         std::ifstream f(path);
@@ -118,13 +159,13 @@ inline Gallery loadAll(float width, float height) {
         }
         std::stringstream ss;
         ss << f.rdbuf();
-        auto res = parser.parse(ss.str());
+        auto res = parser.parse(ss.str(), &ogui::activeTheme());
         if (!res.root) {
             std::cerr << "gallery: parse failed: " << path << "\n";
             for (const auto& e : res.errors) std::cerr << "  - " << e << "\n";
             continue;
         }
-        addNavBar(res.root, width);
+        addNavBar(res.root, width, g.light);
         auto screen = std::make_shared<ogui::Screen>(title);
         screen->width = width;
         screen->height = height;
@@ -138,26 +179,50 @@ inline Gallery loadAll(float width, float height) {
 // Wire the nav bar: bind navPrev/navNext once (bindings key off the widget id,
 // which is identical on every screen) and switch the active screen. `g` and
 // `index` must outlive the kernel. `start` selects the initial screen.
-inline void install(ogui::Kernel& k, Gallery& g, int& index, int start = 0) {
+// `width`/`height` size the re-parse done by the navTheme toggle.
+inline void install(ogui::Kernel& k, Gallery& g, int& index, int start = 0,
+                    float width = 800.0f, float height = 600.0f) {
     const int n = static_cast<int>(g.screens.size());
     index = (n > 0) ? (start < 0 ? 0 : (start >= n ? n - 1 : start)) : 0;
     if (g.screens.empty()) return;
 
-    auto show = [&k, &g, &index] {
+    // show() must live on the heap: the bound lambdas capture it by value and
+    // outlive install(), so a stack lambda would dangle.
+    auto show = std::make_shared<std::function<void()>>([&k, &g, &index] {
         k.switchScreen(g.screens[static_cast<size_t>(index)]);
         std::ostringstream os;
         os << (index + 1) << "/" << g.screens.size() << "   "
            << g.titles[static_cast<size_t>(index)];
         k.setText("nav_title", os.str());
-    };
+    });
 
     k.bind("navPrev", [&index, n, show] {
         index = (index + n - 1) % n;
-        show();
+        (*show)();
     });
     k.bind("navNext", [&index, n, show] {
         index = (index + 1) % n;
-        show();
+        (*show)();
+    });
+
+    // Dark <-> light: install the preset, re-parse every layout so @tokens
+    // and defaultStyle re-resolve, then re-show the current screen. The old
+    // trees are parked in a graveyard because the clicked toggle is still
+    // mid-dispatch inside one of them.
+    k.bind("navTheme", [&k, &g, &index, show, width, height] {
+        const bool light = !g.light;
+        ogui::setActiveTheme(light ? ogui::lightTheme() : ogui::darkTheme());
+        g.light = light;
+        Gallery ng = loadAll(width, height);
+        if (ng.screens.empty()) return;
+        static std::vector<std::shared_ptr<ogui::Screen>> graveyard;
+        graveyard = std::move(g.screens);  // previous round's trees freed here
+        g.titles = std::move(ng.titles);
+        g.screens = std::move(ng.screens);
+        index = std::clamp(index, 0, static_cast<int>(g.screens.size()) - 1);
+        (*show)();
+        k.showToast(light ? "Tema claro." : "Tema escuro.",
+                    ogui::Kernel::ToastKind::Info);
     });
 
     // Widgets screen: modal open/close and toast banners.
@@ -244,7 +309,7 @@ inline void install(ogui::Kernel& k, Gallery& g, int& index, int start = 0) {
     });
 
     k.pushScreen(g.screens[static_cast<size_t>(index)]);
-    show();
+    (*show)();
 }
 
 } // namespace gallery

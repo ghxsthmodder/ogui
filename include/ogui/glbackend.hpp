@@ -36,6 +36,7 @@ public:
 
     // Uploads an RGBA8 image; returns a texture id (>0) or 0 on failure.
     int createTexture(const uint8_t* rgba, int w, int h);
+    int createTextureA8(const uint8_t* alpha, int w, int h);
 
     // Makes sure the font's atlas lives on the GPU. The font keeps a stable
     // (negative) slot id; this backend resolves it to a GL texture.
@@ -74,6 +75,8 @@ private:
     unsigned m_vao = 0;
     unsigned m_vbo = 0;
     unsigned m_ebo = 0;
+    size_t m_vboCap = 0;   // allocated bytes; grow-only, refilled with SubData
+    size_t m_eboCap = 0;
     unsigned m_whiteTex = 0;
     int m_uProj = -1;
     int m_uTex = -1;

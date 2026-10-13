@@ -1,11 +1,13 @@
 <?xml version="1.0"?>
 <!-- manifest.xml : lista de telas da galeria demo.
      Editar este arquivo adiciona/remove telas sem recompilar o demo.exe.
-     Ordem das linhas = ordem de navegacao. -->
-<manifest>
+     Ordem das linhas = ordem de navegacao.
+     theme="dark|light" define o tema inicial (alternavel no toggle da barra). -->
+<manifest theme="dark">
   <screen title="Basico"     path="layout_demo.xml"/>
   <screen title="Texto"      path="layouts/layout_text.xml"/>
   <screen title="Selecao"    path="layouts/layout_selection.xml"/>
+  <screen title="FileTree"   path="layouts/layout_filetree.xml"/>
   <screen title="Dados"      path="layouts/layout_data.xml"/>
   <screen title="Containers" path="layouts/layout_containers.xml"/>
   <screen title="Widgets"    path="layouts/layout_widgets.xml"/>

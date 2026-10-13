@@ -24,6 +24,11 @@ LIB_SRCS=(
     src/imagemanager.cpp
     src/widget.cpp
     src/widgets.cpp
+    src/widgets_text.cpp
+    src/widgets_container.cpp
+    src/widgets_input.cpp
+    src/widgets_list.cpp
+    src/widgets_editor.cpp
     src/clipboard.cpp
     src/software.cpp
     src/kernel.cpp

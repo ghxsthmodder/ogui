@@ -51,6 +51,16 @@ public:
     void drawRect(const Rect& r, const Color& col);
     // Filled rect with rounded corners (radius 0 == drawRect).
     void drawRoundedRect(const Rect& r, const Color& col, float radius);
+    // Rect filled with a top->bottom colour ramp (interpolated per-vertex).
+    void drawVerticalGradient(const Rect& r, const Color& top, const Color& bottom);
+    // Rounded variant of drawVerticalGradient: the ramp is evaluated per
+    // vertex so the corner fans blend like the straight edges do.
+    void drawRoundedGradient(const Rect& r, const Color& top,
+                             const Color& bottom, float radius);
+    // Soft drop shadow: concentric rounded rects with quadratic alpha
+    // falloff, offset by (dx, dy). blur 0 draws nothing.
+    void drawDropShadow(const Rect& r, float radius, const Color& col,
+                        float blur, float dx, float dy);
     void drawRectUV(const Rect& r, const Rect& uv, const Color& col, int texId);
     void drawRectBorder(const Rect& r, const Color& col, float width, float radius);
     void drawLine(const Offset2D& a, const Offset2D& b, const Color& col, float thickness);
@@ -97,6 +107,11 @@ private:
     DrawList m_list;
     Rect m_clip{0, 0, 4096, 4096};
     std::vector<Rect> m_clipStack;
+
+    // Reusable tessellation scratch (corner fans / border strips); cleared
+    // per shape but capacity is kept, so a hot redraw loop stops allocating.
+    std::vector<Vertex> m_scratchV;
+    std::vector<uint32_t> m_scratchI;
 
     int m_texId = 0;
     int m_texW = 0, m_texH = 0;
