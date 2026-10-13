@@ -247,6 +247,38 @@ void XmlParser::parseElement() {
         return;
     }
 
+    // <script src="file.lua"/> (or inline <script>code</script>) hands a
+    // Lua chunk to the host's script handler; the parser runs nothing.
+    if (tag == "script") {
+        auto it = attrs.find("src");
+        if (it == attrs.end() || it->second.empty()) it = attrs.find("path");
+        if (it != attrs.end() && !it->second.empty()) {
+            if (m_result) m_result->scripts.emplace_back(it->second, true);
+            if (m_scriptHandler) m_scriptHandler(it->second, true);
+            if (!selfClosing) skipElement(tag, false);
+            return;
+        }
+        if (selfClosing) {
+            addError("script: src attribute or inline code is required");
+            return;
+        }
+        // Inline body: captured raw up to </script> (Lua may contain <, >,
+        // &; no entity decoding applies).
+        const size_t end = m_text.find("</script>", m_pos);
+        if (end == std::string::npos) {
+            addError("script: unterminated inline <script>");
+            m_pos = m_len;
+            return;
+        }
+        const std::string code = m_text.substr(m_pos, end - m_pos);
+        m_pos = end + 9;   // strlen("</script>")
+        while (m_pos < m_len && m_text[m_pos] != '>') ++m_pos;
+        if (m_pos < m_len) ++m_pos;
+        if (m_result) m_result->scripts.emplace_back(code, false);
+        if (m_scriptHandler) m_scriptHandler(code, false);
+        return;
+    }
+
     auto widget = createWidget(tag,
                                m_stack.empty() ? Style{} : m_stack.back().style,
                                attrs);

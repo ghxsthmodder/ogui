@@ -188,6 +188,7 @@ inline Gallery loadAll(float width, float height) {
         screen->width = contentW;
         screen->height = contentH;
         screen->widgets.push_back(res.root);
+        screen->scripts = std::move(res.scripts);
         g.titles.push_back(title);
         g.screens.push_back(screen);
     }

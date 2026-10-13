@@ -13,6 +13,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 WIN_CXX="${WIN_CXX:-x86_64-w64-mingw32-g++}"
+WIN_CC="${WIN_CC:-x86_64-w64-mingw32-gcc}"
 WIN_AR="${WIN_AR:-x86_64-w64-mingw32-ar}"
 
 LIB_SRCS=(
@@ -36,6 +37,7 @@ LIB_SRCS=(
     src/glbackend.cpp
     src/tween.cpp
     src/host.cpp
+    src/script.cpp
 )
 
 build_host() {
@@ -59,9 +61,17 @@ build_win() {
     # whole (SFTP) and run on Windows: demo.exe + its XML screens.
     mkdir -p debug debug/build-win-objs
     local flags=(-std=c++20 -O2 -static -static-libgcc -static-libstdc++
-                 -Iinclude -Ithirdparty/stb -DOGUI_USE_STB=1)
+                 -Iinclude -Ithirdparty/stb -Ithirdparty/lua/src
+                 -DOGUI_USE_STB=1 -DOGUI_HAS_LUA=1)
 
     local objs=()
+    # Vendored Lua 5.4 interpreter (plain C, warnings off).
+    for src in thirdparty/lua/src/*.c; do
+        local obj="debug/build-win-objs/lua_$(basename "${src%.c}").o"
+        echo "  CC  $src"
+        "$WIN_CC" -O2 -w -Ithirdparty/lua/src -c "$src" -o "$obj"
+        objs+=("$obj")
+    done
     for src in "${LIB_SRCS[@]}"; do
         local obj="debug/build-win-objs/$(basename "${src%.cpp}").o"
         echo "  CXX $src"

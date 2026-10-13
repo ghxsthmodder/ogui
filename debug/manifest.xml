@@ -12,4 +12,5 @@
   <screen title="Containers" path="layouts/layout_containers.xml"/>
   <screen title="Widgets"    path="layouts/layout_widgets.xml"/>
   <screen title="Game"       path="layouts/layout_game.xml"/>
+  <screen title="Script"     path="layouts/layout_script.xml"/>
 </manifest>

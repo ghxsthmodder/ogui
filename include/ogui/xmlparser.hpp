@@ -24,6 +24,9 @@ public:
         std::shared_ptr<Widget> root;   // the screen root <screen>
         std::vector<std::string> errors;
         std::vector<std::string> warnings;
+        // <script> chunks ({payload, isFile}) in document order; hosts
+        // move them onto the Screen so the Kernel loads them on switch.
+        std::vector<std::pair<std::string, bool>> scripts;
     };
 
     XmlParser();
@@ -46,6 +49,16 @@ public:
     };
     ThemeResult parseTheme(const std::string& xml, const Theme& base);
     ThemeResult parseThemeFile(const std::string& path, const Theme& base);
+
+    // ---- scripting --------------------------------------------------------
+    // <script src="file.lua"/> and inline <script>code</script> elements
+    // are forwarded to this handler while parsing (payload, isFile); the
+    // parser itself never runs them. Hosts wire it to a ScriptHost, e.g.
+    //     parser.setScriptHandler([&](const std::string& p, bool f) {
+    //         f ? kernel.loadScriptFile(p) : kernel.loadScriptString(p); });
+    using ScriptHandler =
+        std::function<void(const std::string& payload, bool isFile)>;
+    void setScriptHandler(ScriptHandler h) { m_scriptHandler = std::move(h); }
 
 private:
     std::string m_text;
@@ -134,6 +147,9 @@ private:
     // Active result being filled (points into the ParseResult returned by
     // parse()/parseFile()).
     ParseResult* m_result = nullptr;
+
+    // Receiver for <script> elements (see setScriptHandler()).
+    ScriptHandler m_scriptHandler;
 };
 
 } // namespace ogui

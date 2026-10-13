@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<!-- layout_script.xml : scripting showcase — a Lua chunk embedded in the
+     screen drives the counter, the meter and a pulse animation. The engine
+     owns the loop; the script only reacts (on_load/on_update/on_click). -->
+<screen id="script">
+  <label id="ttl" text="Lua scripting" fontSize="20" x="20" y="60" width="360" height="30"/>
+  <label id="status" text="starting..." x="20" y="92" width="520" height="22"/>
+
+  <!-- these buttons carry no onclick: the clicks fall through to on_click -->
+  <button id="add" text="+1" x="20" y="130" width="80" height="36"/>
+  <button id="sub" text="-1" x="110" y="130" width="80" height="36"/>
+  <button id="pulse" text="pulse" x="200" y="130" width="100" height="36"/>
+  <label id="count" text="n = 0" x="320" y="130" width="160" height="36"/>
+
+  <progress id="meter" value="0" x="20" y="186" width="460" height="20"/>
+
+  <script>
+n = 0
+pulse = false
+
+function on_load()
+  ogui.set("status", "text", "script ready at t=" .. string.format("%.2f", ogui.time()))
+  ogui.log("layout_script: on_load")
+end
+
+function on_click(key)
+  if key == "add" then n = n + 1
+  elseif key == "sub" then n = n - 1
+  elseif key == "pulse" then
+    pulse = not pulse
+    ogui.set("pulse", "text", pulse and "pulse: on" or "pulse: off")
+  end
+  ogui.set("count", "text", "n = " .. n)
+  ogui.set("meter", "value", math.min(1, math.max(0, (n + 5) / 10)))
+end
+
+function on_update(t, dt)
+  if pulse then
+    ogui.set("meter", "value", 0.5 + 0.4 * math.sin(t * 3))
+  end
+end
+  </script>
+</screen>

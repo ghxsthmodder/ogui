@@ -5,6 +5,7 @@
 #include "ogui/font.hpp"
 #include "ogui/widget.hpp"
 #include "ogui/drawlist.hpp"
+#include "ogui/script.hpp"
 #include <vector>
 #include <string>
 #include <memory>
@@ -55,6 +56,12 @@ struct Screen {
     float width = 800.0f;
     float height = 600.0f;
 
+    // Lua <script> chunks collected at parse time ({payload, isFile}).
+    // The Kernel clears its ScriptHost and runs these on every screen
+    // change, so hooks and the ogui globals always belong to the
+    // visible screen.
+    std::vector<std::pair<std::string, bool>> scripts;
+
     Screen() = default;
     Screen(const std::string& id_) : id(id_) {}
 };
@@ -102,11 +109,14 @@ public:
     // Bind a handler to a widget id; fired on click (press+release on it).
     void bind(const std::string& id, std::function<void()> fn);
     // Fire a bound handler by name (menu commands route through this).
+    // A name without a C++ binding also reaches the script's on_event
+    // hook; the return value only reports the C++ binding (compat).
     bool invokeBinding(const std::string& name) {
         auto it = m_bindings.find(name);
-        if (it == m_bindings.end() || !it->second) return false;
-        it->second();
-        return true;
+        const bool ok = (it != m_bindings.end() && it->second);
+        if (ok) it->second();
+        else m_script.notifyEvent(name, name);
+        return ok;
     }
     // Set text on a widget by id (Label/Button/TextInput).
     bool setText(const std::string& id, const std::string& text);
@@ -153,6 +163,22 @@ public:
     const DrawList& buildDrawList();
     const DrawList& drawList() const { return m_drawList; }
 
+    // ---- scripting (Lua) ----
+    // The screen's script host: <script> elements parsed with the parser's
+    // script handler route to loadScriptFile()/loadScriptString(). Hooks
+    // (on_load/on_update/on_click/on_event) fire from the frame loop; see
+    // ogui/script.hpp for the API surface.
+    ScriptHost& script() { return m_script; }
+    bool loadScriptFile(const std::string& path) {
+        return m_script.loadFile(path);
+    }
+    bool loadScriptString(const std::string& code, const std::string& name = "script") {
+        return m_script.loadString(code, name);
+    }
+
+    // Seconds since the first frame (InputState::time mirror).
+    float time() const { return m_input.time; }
+
     // ---- lookup ----
     Widget* findWidget(const std::string& id);
     Widget* focusedWidget() const { return m_focus; }
@@ -179,6 +205,8 @@ public:
 
 private:
     void update();
+    // Swap the ScriptHost to the current screen's scripts (clear + load).
+    void reloadScreenScripts();
     // modifier bitmask derived from the current key state (see ModBits).
     uint32_t currentMods() const;
     void drawTree(Rasterizer& r, Widget* w, float ox, float oy) const;
@@ -219,6 +247,7 @@ private:
     float m_tipMouseY = 0.0f;
 
     std::map<std::string, std::function<void()>> m_bindings;
+    ScriptHost m_script;        // Lua hooks + ogui.* API (see script.hpp)
     DrawList m_drawList;
     Rasterizer m_raster;          // persistent: keeps buffers between frames
 

@@ -17,8 +17,11 @@ creates for you (`ogui::Host`, a built-in Win32/WGL window and event loop).
 * **Two renderers for one DrawList** — `GlBackend` (OpenGL 3.3 core, every
   entry point resolved at runtime, so the library never links against GL)
   and `SoftwareRenderer` (pure CPU, for headless tests and screenshots).
-* **Static library, few dependencies** — stb is vendored; the parser is a
-  hand-rolled tokenizer with no third-party code.
+* **Scripting** — screens embed Lua 5.4 chunks (`<script>`); the engine
+  owns the loop and calls the script's `on_load`/`on_update`/`on_click`/
+  `on_event` hooks through the `ogui` API table.
+* **Static library, few dependencies** — stb and Lua are vendored; the
+  parser is a hand-rolled tokenizer with no third-party code.
 
 ## Requirements
 
@@ -59,11 +62,12 @@ Win32 + WGL demo directly (the project compiles the library sources itself).
 | `OGUI_BUILD_EXAMPLES` | `ON` | `ogui_demo`, `ogui_screenshot`, `ogui_demo_win32` |
 | `OGUI_BUILD_TESTS` | `ON` | unit tests + golden-image test |
 | `OGUI_USE_STATIC_STB` | `ON` | build stb_truetype/stb_image from `thirdparty/stb` |
+| `OGUI_USE_LUA` | `ON` | embed the vendored Lua 5.4 (`thirdparty/lua`) for `<script>` screens |
 
 ## Tests
 
 ```sh
-cd build && ctest --output-on-failure      # parser, drawlist, kernel, screens, scrollbar, golden
+cd build && ctest --output-on-failure      # parser, drawlist, kernel, screens, scrollbar, script, golden
 ```
 
 * `parser` — XML tokenizer, attributes, styles, error reporting.
@@ -71,6 +75,8 @@ cd build && ctest --output-on-failure      # parser, drawlist, kernel, screens, 
 * `kernel` — input dispatch, focus/capture, text editing, tabs, tooltip.
 * `screens` — every manifest screen parses in both themes and keeps the ids the gallery binds to.
 * `scrollbar` — presses on the listbox/treeview/table/scrollview/window/textarea bars scroll instead of selecting or hitting children; dropdown popups fit the screen and scroll.
+* `script` — `<script>` collection, screen-bound Lua loading on screen
+  switches, all four hooks and the `ogui.*` widget API; error capture.
 * `golden` — renders a fixed `@token` layout through
   `Kernel -> DrawList -> SoftwareRenderer` in both themes and diffs it
   against `tests/golden/basic.png` (dark) and `tests/golden/basic_light.png`
@@ -327,6 +333,7 @@ theme default.
 | `theme` | stylesheet root: shared palette + named styles + fonts (`base="dark\|light"` preset it layers over) | `name`, `base` |
 | `palette` | inside `<theme>` only: re-colours tokens (`accent="#e8b33c" ...`); unknown tokens warn | token names |
 | `stylesheet` | merges an external `<theme>` file into the current document (named styles, fonts, palette) | `path` |
+| `script` | Lua chunk for the screen — `<script src="file.lua"/>` or inline `<script>code</script>`; hooks `on_load`/`on_update`/`on_click`/`on_event` + `ogui` API (see [xml-reference](docs/xml-reference.md)) | `src` |
 | `panel` | plain rectangle container | — |
 | `window` | bordered panel with a title bar (children are offset by it) | `title`, `titleVisible` |
 | `column` | stacks children vertically (gap 4, honours `padding`/`margin`) | — |
@@ -471,6 +478,7 @@ tests/            unit tests + tests/golden/ (golden image + meta)
 cmake/            CMake package config template
 scripts/build.sh  host / win / clean
 thirdparty/stb    vendored stb_truetype + stb_image[_write]
+thirdparty/lua    vendored Lua 5.4 interpreter sources (scripting)
 ```
 
 ## Known limitations

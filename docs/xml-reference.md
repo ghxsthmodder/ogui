@@ -285,11 +285,65 @@ Overflowing tab headers collapse into a `...` popup menu automatically.
 | `default` | base Style overrides, only valid inside a `<theme>` root |
 | `stylesheet` | merges an external `<theme>` file into this document | `path` |
 | `font` | registers a font family: `<font family="anton" source="assets/Anton-Regular.ttf"/>`; later `font="anton"` attributes resolve to that file. Data-only, yields no widget |
+| `script` | a Lua chunk for the screen: `<script src="file.lua"/>` or inline `<script>code</script>` (raw text up to `</script>`, no entity decoding). Data-only, yields no widget — see [Scripting](#scripting-lua) |
 | `option` | entry of `optionspin`/`combobox` |
 | `item` | entry of `listbox`/`combobox` |
 
+## Scripting (Lua)
+
+Screens embed behaviour with the `<script>` element (Lua 5.4, vendored;
+build with `OGUI_USE_LUA=OFF` to drop it). The engine owns the loop and
+calls the script — never the other way around:
+
+- `XmlParser::parse()` collects chunks into `res.scripts` (`{payload,
+  isFile}`); hosts move them onto `Screen::scripts`.
+- The `Kernel` clears its `ScriptHost` and runs the current screen's
+  chunks on every `pushScreen`/`popScreen`/`switchScreen`, so hooks always
+  belong to the visible screen. Each load runs the chunk and then its
+  `on_load`.
+
+Hooks (plain global functions, all optional):
+
+| Hook | Fired |
+|---|---|
+| `on_load()` | right after the chunk runs |
+| `on_update(t, dt)` | every frame (`t` = seconds since kernel start) |
+| `on_click(key)` | left-click released on a widget with **no** C++ binding (onclick name, else id) |
+| `on_event(name, key)` | an `invokeBinding(name)` with no C++ binding (C++ wins; scripts see the leftovers) |
+
+API table `ogui` (all calls are safe on unknown ids):
+
+| Call | Effect |
+|---|---|
+| `ogui.set(id, attr, v)` | `attr`: `text`, `visible`, `checked`, `value`, `x`, `y`, `width`, `height` (geometry pins the spec to absolute so layout keeps the new values) |
+| `ogui.get(id, attr)` | same attrs; `text` → string, `value`/geometry → number, `visible`/`checked` → boolean; unknown → `nil` |
+| `ogui.exists(id)` | widget lookup |
+| `ogui.click(id)` | fire the widget's C++ binding/handler |
+| `ogui.time()` | seconds since kernel start |
+| `ogui.toast(msg[, kind])` | `kind`: `"info"` (default) / `"warn"` / `"error"` |
+| `ogui.log(msg)` | push to `Kernel::addLog` |
+
+Example:
+
+```xml
+<screen id="counter">
+  <button id="add" text="+1" x="20" y="20" width="80" height="36"/>
+  <label  id="num" text="0"  x="120" y="20" width="80" height="36"/>
+  <script>
+n = 0
+function on_click(key)
+  if key == "add" then n = n + 1 end
+  ogui.set("num", "text", tostring(n))
+end
+  </script>
+</screen>
+```
+
+Runtime errors never unwind into the engine: they are captured in
+`ScriptHost::errors()` and mirrored to `Kernel::addLog`.
+
 ## Error reporting
 
-`XmlParser::parse()` returns `{root, errors, warnings}`. Errors never abort
+`XmlParser::parse()` returns `{root, errors, warnings, scripts}`. Errors never abort
 the parse: unknown root/element names are logged and skipped, and the caller
 always receives a usable tree.

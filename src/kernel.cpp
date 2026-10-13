@@ -92,6 +92,8 @@ void Kernel::init() {
     m_prevChar = 0;
     for (bool& k : m_prevKeys) k = false;
     m_bindings.clear();
+    m_script.clear();
+    m_script.bindKernel(this);
     m_drawList.clear();
 
     m_tipTarget = nullptr;
@@ -147,10 +149,23 @@ void Kernel::frame(const InputState& input) {
     buildDrawList();
 }
 
+void Kernel::reloadScreenScripts() {
+    m_script.clear();
+    m_script.bindKernel(this);
+    auto screen = currentScreen();
+    if (!screen) return;
+    for (const auto& [payload, isFile] : screen->scripts) {
+        if (isFile) m_script.loadFile(payload);
+        else m_script.loadString(payload, screen->id);
+    }
+    invalidate();
+}
+
 void Kernel::pushScreen(std::shared_ptr<Screen> screen) {
     if (!screen) return;
     m_screenStack.push_back(screen);
     setFocus(m_focus, nullptr);
+    reloadScreenScripts();
     invalidate();
 }
 
@@ -158,6 +173,7 @@ void Kernel::popScreen() {
     if (m_screenStack.size() > 1) {
         m_screenStack.pop_back();
         setFocus(m_focus, nullptr);
+        reloadScreenScripts();
         invalidate();
     }
 }
@@ -174,6 +190,7 @@ void Kernel::switchScreen(std::shared_ptr<Screen> screen) {
         }
         m_screenStack.back() = screen;
         setFocus(m_focus, nullptr);
+        reloadScreenScripts();
         invalidate();
     }
 }
@@ -306,6 +323,7 @@ void Kernel::update() {
     const float dt = std::clamp(m_input.time - m_prevTime, 0.0f, 0.25f);
     m_prevTime = m_input.time;
     advanceAnimations(dt);
+    m_script.notifyUpdate(m_input.time, dt);
 
     for (auto& t : m_toasts) t.age += dt;
     if (!m_toasts.empty()) m_dirty = true;   // fading/aging banners
@@ -437,9 +455,16 @@ void Kernel::update() {
                 auto it = m_bindings.find(key);
                 return (it != m_bindings.end()) ? it->second : nullptr;
             };
-            if (auto fn = lookup(m_pressed->binding())) fn();
-            else if (auto fn2 = lookup(m_pressed->id())) fn2();
-            else if (const auto& h = m_pressed->clickHandler()) h();
+            bool handled = false;
+            if (auto fn = lookup(m_pressed->binding())) { fn(); handled = true; }
+            else if (auto fn2 = lookup(m_pressed->id())) { fn2(); handled = true; }
+            else if (const auto& h = m_pressed->clickHandler()) { h(); handled = true; }
+            // Nothing C++-bound: route the click to the screen's Lua
+            // on_click hook with the widget id (onclick name if set).
+            if (!handled && !m_pressed->id().empty())
+                m_script.notifyClick(m_pressed->binding().empty()
+                                         ? m_pressed->id()
+                                         : m_pressed->binding());
             m_pressed->dispatchEvent(EventType::MouseButton, p);
         }
         m_captured = nullptr;

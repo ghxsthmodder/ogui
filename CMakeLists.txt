@@ -10,6 +10,7 @@ set(OGUI_VERSION "${OGUI_VERSION_MAJOR}.${OGUI_VERSION_MINOR}.${OGUI_VERSION_PAT
 option(OGUI_BUILD_EXAMPLES "Build example apps" ON)
 option(OGUI_BUILD_TESTS "Build unit tests" ON)
 option(OGUI_USE_STATIC_STB "Statically link stb_truetype + stb_image (Windows-safe)" ON)
+option(OGUI_USE_LUA "Embed the vendored Lua 5.4 scripting engine" ON)
 
 # ---- Compiler / flags ----------------------------------------------------
 set(CMAKE_CXX_STANDARD 20)
@@ -49,6 +50,28 @@ if(OGUI_USE_STATIC_STB)
     add_compile_definitions(OGUI_USE_STB=1)
 endif()
 
+# ---- Lua 5.4 (vendored scripting engine) ----------------------------------
+# thirdparty/lua/src holds the upstream interpreter sources (lua/luac mains
+# removed). Compiled as plain C into its own static archive so our strict
+# C++ warning flags never apply to it.
+if(OGUI_USE_LUA)
+    set(LUA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/thirdparty/lua/src")
+    if(NOT EXISTS "${LUA_DIR}/lua.h")
+        message(FATAL_ERROR "Lua sources missing (see thirdparty/lua/LICENSE)")
+    endif()
+    file(GLOB LUA_SRCS "${LUA_DIR}/*.c")
+    add_library(ogui_lua STATIC ${LUA_SRCS})
+    # BUILD_INTERFACE only: the archive is installed, its headers are not
+    # (ogui links Lua PRIVATE; consumers never see lua_State internals).
+    target_include_directories(ogui_lua PUBLIC
+        $<BUILD_INTERFACE:${LUA_DIR}>)
+    if(MSVC)
+        target_compile_options(ogui_lua PRIVATE /w)
+    else()
+        target_compile_options(ogui_lua PRIVATE -w)
+    endif()
+endif()
+
 # ---- Include dirs --------------------------------------------------------
 # target_include_directories is used for both the INTERFACE and the target,
 # so it is placed right after add_library().
@@ -75,6 +98,7 @@ add_library(ogui STATIC
     src/glbackend.cpp
     src/tween.cpp
     src/host.cpp
+    src/script.cpp
 )
 
 # The GL backend resolves libGL at runtime (dlopen/GetProcAddress); no
@@ -90,6 +114,13 @@ target_include_directories(ogui PUBLIC
 
 if(OGUI_USE_STATIC_STB)
     target_include_directories(ogui PRIVATE ${STB_DIR})
+endif()
+
+if(OGUI_USE_LUA)
+    # PRIVATE: script.hpp only forward-declares lua_State; consumers of the
+    # installed ogui never need the Lua headers.
+    target_link_libraries(ogui PRIVATE ogui_lua)
+    target_compile_definitions(ogui PRIVATE OGUI_HAS_LUA=1)
 endif()
 
 target_compile_definitions(ogui PRIVATE
@@ -148,6 +179,10 @@ if(OGUI_BUILD_TESTS)
     add_executable(ogui_scrollbar_test tests/scrollbar_test.cpp)
     target_link_libraries(ogui_scrollbar_test PRIVATE ogui)
 
+    # Lua scripting: <script> collection, screen-bound hooks, ogui.* API.
+    add_executable(ogui_script_test tests/script_test.cpp)
+    target_link_libraries(ogui_script_test PRIVATE ogui)
+
     # Golden-image test: renders a fixed layout and diffs it against
     # tests/golden/basic.png (regenerate with OGUI_UPDATE_GOLDEN=1).
     if(OGUI_USE_STATIC_STB)
@@ -164,6 +199,7 @@ if(OGUI_BUILD_TESTS)
     add_test(NAME kernel COMMAND ogui_kernel_test)
     add_test(NAME screens COMMAND ogui_screens_test)
     add_test(NAME scrollbar COMMAND ogui_scrollbar_test)
+    add_test(NAME script COMMAND ogui_script_test)
     if(TARGET ogui_golden_test)
         add_test(NAME golden COMMAND ogui_golden_test)
     endif()
@@ -182,9 +218,15 @@ install(TARGETS ogui
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
 
+if(OGUI_USE_LUA)
+    install(TARGETS ogui_lua
+        EXPORT ogui-targets
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif()
+
 # Examples and tests are only installed when explicitly built, and the
 # targets may not exist in a partial build configuration.
-foreach(t ogui_demo ogui_demo_win32 ogui_screenshot ogui_parser_test ogui_drawlist_test ogui_kernel_test ogui_screens_test ogui_scrollbar_test ogui_golden_test)
+foreach(t ogui_demo ogui_demo_win32 ogui_screenshot ogui_parser_test ogui_drawlist_test ogui_kernel_test ogui_screens_test ogui_scrollbar_test ogui_script_test ogui_golden_test)
     if(TARGET ${t})
         install(TARGETS ${t} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
     endif()
@@ -205,6 +247,7 @@ install(FILES
     include/ogui/widgets.hpp
     include/ogui/host.hpp
     include/ogui/tween.hpp
+    include/ogui/script.hpp
     include/ogui/xmlparser.hpp
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ogui
 )
