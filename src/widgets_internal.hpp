@@ -5,6 +5,7 @@
 #include "ogui/widgets.hpp"
 #include "ogui/clipboard.hpp"
 #include "ogui/imagemanager.hpp"
+#include "ogui/rasterizer.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -69,6 +70,46 @@ namespace ogui {
         while (i < s.size() && isWordByte(static_cast<unsigned char>(s[i]))) ++i;
         while (i < s.size() && !isWordByte(static_cast<unsigned char>(s[i]))) ++i;
         return i;
+    }
+
+    // Vertical scrollbar geometry shared by the scrollable list widgets:
+    // an 8px rounded bar overlaying the right edge of the viewport.
+    inline constexpr float kBarW = 8.0f;
+    inline constexpr float kBarMargin = 2.0f;
+    inline constexpr float kBarMinThumb = 16.0f;
+
+    inline float barThumbH(float trackH, float viewH, float total) {
+        if (total <= 0.0f) return trackH;
+        return std::clamp(trackH * (viewH / total), kBarMinThumb, trackH);
+    }
+
+    // Scroll position -> thumb rect inside track (absolute coordinates).
+    inline Rect barThumbRect(const Rect& trk, float viewH, float total, float scroll) {
+        if (trk.h <= 0.0f) return trk;
+        const float thumbH = barThumbH(trk.h, viewH, total);
+        const float maxScroll = std::max(total - viewH, 0.0f);
+        const float frac = maxScroll > 0.0f ? scroll / maxScroll : 0.0f;
+        return Rect{trk.x, trk.y + frac * (trk.h - thumbH), trk.w, thumbH};
+    }
+
+    // Pointer y + grab offset -> the scroll value that puts the thumb there.
+    inline float barScrollAt(const Rect& trk, float viewH, float total,
+                             float ly, float grab) {
+        const float maxScroll = std::max(total - viewH, 0.0f);
+        if (trk.h <= 0.0f || total <= 0.0f || maxScroll <= 0.0f) return 0.0f;
+        const float span = trk.h - barThumbH(trk.h, viewH, total);
+        if (span <= 0.0f) return 0.0f;
+        return std::clamp((ly - grab - trk.y) / span, 0.0f, 1.0f) * maxScroll;
+    }
+
+    inline void drawVerticalBar(Rasterizer& r, const Rect& trk, const Rect& thumb,
+                                bool active) {
+        Color track = palette().surface;
+        track.a = 90;
+        r.drawRoundedRect(trk, track, trk.w * 0.5f);
+        Color knob = palette().borderStrong;
+        knob.a = active ? 240 : 170;
+        r.drawRoundedRect(thumb, knob, thumb.w * 0.5f);
     }
 
 } // namespace ogui

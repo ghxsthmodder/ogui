@@ -10,6 +10,16 @@
     <item label="Beta"/>
     <item label="Gamma"/>
     <item label="Delta"/>
+    <item label="Epsilon"/>
+    <item label="Zeta"/>
+    <item label="Eta"/>
+    <item label="Theta"/>
+    <item label="Iota"/>
+    <item label="Kappa"/>
+    <item label="Lambda"/>
+    <item label="Mu"/>
+    <item label="Nu"/>
+    <item label="Xi"/>
   </listbox>
 
   <label x="48.75%" y="84" w="50%" h="18" text="ComboBox"/>

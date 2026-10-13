@@ -547,6 +547,23 @@ int ListBox::rowAt(float localY) const {
     return (row >= 0 && row < static_cast<int>(m_items.size())) ? row : -1;
 }
 
+bool ListBox::barVisible() const {
+    const float total = m_rowH * static_cast<float>(m_items.size());
+    return total - std::max(bounds().h, 0.0f) > 1.0f;
+}
+
+Rect ListBox::barTrack() const {
+    const Rect b = bounds();
+    return Rect{b.x + b.w - kBarW - kBarMargin, b.y + kBarMargin,
+                kBarW, std::max(b.h - 2.0f * kBarMargin, 0.0f)};
+}
+
+Rect ListBox::barThumb() const {
+    const float viewH = std::max(bounds().h, 0.0f);
+    const float total = m_rowH * static_cast<float>(m_items.size());
+    return barThumbRect(barTrack(), viewH, total, m_scroll);
+}
+
 void ListBox::commit(int row) {
     if (row < 0 || row >= static_cast<int>(m_items.size())) return;
     const bool changed = (m_selected != row);
@@ -556,12 +573,45 @@ void ListBox::commit(int row) {
 
 void ListBox::onPointerDown(MouseButton, const Offset2D& p) {
     const Offset2D o = absoluteOrigin();
-    commit(rowAt(static_cast<float>(p.y) - o.y));
+    const float lx = static_cast<float>(p.x) - o.x;
+    const float ly = static_cast<float>(p.y) - o.y;
+    if (barVisible()) {
+        const Rect trk = barTrack();
+        if (lx >= trk.x && lx <= trk.x + trk.w &&
+            ly >= trk.y && ly <= trk.y + trk.h) {
+            m_barDrag = true;
+            const float viewH = std::max(bounds().h, 0.0f);
+            const float total = m_rowH * static_cast<float>(m_items.size());
+            const Rect th = barThumb();
+            if (ly >= th.y && ly <= th.y + th.h) {
+                m_barGrab = ly - th.y;
+            } else {
+                // Empty track: jump the thumb center to the press point.
+                m_barGrab = th.h * 0.5f;
+                m_scroll = barScrollAt(trk, viewH, total, ly, m_barGrab);
+                clampScroll();
+            }
+            return;
+        }
+    }
+    commit(rowAt(ly));
+}
+
+void ListBox::onPointerUp(MouseButton) {
+    m_barDrag = false;
 }
 
 void ListBox::onPointerMove(const Offset2D& p) {
     const Offset2D o = absoluteOrigin();
-    m_hover = rowAt(static_cast<float>(p.y) - o.y);
+    const float ly = static_cast<float>(p.y) - o.y;
+    if (m_barDrag) {
+        const float viewH = std::max(bounds().h, 0.0f);
+        const float total = m_rowH * static_cast<float>(m_items.size());
+        m_scroll = barScrollAt(barTrack(), viewH, total, ly, m_barGrab);
+        clampScroll();
+        return;
+    }
+    m_hover = rowAt(ly);
 }
 
 void ListBox::onPointerScroll(float, float dy) {
@@ -616,6 +666,8 @@ void ListBox::onDraw(Rasterizer& r) const {
         }
     }
     r.endFrame();
+
+    if (barVisible()) drawVerticalBar(r, barTrack(), barThumb(), m_barDrag);
 }
 
 // ------------------------------------------------------------------
@@ -819,6 +871,24 @@ int Table::rowAt(float localY) const {
     return (row >= 0 && row < static_cast<int>(m_rows.size())) ? row : -1;
 }
 
+bool Table::barVisible() const {
+    const float total = m_rowH * static_cast<float>(m_order.size());
+    return total - std::max(bounds().h - m_headH, 0.0f) > 1.0f;
+}
+
+Rect Table::barTrack() const {
+    const Rect b = bounds();
+    const float top = b.y + m_headH + kBarMargin;
+    return Rect{b.x + b.w - kBarW - kBarMargin, top,
+                kBarW, std::max(b.h - m_headH - 2.0f * kBarMargin, 0.0f)};
+}
+
+Rect Table::barThumb() const {
+    const float viewH = std::max(bounds().h - m_headH, 0.0f);
+    const float total = m_rowH * static_cast<float>(m_order.size());
+    return barThumbRect(barTrack(), viewH, total, m_scroll);
+}
+
 float Table::columnW(int col) const {
     if (col < 0 || col >= static_cast<int>(m_cols.size())) return 0.0f;
     if (m_cols[col].width > 0.0f) return m_cols[col].width;
@@ -934,6 +1004,25 @@ void Table::onPointerDown(MouseButton, const Offset2D& p) {
     const Offset2D o = absoluteOrigin();
     const float lx = static_cast<float>(p.x) - o.x;
     const float ly = static_cast<float>(p.y) - o.y;
+    if (barVisible()) {
+        const Rect trk = barTrack();
+        if (lx >= trk.x && lx <= trk.x + trk.w &&
+            ly >= trk.y && ly <= trk.y + trk.h) {
+            m_barDrag = true;
+            const float viewH = std::max(bounds().h - m_headH, 0.0f);
+            const float total = m_rowH * static_cast<float>(m_order.size());
+            const Rect th = barThumb();
+            if (ly >= th.y && ly <= th.y + th.h) {
+                m_barGrab = ly - th.y;
+            } else {
+                // Empty track: jump the thumb center to the press point.
+                m_barGrab = th.h * 0.5f;
+                m_scroll = barScrollAt(trk, viewH, total, ly, m_barGrab);
+                clampScroll();
+            }
+            return;
+        }
+    }
     if (ly < m_headH) {
         // Header: a grab on a resizable column edge starts a width drag,
         // otherwise a click sorts by that column.
@@ -965,12 +1054,20 @@ void Table::onPointerDown(MouseButton, const Offset2D& p) {
 
 void Table::onPointerUp(MouseButton) {
     m_resizeCol = -1;
+    m_barDrag = false;
 }
 
 void Table::onPointerMove(const Offset2D& p) {
     const Offset2D o = absoluteOrigin();
     const float lx = static_cast<float>(p.x) - o.x;
     const float ly = static_cast<float>(p.y) - o.y;
+    if (m_barDrag) {
+        const float viewH = std::max(bounds().h - m_headH, 0.0f);
+        const float total = m_rowH * static_cast<float>(m_order.size());
+        m_scroll = barScrollAt(barTrack(), viewH, total, ly, m_barGrab);
+        clampScroll();
+        return;
+    }
     if (m_resizeCol >= 0) {
         const float dx = lx - m_resizeGrabX;
         m_cols[static_cast<size_t>(m_resizeCol)].width =
@@ -1182,6 +1279,8 @@ void Table::onDraw(Rasterizer& r) const {
     for (int c = 1; c < static_cast<int>(m_cols.size()); ++c)
         r.drawLine({b.x + columnX(c), b.y}, {b.x + columnX(c), b.y + b.h},
                    Color{60, 60, 60, 255}, 1.0f);
+
+    if (barVisible()) drawVerticalBar(r, barTrack(), barThumb(), m_barDrag);
 }
 
 // ------------------------------------------------------------------
@@ -1251,6 +1350,23 @@ bool TreeView::toggleAt(float localX, const Row& row) const {
     // The triangle occupies the [depth*indent, depth*indent + indent) slice.
     const float x0 = static_cast<float>(row.depth) * m_indent;
     return localX >= x0 && localX < x0 + m_indent;
+}
+
+bool TreeView::barVisible() const {
+    const float total = m_rowH * static_cast<float>(m_rows.size());
+    return total - std::max(bounds().h, 0.0f) > 1.0f;
+}
+
+Rect TreeView::barTrack() const {
+    const Rect b = bounds();
+    return Rect{b.x + b.w - kBarW - kBarMargin, b.y + kBarMargin,
+                kBarW, std::max(b.h - 2.0f * kBarMargin, 0.0f)};
+}
+
+Rect TreeView::barThumb() const {
+    const float viewH = std::max(bounds().h, 0.0f);
+    const float total = m_rowH * static_cast<float>(m_rows.size());
+    return barThumbRect(barTrack(), viewH, total, m_scroll);
 }
 
 void TreeView::rebuildAnimated() {
@@ -1381,6 +1497,25 @@ void TreeView::onPointerDown(MouseButton, const Offset2D& p) {
     const Offset2D o = absoluteOrigin();
     const float lx = static_cast<float>(p.x) - o.x;
     const float ly = static_cast<float>(p.y) - o.y;
+    if (barVisible()) {
+        const Rect trk = barTrack();
+        if (lx >= trk.x && lx <= trk.x + trk.w &&
+            ly >= trk.y && ly <= trk.y + trk.h) {
+            m_barDrag = true;
+            const float viewH = std::max(bounds().h, 0.0f);
+            const float total = m_rowH * static_cast<float>(m_rows.size());
+            const Rect th = barThumb();
+            if (ly >= th.y && ly <= th.y + th.h) {
+                m_barGrab = ly - th.y;
+            } else {
+                // Empty track: jump the thumb center to the press point.
+                m_barGrab = th.h * 0.5f;
+                m_scroll = barScrollAt(trk, viewH, total, ly, m_barGrab);
+                clampSelected();
+            }
+            return;
+        }
+    }
     const int row = rowAt(ly);
     if (row < 0) return;
     const Row& r = m_rows[static_cast<size_t>(row)];
@@ -1455,9 +1590,21 @@ std::string TreeView::checkedLabels() const {
     return out;
 }
 
+void TreeView::onPointerUp(MouseButton) {
+    m_barDrag = false;
+}
+
 void TreeView::onPointerMove(const Offset2D& p) {
     const Offset2D o = absoluteOrigin();
-    m_hover = rowAt(static_cast<float>(p.y) - o.y);
+    const float ly = static_cast<float>(p.y) - o.y;
+    if (m_barDrag) {
+        const float viewH = std::max(bounds().h, 0.0f);
+        const float total = m_rowH * static_cast<float>(m_rows.size());
+        m_scroll = barScrollAt(barTrack(), viewH, total, ly, m_barGrab);
+        clampSelected();
+        return;
+    }
+    m_hover = rowAt(ly);
 }
 
 void TreeView::onPointerScroll(float, float dy) {
@@ -1620,6 +1767,8 @@ void TreeView::onDraw(Rasterizer& r) const {
         emit(row.node, row.depth, relY, fade, sel, hov);
     }
     r.endFrame();
+
+    if (barVisible()) drawVerticalBar(r, barTrack(), barThumb(), m_barDrag);
 }
 
 // ------------------------------------------------------------------

@@ -142,6 +142,10 @@ if(OGUI_BUILD_TESTS)
     target_compile_definitions(ogui_screens_test PRIVATE
         OGUI_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 
+    # Presses on the list/tree/table scrollbars must scroll, not select.
+    add_executable(ogui_scrollbar_test tests/scrollbar_test.cpp)
+    target_link_libraries(ogui_scrollbar_test PRIVATE ogui)
+
     # Golden-image test: renders a fixed layout and diffs it against
     # tests/golden/basic.png (regenerate with OGUI_UPDATE_GOLDEN=1).
     if(OGUI_USE_STATIC_STB)
@@ -157,6 +161,7 @@ if(OGUI_BUILD_TESTS)
     add_test(NAME drawlist COMMAND ogui_drawlist_test)
     add_test(NAME kernel COMMAND ogui_kernel_test)
     add_test(NAME screens COMMAND ogui_screens_test)
+    add_test(NAME scrollbar COMMAND ogui_scrollbar_test)
     if(TARGET ogui_golden_test)
         add_test(NAME golden COMMAND ogui_golden_test)
     endif()
@@ -177,7 +182,7 @@ install(TARGETS ogui
 
 # Examples and tests are only installed when explicitly built, and the
 # targets may not exist in a partial build configuration.
-foreach(t ogui_demo ogui_demo_win32 ogui_screenshot ogui_parser_test ogui_drawlist_test ogui_kernel_test ogui_screens_test ogui_golden_test)
+foreach(t ogui_demo ogui_demo_win32 ogui_screenshot ogui_parser_test ogui_drawlist_test ogui_kernel_test ogui_screens_test ogui_scrollbar_test ogui_golden_test)
     if(TARGET ${t})
         install(TARGETS ${t} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
     endif()

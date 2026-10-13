@@ -1116,6 +1116,7 @@ public:
 
     virtual void layout(float parentWidth, float parentHeight) override;
     virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
+    virtual void onPointerUp(MouseButton btn) override;
     virtual void onPointerMove(const Offset2D& p) override;
     virtual void onPointerScroll(float dx, float dy) override;
     virtual void onKeyDown(KeyCode key, uint32_t mods) override;
@@ -1128,6 +1129,9 @@ private:
     void ensureVisible(int row);
     int rowAt(float localY) const;     // row under a widget-local y
     void commit(int row);              // user select -> notify
+    bool barVisible() const;           // content overflows the viewport
+    Rect barTrack() const;
+    Rect barThumb() const;
 
     std::vector<std::string> m_items;
     std::string m_fontFam = "sans";
@@ -1138,6 +1142,8 @@ private:
     int m_wantedSelected = -1;         // selected= attr applied on rebuild
     int m_hover = -1;
     bool m_resolved = false;
+    bool m_barDrag = false;            // pointer is dragging the scrollbar thumb
+    float m_barGrab = 0.0f;            // thumb-top offset of the drag press
     Color m_bg{ogui::palette().window};
     Color m_border{ogui::palette().accent};
     Color m_text{ogui::palette().text};
@@ -1329,6 +1335,13 @@ private:
     void beginEdit(int visRow, int col);
     void endEdit(bool save);
     void insertEdit(uint32_t ch);
+    bool barVisible() const;           // rows overflow the viewport
+    Rect barTrack() const;
+    Rect barThumb() const;
+
+    // Scrollbar thumb drag.
+    bool m_barDrag = false;
+    float m_barGrab = 0.0f;
 
     std::vector<Column> m_cols;
     std::vector<std::vector<std::string>> m_rows;
@@ -1464,6 +1477,7 @@ public:
 
     virtual void layout(float parentWidth, float parentHeight) override;
     virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
+    virtual void onPointerUp(MouseButton btn) override;
     virtual void onPointerMove(const Offset2D& p) override;
     virtual void onPointerScroll(float dx, float dy) override;
     virtual void onKeyDown(KeyCode key, uint32_t mods) override;
@@ -1482,6 +1496,9 @@ private:
     void ensureVisible(int row);
     int rowAt(float localY) const;
     bool toggleAt(float localX, const Row& row) const;  // click on triangle?
+    bool barVisible() const;           // rows overflow the viewport
+    Rect barTrack() const;
+    Rect barThumb() const;
     void toggleRow(int row);
     // A node can expand if it has children already, or a not-yet-scanned
     // filesystem path behind it (lazy directory loading).
@@ -1537,6 +1554,10 @@ private:
     float m_animToggleY = 0.0f;
     float m_animOldH = 0.0f;           // widget height when the tween began
     Tween m_anim;
+
+    // Scrollbar thumb drag.
+    bool m_barDrag = false;
+    float m_barGrab = 0.0f;
 };
 
 // ------------------------------------------------------------------
