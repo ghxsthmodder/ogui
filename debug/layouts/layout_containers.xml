@@ -1,61 +1,61 @@
 <screen id="containers">
-  <panel id="bg" x="0" y="0" w="100%" h="100%" bg="@screen"/>
-  <label id="lbl_group" x="1.25%" y="52" w="97.5%" h="20" text="Containers: janela, grupo, splitter, scroll e abas"
+  <panel id="bg" x="0" y="0" width="100%" height="100%" background="@screen"/>
+  <label id="lbl_group" x="1.25%" y="52" width="97.5%" height="20" text="Containers: janela, grupo, splitter, scroll e abas"
          font sans 16 color="#66ee66"/>
 
-  <window id="win_demo" x="1.25%" y="84" w="45%" h="25%" title="Janela"
-          bg="#202020" border="@accent" color="@text"
-          gradient="#141414" shadow="8,4" shadowcolor="#000000">
-    <label x="10" y="34" w="90%" h="20" text="Filhos dentro de uma Window."/>
-    <button x="10" y="62" w="120" h="28" text="Ok" bg="@accent" color="#fff" radius="6"/>
-    <checkbox x="150" y="64" w="120" h="22" text="Opcao" checked="true"/>
-    <panel x="200" y="58" w="100" h="34" bg="@surfaceHi" radius="6" shadow="6,2"/>
+  <window id="win_demo" x="1.25%" y="84" width="45%" height="25%" title="Janela"
+          background="#202020" border="@accent" color="@text"
+          gradient="#141414" shadow="8,4" shadow_color="#000000">
+    <label x="10" y="34" width="90%" height="20" text="Filhos dentro de uma Window."/>
+    <button x="10" y="62" width="120" height="28" text="Ok" background="@accent" color="#fff" radius="6"/>
+    <checkbox x="150" y="64" width="120" height="22" text="Opcao" checked="true"/>
+    <panel x="200" y="58" width="100" height="34" background="@surfaceHi" radius="6" shadow="6,2"/>
   </window>
 
-  <group id="gp_demo" name="Grupo" x="48.75%" y="84" w="50%" h="25%"
-         bg="@window" border="@accent">
-    <label x="12" y="26" w="90%" h="20" text="Um Group com borda e titulo."/>
-    <row x="12" y="56" w="90%" h="24">
-      <radiobutton text="1" x="0" y="0" w="40" h="24" group="g2" checked="true"/>
-      <radiobutton text="2" x="0" y="0" w="40" h="24" group="g2"/>
-      <radiobutton text="3" x="0" y="0" w="40" h="24" group="g2"/>
+  <group id="gp_demo" name="Grupo" x="48.75%" y="84" width="50%" height="25%"
+         background="@window" border="@accent">
+    <label x="12" y="26" width="90%" height="20" text="Um Group com borda e titulo."/>
+    <row x="12" y="56" width="90%" height="24">
+      <radiobutton text="1" x="0" y="0" width="40" height="24" group="g2" checked="true"/>
+      <radiobutton text="2" x="0" y="0" width="40" height="24" group="g2"/>
+      <radiobutton text="3" x="0" y="0" width="40" height="24" group="g2"/>
     </row>
   </group>
 
-  <label x="1.25%" y="41.3%" w="45%" h="18" text="RangeSlider (arraste as duas alcas)"/>
-  <rangeslider id="rs_demo" x="1.25%" y="45%" w="45%" h="22"
+  <label x="1.25%" y="41.3%" width="45%" height="18" text="RangeSlider (arraste as duas alcas)"/>
+  <rangeslider id="rs_demo" x="1.25%" y="45%" width="45%" height="22"
                min="0" max="100" low="20" high="80" color="#66ee66"/>
 
-  <label x="48.75%" y="41.3%" w="50%" h="18" text="Splitter (arraste a barra azul)"/>
-  <splitter id="sp_split" x="48.75%" y="45%" w="50%" h="25%" split="0.5" handlecolor="@accent">
-    <panel x="0" y="0" w="200" h="150" bg="#22344a" border="#4a6c96"/>
-    <panel x="0" y="0" w="200" h="150" bg="#3d2246" border="#7a4a96"/>
+  <label x="48.75%" y="41.3%" width="50%" height="18" text="Splitter (arraste a barra azul)"/>
+  <splitter id="sp_split" x="48.75%" y="45%" width="50%" height="25%" split="0.5" handle_color="@accent">
+    <panel x="0" y="0" width="200" height="150" background="#22344a" border="#4a6c96"/>
+    <panel x="0" y="0" width="200" height="150" background="#3d2246" border="#7a4a96"/>
   </splitter>
 
-  <label x="1.25%" y="50%" w="45%" h="18" text="ScrollView (role a roda)"/>
-  <scrollview id="sv_demo" x="1.25%" y="53.7%" w="45%" h="25%" scrollstep="30"
-              bg="@window" border="@accent">
-    <label x="8" y="8" w="91%" h="360" wrap="true" color="@text"
+  <label x="1.25%" y="50%" width="45%" height="18" text="ScrollView (role a roda)"/>
+  <scrollview id="sv_demo" x="1.25%" y="53.7%" width="45%" height="25%" scroll_step="30"
+              background="@window" border="@accent">
+    <label x="8" y="8" width="91%" height="360" wrap="true" color="@text"
            text="Um paragrafo comprido que ultrapassa a altura da viewport, por isso mora dentro de um ScrollView. Continue rolando para ver o resto do texto aparecer linha a linha conforme o conteudo se desloca para cima."/>
   </scrollview>
 
-  <tabs id="tb_demo" x="1.25%" y="81%" w="45%" h="16%" theight="24" active="0"
-        headercolor="#222" tabcolor="#1a1a1a" activecolor="#2a2a2a" accent="#4488ff">
+  <tabs id="tb_demo" x="1.25%" y="81%" width="45%" height="16%" tab_height="24" active="0"
+        header_color="#222" tab_color="#1a1a1a" active_color="#2a2a2a" accent="#4488ff">
     <tab label="Aba 1">
-      <label x="12" y="8" w="95%" h="20" text="Conteudo da primeira aba."/>
+      <label x="12" y="8" width="95%" height="20" text="Conteudo da primeira aba."/>
     </tab>
     <tab label="Aba 2">
-      <label x="12" y="8" w="95%" h="20" text="Conteudo da segunda aba."/>
-      <button x="12" y="34" w="120" h="26" text="Botao" bg="@borderStrong" color="#fff" radius="6"/>
+      <label x="12" y="8" width="95%" height="20" text="Conteudo da segunda aba."/>
+      <button x="12" y="34" width="120" height="26" text="Botao" background="@borderStrong" color="#fff" radius="6"/>
     </tab>
     <tab label="Texturas">
-      <label x="12" y="8" w="95%" h="20" text="Pagina escondida no menu de overflow (...)."/>
+      <label x="12" y="8" width="95%" height="20" text="Pagina escondida no menu de overflow (...)."/>
     </tab>
     <tab label="Iluminacao">
-      <label x="12" y="8" w="95%" h="20" text="Iluminacao global."/>
+      <label x="12" y="8" width="95%" height="20" text="Iluminacao global."/>
     </tab>
     <tab label="Pos-processamento">
-      <label x="12" y="8" w="95%" h="20" text="Filtros de pos-processamento."/>
+      <label x="12" y="8" width="95%" height="20" text="Filtros de pos-processamento."/>
     </tab>
   </tabs>
 </screen>

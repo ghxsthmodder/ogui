@@ -9,6 +9,16 @@ one widget, not the whole screen.
 XML text ──XmlParser──▶ widget tree ──Kernel::frame──▶ DrawList ──▶ GL / Software
 ```
 
+## Attribute naming
+
+Attribute names are **full snake_case** — `background`, `width`, `height`,
+`row_height`, `border_width`, `font_size`, ... The old short forms (`bg`, `w`,
+`h`, `rowheight`, `borderwidth`, `fontsize`, ...) still parse as **legacy
+aliases** and normalise to the same keys, so existing layouts keep working,
+but new layouts should use the full names. A few conventional names are not
+abbreviations and stay as they are: `x`, `y` (position), `id`, `min`, `max`,
+`color`, `text`, `value`, `label`, `title`.
+
 ## Document roots
 
 A layout file must open with one of two root elements:
@@ -35,8 +45,8 @@ an empty container.
 
 ## General syntax rules
 
-- **Attribute names are case-insensitive** (`fontSize`, `fontsize`,
-  `FONTSIZE` are the same key). **Element names are exact-match lowercase.**
+- **Attribute names are case-insensitive** (`FontSize`, `font_size`,
+  `FONT_SIZE` are the same key). **Element names are exact-match lowercase.**
 - A bare attribute with no value means `"true"`: `<checkbox checked/>`.
 - Values may be quoted (`attr="12"`) or unquoted (`attr=12`); quoted values
   stop at the closing `"`, unquoted ones at whitespace, `>` or `/`.
@@ -50,11 +60,11 @@ an empty container.
 
 ## Colors and `@token` references
 
-Every colour attribute (`bg`, `color`, `border`, ...) accepts either a hex
-literal (`"#4488ff"`, `"#48f"`) or a **palette token** (`"@accent"`). Tokens
-resolve against the *active theme* at parse time, so one theme swap restyles
-the whole tree; an unknown token silently falls back to `window`. Tag-level
-`<style>` definitions may use tokens too.
+Every colour attribute (`background`, `color`, `border`, ...) accepts either a
+hex literal (`"#4488ff"`, `"#48f"`) or a **palette token** (`"@accent"`).
+Tokens resolve against the *active theme* at parse time, so one theme swap
+restyles the whole tree; an unknown token silently falls back to `window`.
+Tag-level `<style>` definitions may use tokens too.
 
 | Token | Dark | Light | Typical use |
 |---|---|---|---|
@@ -82,13 +92,13 @@ the whole tree; an unknown token silently falls back to `window`. Tag-level
 
 ## Geometry
 
-`x`, `y`, `w`, `h` each accept three forms:
+`x`, `y`, `width`, `height` each accept three forms:
 
 | Form | Example | Meaning |
 |---|---|---|
-| pixels | `w="150"` | absolute size/offset |
-| percent | `w="50%"` | fraction of the **parent's content size** |
-| fill | `w="fill"` | the whole parent content size |
+| pixels | `width="150"` | absolute size/offset |
+| percent | `width="50%"` | fraction of the **parent's content size** |
+| fill | `width="fill"` | the whole parent content size |
 
 Percent and `fill` components are re-resolved on **every layout pass**, so
 resizing the window reflows the tree. Mixed px+% rows only stay coherent
@@ -106,32 +116,32 @@ lower-right corner.
 | Attribute | Effect |
 |---|---|
 | `id` | lookup name (`Kernel::findWidget`) |
-| `onclick` / `bind` | action name fired on click |
-| `contextmenu` | name of a `<contextmenu>` to pop on right-click |
+| `on_click` / `bind` | action name fired on click |
+| `context_menu` | id of a `<contextmenu>` to pop on right-click |
 | `tooltip` | hover text |
 | `visible` | show/hide |
-| `bg` | fill colour |
+| `background` | fill colour |
 | `color` | foreground/text colour |
-| `border` / `bordercolor` | stroke colour |
-| `borderwidth` | stroke thickness in px |
+| `border` / `border_color` | stroke colour |
+| `border_width` | stroke thickness in px |
 | `radius` | corner radius |
 | `padding` / `margin` | inner / outer spacing |
-| `font` / `fontsize` | family and size (`fontsize` overrides; legacy `font sans 20 color "#66ee66"` pseudo-syntax also works) |
+| `font` / `font_size` | family and size (`font_size` overrides; legacy `font sans 20 color "#66ee66"` pseudo-syntax also works) |
 | `shadow` | drop shadow as `"blur[,dy[,dx]]"` |
-| `shadowcolor` | shadow tint |
+| `shadow_color` | shadow tint |
 | `gradient` | fill gradient |
 
 ## Named styles
 
 `<style name="...">` anywhere in a screen declares a reusable attribute set;
-`<style name="p" bg="@accent" color="#fff" radius="6"/>` or a non-self-closing
-`<style>` containing nested `<set .../>` elements. Elements opt in with
-`style="p"`; the named style provides the base and the element's **own
-attributes win**. Referencing an unknown style warns and is ignored.
+`<style name="p" background="@accent" color="#fff" radius="6"/>` or a
+non-self-closing `<style>` containing nested `<set .../>` elements. Elements
+opt in with `style="p"`; the named style provides the base and the element's
+**own attributes win**. Referencing an unknown style warns and is ignored.
 
 ```xml
-<style name="primary" bg="@accent" color="@white" radius="6"/>
-<button style="primary" text="Iniciar" w="150" h="38"/>
+<style name="primary" background="@accent" color="@white" radius="6"/>
+<button style="primary" text="Iniciar" width="150" height="38"/>
 ```
 
 ## Elements
@@ -144,7 +154,7 @@ attributes win**. Referencing an unknown style warns and is ignored.
 | `badge` | `text`, `count`, `removable` | — |
 | `sparkline` | `values` (comma list), `label`, `max` | — |
 | `separator` | `thickness` | — |
-| `image` | `src`, `tile` | — |
+| `image` | `source`, `tile` | — |
 
 ### Inputs
 
@@ -153,9 +163,9 @@ attributes win**. Referencing an unknown style warns and is ignored.
 | `textinput` | `text`, `placeholder` | — |
 | `searchinput` | `text`, `placeholder` | — |
 | `textarea` | — (common attributes only) | — |
-| `spinbox` | `min`, `max`, `value`, `step`, `decimals`, `wrap`, `prefix`, `suffix`, `text`, `buttoncolor` | — |
+| `spinbox` | `min`, `max`, `value`, `step`, `decimals`, `wrap`, `prefix`, `suffix`, `text`, `button_color` | — |
 | `optionspin` | `options="a,b,c"`, `value`, `index`, `wrap` | `option` |
-| `slider` | `min`, `max`, `value`, `color`, `bg`, `thumbcolor` | — |
+| `slider` | `min`, `max`, `value`, `color`, `background`, `thumb_color` | — |
 | `rangeslider` | `low`, `high` (plus slider attrs) | — |
 | `colorpicker` | `color` | — |
 | `pathpicker` | `value`, `placeholder`, `path`, `filter` | — |
@@ -167,7 +177,7 @@ attributes win**. Referencing an unknown style warns and is ignored.
 | Element | Typed attributes | Children |
 |---|---|---|
 | `button` | `text` | — |
-| `checkbox` | `text`, `checked`, `color`, `bg` (check colour), `bordercolor` | — |
+| `checkbox` | `text`, `checked`, `color`, `background` (check colour), `border_color` | — |
 | `radiobutton` | `text`, `checked`, `group`, `accent` | — |
 | `toggleswitch` / `toggle` | `checked`, `on`, `text` | — |
 | `progress` | `value` (0..1), `indeterminate` | — |
@@ -177,13 +187,13 @@ attributes win**. Referencing an unknown style warns and is ignored.
 
 | Element | Typed attributes | Children |
 |---|---|---|
-| `listbox` | `rowheight`, `selected`, `highlight` | `item` (`ListItem`) |
+| `listbox` | `row_height`, `selected`, `highlight` | `item` (`ListItem`) |
 | `item` | `label`/`text`, `value` | — |
-| `table` | `rowheight`, `headerheight`, `selected`, `sortable`, `headerbg` | `th`, `tr` |
-| `th` | `label`, `w`, `resizable`, `editable`, `scrollingtext` (`automatic`/`onmouseenter`) | — |
-| `tr` | `cells="a;b;c"`, `value`, `editablecells`, `resizable`, `scrollingtext` | `cell` |
-| `cell` | `editable`, `resizable`, `scrollingtext`; text content also works (`<cell>Zoe</cell>`) | — |
-| `tree` | `rowheight`, `indent`, `autoheight`, `selected`, `icons`, `checks`, `guides`, `dir` | `treeitem` |
+| `table` | `row_height`, `header_height`, `selected`, `sortable`, `header_background` | `th`, `tr` |
+| `th` | `label`, `width`, `resizable`, `editable`, `scrolling_text` (`automatic`/`onmouseenter`) | — |
+| `tr` | `cells="a;b;c"`, `value`, `editable_cells`, `resizable`, `scrolling_text` | `cell` |
+| `cell` | `editable`, `resizable`, `scrolling_text`; text content also works (`<cell>Zoe</cell>`) | — |
+| `tree` | `row_height`, `indent`, `auto_height`, `selected`, `icons`, `checks`, `guides`, `dir` | `treeitem` |
 | `treeitem` | `label`, `value`, `expanded`, `folder`/`file`, `checked` | nested `treeitem` |
 
 `listbox`, `table` and `tree` draw an overlay scrollbar (drag it, or click
@@ -196,15 +206,15 @@ empty track to jump) whenever content exceeds the viewport.
 | `panel` | — | any widget |
 | `group` | `name` (box caption) | any widget |
 | `window` | `title`, `title_visible` | any widget |
-| `scrollview` | `scrollstep`, `scrollx`, `scrolly` | any widget |
+| `scrollview` | `scroll_step`, `scroll_x`, `scroll_y` | any widget |
 | `column` / `row` | — | any widget (stacked) |
-| `grid` | `cols`, `gap`, `rowheight` | any widget |
-| `splitter` | `orientation`/`vertical`, `split` (0..1), `handlesize`, `handlecolor` | two panels |
-| `tabs` | `active`, `theight`, `headercolor`, `tabcolor`, `activecolor`, `accent` | `tab` |
+| `grid` | `columns`, `gap`, `row_height` | any widget |
+| `splitter` | `orientation`/`vertical`, `split` (0..1), `handle_size`, `handle_color` | two panels |
+| `tabs` | `active`, `tab_height`, `header_color`, `tab_color`, `active_color`, `accent` | `tab` |
 | `tab` | `label` | any widget |
 | `accordion` | `exclusive`, `gap` | `section` |
-| `section` | `header`/`text`, `expanded`, `headerheight` | any widget |
-| `combobox` | `selected`, `rowheight`, `highlight`, `panel`, `accent` | `item`/`option` |
+| `section` | `header`/`text`, `expanded`, `header_height` | any widget |
+| `combobox` | `selected`, `row_height`, `highlight`, `panel`, `accent` | `item`/`option` |
 
 Overflowing tab headers collapse into a `...` popup menu automatically.
 
@@ -216,8 +226,8 @@ Overflowing tab headers collapse into a `...` popup menu automatically.
 | `menu` | `label` | `menuitem`, `menuseparator`, nested `menu` |
 | `menuitem` | `label`/`text`, `command` | — |
 | `menuseparator` | — | — |
-| `contextmenu` | located by its `id` (pointed to from `contextmenu="..."` on any widget) | `menuitem` |
-| `modal` | `title`, `open`, `panelw`, `panelh` | any widget |
+| `contextmenu` | located by its `id` (pointed to from `context_menu="..."` on any widget) | `menuitem` |
+| `modal` | `title`, `open`, `panel_width`, `panel_height` | any widget |
 
 ### Data-only
 

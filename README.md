@@ -105,7 +105,7 @@ screen->height = 720.f;
 ogui::Kernel kernel;
 kernel.init();
 kernel.pushScreen(screen);
-kernel.bind("onStart", []{ /* fired when a widget with onclick="onStart" is clicked */ });
+kernel.bind("onStart", []{ /* fired when a widget with on_click="onStart" is clicked */ });
 
 // 3. GL backend (after your context is current)
 ogui::GlBackend backend;
@@ -198,23 +198,30 @@ attributes, `@token` palette values for both themes and the named-style
 rules — lives in [`docs/xml-reference.md`](docs/xml-reference.md). Quick
 intro below.
 
+Attribute names are full snake_case (`background`, `width`, `height`,
+`row_height`, `border_width`, `font_size`, …). The old short forms (`bg`, `w`,
+`h`, `rowheight`, `borderwidth`, `fontsize`, …) still parse as legacy aliases,
+so existing layouts keep working, but new layouts should use the full names.
+Conventional names that are not abbreviations stay as-is: `x`, `y`, `id`,
+`min`, `max`, `color`, `text`, `value`, `label`, `title`.
+
 ```xml
 <screen id="main">
-  <style name="primary" bg="#4488ff" color="#ffffff" radius="6"/>
+  <style name="primary" background="#4488ff" color="#ffffff" radius="6"/>
 
-  <window id="win" x="120" y="80" w="560" h="420" title="ogui demo"
-          bg="#202020" border="#4488ff" borderwidth="1">
+  <window id="win" x="120" y="80" width="560" height="420" title="ogui demo"
+          background="#202020" border="#4488ff" border_width="1">
     <column id="col">
       <button id="start" style="primary" text="Iniciar"
-              x="20" y="20" w="200" h="44" onclick="onStart"
+              x="20" y="20" width="200" height="44" on_click="onStart"
               tooltip="Iniciar a simulacao"/>
-      <textinput id="log" x="20" y="80" w="520" h="40" placeholder="..."/>
-      <tabs x="20" y="140" w="520" h="120" theight="26" active="0">
+      <textinput id="log" x="20" y="80" width="520" height="40" placeholder="..."/>
+      <tabs x="20" y="140" width="520" height="120" tab_height="26" active="0">
         <tab label="Geral">
-          <label text="conteudo" x="12" y="8" w="400" h="22"/>
+          <label text="conteudo" x="12" y="8" width="400" height="22"/>
         </tab>
         <tab label="Avancado">
-          <label text="ajustes" x="12" y="8" w="400" h="22"/>
+          <label text="ajustes" x="12" y="8" width="400" height="22"/>
         </tab>
       </tabs>
     </column>
@@ -227,18 +234,18 @@ intro below.
 | Attribute | Meaning |
 | --- | --- |
 | `id` | lookup key for `Kernel::findWidget/setText/getText` and `bind()` |
-| `onclick` / `bind` | binding name resolved on click against `Kernel::bind` |
+| `on_click` / `bind` | binding name resolved on click against `Kernel::bind` |
 | `tooltip` | text shown by the hover tooltip after ~0.5 s |
-| `x` `y` `w` `h` | bounds, **relative to the parent**; each accepts pixels (`20`), percent (`"50%"`) or — for `w`/`h` — `"fill"` (see below) |
+| `x` `y` `width` `height` | bounds, **relative to the parent**; each accepts pixels (`20`), percent (`"50%"`) or — for `width`/`height` — `"fill"` (see below) |
 | `anchor` | pin edges across parent resizes: `anchor="right"`, `"l,r"`, `"top,bottom"` etc. (`left/right/top/bottom`, short forms `l/r/t/b`, space/comma-separated) |
 | `visible` | `true/false` — an invisible widget (and its subtree) is skipped by drawing *and* input |
 | `style` | name of a `<style>` declared earlier in the document |
-| `bg` `color` `border` `bordercolor` `borderwidth` `radius` | colors/metrics |
+| `background` `color` `border` `border_color` `border_width` `radius` | colors/metrics |
 | `shadow` | soft drop shadow: `blur` or `blur,dy` or `blur,dx,dy` (pixels) |
-| `shadowcolor` | shadow color (default `#000000`), e.g. `shadowcolor="#000000"` |
-| `gradient` | vertical background gradient end color: `bg` stays the top color |
+| `shadow_color` | shadow color (default `#000000`), e.g. `shadow_color="#000000"` |
+| `gradient` | vertical background gradient end color: `background` stays the top color |
 | `padding` `margin` | layout knobs (`<column>` uses both) |
-| `font` `fontsize` | `font="sans 20"` or the legacy `font sans 20 color "#66ee66"` |
+| `font` `font_size` | `font="sans 20"` or the legacy `font sans 20 color "#66ee66"` |
 
 ### Theme & palette
 
@@ -252,7 +259,7 @@ Any colour attribute also accepts `@token` instead of a hex literal — the
 token is resolved against the active palette at parse time:
 
 ```xml
-<panel id="bg" x="0" y="0" w="100%" h="100%" bg="@screen"/>
+<panel id="bg" x="0" y="0" width="100%" height="100%" background="@screen"/>
 <label text="Title" color="@textBright"/>
 ```
 
@@ -274,8 +281,8 @@ area below the title bar inside a `<window>`, the content width inside a
 `<column>`), so resizing or maximizing the window reflows the tree:
 
 ```xml
-<panel id="bg" x="0" y="0" w="100%" h="100%" bg="#161616"/>
-<slider  id="sl" x="1.25%" y="292" w="92.5%" h="20"/>
+<panel id="bg" x="0" y="0" width="100%" height="100%" background="#161616"/>
+<slider  id="sl" x="1.25%" y="292" width="92.5%" height="20"/>
 ```
 
 Absolute components keep whatever the bounds currently hold, so runtime
@@ -291,9 +298,9 @@ the rest of the session:
 
 ```xml
 <!-- stays 20px from the navbar's right edge, 120px wide -->
-<button id="exit" x="700" y="6" w="120" h="20" anchor="top,right"/>
+<button id="exit" x="700" y="6" width="120" height="20" anchor="top,right"/>
 <!-- stretches with the parent, keeping a 10px gap on each side -->
-<panel id="band" x="10" y="100" w="620" h="40" anchor="l,r"/>
+<panel id="band" x="10" y="100" width="620" height="40" anchor="l,r"/>
 ```
 
 Anchoring both edges of an axis keeps both margins and stretches the
@@ -316,48 +323,48 @@ theme default.
 | `window` | bordered panel with a title bar (children are offset by it) | `title`, `title_visible` |
 | `column` | stacks children vertically (gap 4, honours `padding`/`margin`) | — |
 | `row` | lays children out horizontally, tiling authored widths with a gap | — |
-| `grid` | row-major tiling over column tracks; children fill each cell origin (child `x`/`y` are ignored, percent/fill resolve against the cell) | `cols` (`"3"` = 3 equal tracks, or a list like `"120 1fr 25%"`: px, fractional, percent), `gap` (px, default 4), `rowheight` (px; default is auto = tallest child of the row) |
+| `grid` | row-major tiling over column tracks; children fill each cell origin (child `x`/`y` are ignored, percent/fill resolve against the cell) | `columns` (`"3"` = 3 equal tracks, or a list like `"120 1fr 25%"`: px, fractional, percent), `gap` (px, default 4), `row_height` (px; default is auto = tallest child of the row) |
 | `label` | text | `text`, `wrap`, `align="left\|center\|right"` |
 | `button` | clickable button, press/release feedback | `text` |
 | `textinput` | single-line UTF-8 editor: caret, click-drag / Shift+arrows / Shift+click selection, double-click selects the word, triple-click selects all, Ctrl+Left/Right jump words, Ctrl+A/C/X/V | `text`, `placeholder` |
 | `textarea` | multiline UTF-8 editor: Enter inserts a newline, Up/Down navigate lines, selection spans lines (word/line drag, double/triple-click and Shift+click like `textinput`), long lines soft-wrap to the widget width, wheel scrolls, vertical scrollbar (drag the thumb or click the track) when content overflows | `text`, `placeholder` (style attrs as `textinput`) |
-| `listbox` | scrollable list with single selection (click, wheel, Up/Down/Home/End) | `selected`, `rowheight`, `highlight` + `<item>` children |
+| `listbox` | scrollable list with single selection (click, wheel, Up/Down/Home/End) | `selected`, `row_height`, `highlight` + `<item>` children |
 | `item` | a `listbox` entry | `label` / `text`, `value` |
-| `table` | data grid: header click sorts (re-click flips direction), row click selects, wheel + Up/Down/Home/End; drag a header edge to resize a `resizable` column, click a cell in an `editable` column (or press F2) to edit it inline (Enter saves, Esc cancels), overflowing cell text marquees per `scrollingtext` | `selected`, `rowheight`, `headerheight`, `sortable`, `headerbg`, `highlight` + `<th>`/`<tr>` children |
-| `th` | a `table` column | `label` / `text`, `w` (0 = share leftover width), `resizable`, `editable`, `scrollingtext` (`automatic` / `onmouseenter`) |
-| `tr` | a `table` row: cells from `cells="a;b"` or nested `<cell>` children | `cells` (`;`-separated), `value`, `editablecells` (`;`-separated column labels), `resizable`, `scrollingtext` |
-| `cell` | a `tr` cell written as an element (`<cell>text</cell>`) | text content; `editable`, `resizable`, `scrollingtext` (override the column) |
-| `tree` | hierarchical tree: triangle toggles expansion (rows compress/slide instead of blinking away), click selects, Left/Right collapse/expand; auto-shrinks to its visible rows when collapsed. `icons`/`checks`/`guides` turn it into a file-tree view (folder/file glyphs, a per-node checkbox that fires the widget `bind()`, and dotted parent connectors). With `dir`, the tree mirrors a real filesystem folder: children are read lazily on first expand (dotfiles hidden, dirs first), `<treeitem>` children are ignored | `selected`, `rowheight`, `indent`, `autoheight` (default true), `accent`, `highlight`, `icons`, `checks`, `guides`, `dir` + nested `<treeitem>` children |
+| `table` | data grid: header click sorts (re-click flips direction), row click selects, wheel + Up/Down/Home/End; drag a header edge to resize a `resizable` column, click a cell in an `editable` column (or press F2) to edit it inline (Enter saves, Esc cancels), overflowing cell text marquees per `scrolling_text` | `selected`, `row_height`, `header_height`, `sortable`, `header_background`, `highlight` + `<th>`/`<tr>` children |
+| `th` | a `table` column | `label` / `text`, `width` (0 = share leftover width), `resizable`, `editable`, `scrolling_text` (`automatic` / `onmouseenter`) |
+| `tr` | a `table` row: cells from `cells="a;b"` or nested `<cell>` children | `cells` (`;`-separated), `value`, `editable_cells` (`;`-separated column labels), `resizable`, `scrolling_text` |
+| `cell` | a `tr` cell written as an element (`<cell>text</cell>`) | text content; `editable`, `resizable`, `scrolling_text` (override the column) |
+| `tree` | hierarchical tree: triangle toggles expansion (rows compress/slide instead of blinking away), click selects, Left/Right collapse/expand; auto-shrinks to its visible rows when collapsed. `icons`/`checks`/`guides` turn it into a file-tree view (folder/file glyphs, a per-node checkbox that fires the widget `bind()`, and dotted parent connectors). With `dir`, the tree mirrors a real filesystem folder: children are read lazily on first expand (dotfiles hidden, dirs first), `<treeitem>` children are ignored | `selected`, `row_height`, `indent`, `auto_height` (default true), `accent`, `highlight`, `icons`, `checks`, `guides`, `dir` + nested `<treeitem>` children |
 | `treeitem` | a `tree` node (may nest further `<treeitem>`s) | `label` / `text`, `value`, `expanded`, `folder`/`file`, `checked` |
 | `toggleswitch` / `toggle` | compact pill switch for a binary mode: click slides the knob over an accent-tinted track, firing `onChanged(bool)` and the widget `bind()` | `checked`/`on`, `text` (trailing label) |
 | `checkbox` | toggle + label | `text`, `checked` |
 | `radiobutton` | radio toggle in group | `text`, `checked`, `group` |
-| `combobox` | dropdown: current value shown, popup lists `<option>` children (keyboard Up/Down/Enter, autoclose on outside press) | `selected` (index or `label=`), `rowheight`, `panel` (popup bg), `highlight`, `highlighttext`, `arrow` |
-| `slider` | value in `min..max` (drag, arrows, Home/End) | `min`, `max`, `value`, `color` (bar), `bg` (track), `thumbcolor` |
-| `spinbox` | numeric value with `-`/`+` buttons on each end, drawn as one unified widget (flat button regions + hairline separators); focused Up/Right/Down/Left step, Home/End clamp | `min`, `max`, `value`, `step`, `decimals`, `wrap` (cycles min↔max), `prefix`, `suffix` (or `text`), `bg`, `color` (text), `buttoncolor`, `bordercolor`/`border`, `font` |
-| `optionspin` | text-only spin `[ < ][ option ][ > ]`: cycles through a fixed list of options as one unified widget; focused Right/Up forward, Left/Down back, Home/End first/last | `options` (comma-separated list), `value` (matching option text) or `index`, `wrap` (default true), `bg`, `color`, `buttoncolor`, `bordercolor`/`border`, `font` |
-| `rangeslider` | two-thumb slider over a `[low, high]` sub-range; drag the nearest thumb (the band between is filled), focused Left/Right nudge low and Up/Down nudge high | `min`, `max`, `low`, `high`, `color` (band), `bg` (track), `thumbcolor` |
-| `splitter` | two panes (first two children, placed in the splitter's own space) with a draggable divider kept at a `split` fraction; the panes resize as the handle is dragged | `orientation` (`"vertical"` = vertical divider/side-by-side panes (default), `"horizontal"` = stacked panes) or `vertical` (bool), `split` (0..1), `handlesize`, `handlecolor` |
-| `progress` | read-only fill; `indeterminate="true"` slides a block back and forth instead of showing a value | `value` (0..1), `indeterminate`, `color`, `bg`, `radius` |
-| `badge` | small pill tag (rounded to a capsule); `removable` adds an ✕ hit-region at the right that hides the badge when clicked; `count` appends `(n)` | `text`, `count` (-1 = none), `removable`, `bg`, `color` (text), `border` |
+| `combobox` | dropdown: current value shown, popup lists `<option>` children (keyboard Up/Down/Enter, autoclose on outside press) | `selected` (index or `label=`), `row_height`, `panel` (popup bg), `highlight`, `highlighttext`, `arrow` |
+| `slider` | value in `min..max` (drag, arrows, Home/End) | `min`, `max`, `value`, `color` (bar), `background` (track), `thumb_color` |
+| `spinbox` | numeric value with `-`/`+` buttons on each end, drawn as one unified widget (flat button regions + hairline separators); focused Up/Right/Down/Left step, Home/End clamp | `min`, `max`, `value`, `step`, `decimals`, `wrap` (cycles min↔max), `prefix`, `suffix` (or `text`), `background`, `color` (text), `button_color`, `border_color`/`border`, `font` |
+| `optionspin` | text-only spin `[ < ][ option ][ > ]`: cycles through a fixed list of options as one unified widget; focused Right/Up forward, Left/Down back, Home/End first/last | `options` (comma-separated list), `value` (matching option text) or `index`, `wrap` (default true), `background`, `color`, `button_color`, `border_color`/`border`, `font` |
+| `rangeslider` | two-thumb slider over a `[low, high]` sub-range; drag the nearest thumb (the band between is filled), focused Left/Right nudge low and Up/Down nudge high | `min`, `max`, `low`, `high`, `color` (band), `background` (track), `thumb_color` |
+| `splitter` | two panes (first two children, placed in the splitter's own space) with a draggable divider kept at a `split` fraction; the panes resize as the handle is dragged | `orientation` (`"vertical"` = vertical divider/side-by-side panes (default), `"horizontal"` = stacked panes) or `vertical` (bool), `split` (0..1), `handle_size`, `handle_color` |
+| `progress` | read-only fill; `indeterminate="true"` slides a block back and forth instead of showing a value | `value` (0..1), `indeterminate`, `color`, `background`, `radius` |
+| `badge` | small pill tag (rounded to a capsule); `removable` adds an ✕ hit-region at the right that hides the badge when clicked; `count` appends `(n)` | `text`, `count` (-1 = none), `removable`, `background`, `color` (text), `border` |
 | `spinner` | animated loading indicator ticked by the frame clock: `variant="glyph"` cycles &#124;/-\, `variant="blocks"` runs a comet of cells; optional trailing label | `text`, `variant` (`glyph`/`blocks`), `speed`, `color` |
-| `searchinput` | `textinput` with a magnifier icon inset on the left and a ✕ clear button on the right (click clears the text) | `text`, `placeholder`, `bg` |
-| `accordion` / `section` | stack of collapsible sections: clicking a section header toggles it; with `exclusive` (default) opening one closes its siblings; collapsed sections hide their children | `exclusive`, `gap` / `header`, `expanded`, `headerheight` |
-| `modal` | full-screen dim + centred panel that blocks all input below while open; children are laid out relative to the panel origin | `title`, `open`, `panelw`, `panelh` (toggle with `Modal::setOpen`) |
-| `sparkline` | mini line plot of a value history (scaled to min/max); `addSample(v)` from C++ pushes a point and trims to `max` samples | `values` (`;`-separated), `label`, `max`, `color`, `bg` |
+| `searchinput` | `textinput` with a magnifier icon inset on the left and a ✕ clear button on the right (click clears the text) | `text`, `placeholder`, `background` |
+| `accordion` / `section` | stack of collapsible sections: clicking a section header toggles it; with `exclusive` (default) opening one closes its siblings; collapsed sections hide their children | `exclusive`, `gap` / `header`, `expanded`, `header_height` |
+| `modal` | full-screen dim + centred panel that blocks all input below while open; children are laid out relative to the panel origin | `title`, `open`, `panel_width`, `panel_height` (toggle with `Modal::setOpen`) |
+| `sparkline` | mini line plot of a value history (scaled to min/max); `addSample(v)` from C++ pushes a point and trims to `max` samples | `values` (`;`-separated), `label`, `max`, `color`, `background` |
 | `menubar` / `menu` | menu bar strip; each top-level `menu` opens a floating popup under its label, commands route to `Kernel::bind()` | — / `label` |
 | `menuitem` | a menu entry (nest more `menuitem`s inside it for a ▶ submenu) | `label` / `text`, `command` (a `bind()` name) |
 | `menuseparator` | divider line inside a menu | — |
-| `contextmenu` | right-click menu holder (invisible in the tree); any widget points at it with `contextmenu="<id>"` and right-clicking it opens the menu at the pointer (right-click never fires click bindings) | `id`; children are `menuitem`/`menuseparator` |
+| `contextmenu` | right-click menu holder (invisible in the tree); any widget points at it with `context_menu="<id>"` and right-clicking it opens the menu at the pointer (right-click never fires click bindings) | `id`; children are `menuitem`/`menuseparator` |
 | `colorpicker` | swatch + hex label; click opens a popup with a saturation/value grid, a hue strip and a live hex readout; drags update the color and fire the widget's `bind()` | `color` (`#rrggbb`) |
 | `pathpicker` | read-only path field with a `...` button that opens a file-browser popup (folders first with a trailing `/`, `..` to go up, capped at 40 entries); picking a file fires the widget's `bind()` | `value`, `placeholder`, `path` (start folder), `filter` (extension, e.g. `.png`) |
 | `rampeditor` / `ramp` | horizontal color-gradient bar built from movable stops; click the bar to add a stop, drag a stop to reposition it, colours blend piecewise-linearly between neighbours; a change fires the widget's `bind()` | `stops` (`pos:#rrggbb pos:#rrggbb ...`, pos 0..1) |
 | `curveeditor` / `curve` | cubic-Bézier curve in a unit box with four draggable control points (endpoints cyan, handles yellow); `evaluate(t)` samples the eased output for animation | `points` (`x,y x,y x,y x,y`, normalised 0..1, y up) |
 | `separator` | rule, horizontal or vertical | `thickness`, `color` |
-| `tabs` / `tab` | header strip over stacked pages (inactive pages take no input); pages that don't fit the width collapse into a `...` popup menu | `active`, `theight`, `headercolor`, `tabcolor`, `activecolor`, `accent` / `label` |
+| `tabs` / `tab` | header strip over stacked pages (inactive pages take no input); pages that don't fit the width collapse into a `...` popup menu | `active`, `tab_height`, `header_color`, `tab_color`, `active_color`, `accent` / `label` |
 | `group` | titled grouping box | `name` |
-| `image` | RGBA image file (PNG/JPG/… decoded by `ImageManager` via stb_image): stretched to the bounds, or repeated at native size with `tile`; `border` draws a frame on top; a missing file draws nothing | `src` (path, relative to the working directory), `tile` |
-| `scrollview` | wheel-scrollable clipped viewport over its children | `scrollx`, `scrolly`, `scrollstep` |
+| `image` | RGBA image file (PNG/JPG/… decoded by `ImageManager` via stb_image): stretched to the bounds, or repeated at native size with `tile`; `border` draws a frame on top; a missing file draws nothing | `source` (path, relative to the working directory), `tile` |
+| `scrollview` | wheel-scrollable clipped viewport over its children | `scroll_x`, `scroll_y`, `scroll_step` |
 
 Toasts (transient notification banners) are a kernel layer rather than an
 XML element: `Kernel::showToast("saved", Kernel::ToastKind::Info)` stacks a

@@ -1,6 +1,6 @@
 <screen id="widgets">
-  <panel id="bg" x="0" y="0" w="100%" h="100%" bg="@screen"/>
-  <menubar id="mb" x="0" y="44" w="100%" h="24">
+  <panel id="bg" x="0" y="0" width="100%" height="100%" background="@screen"/>
+  <menubar id="mb" x="0" y="44" width="100%" height="24">
     <menu label="Arquivo">
       <menuitem label="Nova cena" command="file_new"/>
       <menuitem label="Abrir cena..." command="file_open"/>
@@ -18,96 +18,96 @@
       <menuitem label="Sobre ogui" command="help_about"/>
     </menu>
   </menubar>
-  <label id="lbl_title" x="1.25%" y="78" w="97.5%" h="20"
+  <label id="lbl_title" x="1.25%" y="78" width="97.5%" height="20"
          text="Novos widgets em um grid 2 colunas (1fr 1fr)"
          font sans 16 color="#66ee66"/>
 
-  <grid id="gd_main" x="1.25%" y="104" w="97.5%" h="70%" cols="1fr 1fr" gap="10">
+  <grid id="gd_main" x="1.25%" y="104" width="97.5%" height="70%" columns="1fr 1fr" gap="10">
 
     <!-- celula 1: form -->
-    <panel x="0" y="0" w="100%" h="220" bg="@surface" border="@border" radius="6"
-           contextmenu="cm_form">
-      <label x="10" y="8" w="90%" h="18" text="Formulario" font sans 14 color="@dim"/>
-      <searchinput id="se_busca" x="10" y="32" w="62%" h="30"
-                   placeholder="Buscar..." bg="@window"/>
-      <spinner id="sp_load" x="66%" y="34" w="32%" h="26" text="filtro" speed="6"/>
-      <badge id="bg_pbr" x="10" y="72" w="110" h="24" text="Shader: PBR" removable="true"/>
-      <badge id="bg_inst" x="128" y="72" w="96" h="24" text="Instancing" count="4"
-             removable="true" bg="#25344d" border="#3c5a86"/>
-      <badge id="bg_shadow" x="232" y="72" w="110" h="24" text="ShadowMaps" count="2"
-             removable="true" bg="#3a2544" border="#6c4a86"/>
-      <separator x="10" y="108" w="95%" h="6"/>
-      <label x="10" y="122" w="90%" h="18" text="Progresso indeterminado" font sans 12 color="@dim"/>
-      <progress id="pr_ind" x="10" y="144" w="95%" h="18" indeterminate="true"
-                color="@accent" bg="@surfaceLo" radius="4"/>
-      <label x="10" y="174" w="90%" h="18" text="Determinado 60%" font sans 12 color="@dim"/>
-      <progress id="pr_det" x="10" y="196" w="95%" h="18" value="0.6"
-                color="#44dd88" bg="@surfaceLo" radius="4"/>
+    <panel x="0" y="0" width="100%" height="220" background="@surface" border="@border" radius="6"
+           context_menu="cm_form">
+      <label x="10" y="8" width="90%" height="18" text="Formulario" font sans 14 color="@dim"/>
+      <searchinput id="se_busca" x="10" y="32" width="62%" height="30"
+                   placeholder="Buscar..." background="@window"/>
+      <spinner id="sp_load" x="66%" y="34" width="32%" height="26" text="filtro" speed="6"/>
+      <badge id="bg_pbr" x="10" y="72" width="110" height="24" text="Shader: PBR" removable="true"/>
+      <badge id="bg_inst" x="128" y="72" width="96" height="24" text="Instancing" count="4"
+             removable="true" background="#25344d" border="#3c5a86"/>
+      <badge id="bg_shadow" x="232" y="72" width="110" height="24" text="ShadowMaps" count="2"
+             removable="true" background="#3a2544" border="#6c4a86"/>
+      <separator x="10" y="108" width="95%" height="6"/>
+      <label x="10" y="122" width="90%" height="18" text="Progresso indeterminado" font sans 12 color="@dim"/>
+      <progress id="pr_ind" x="10" y="144" width="95%" height="18" indeterminate="true"
+                color="@accent" background="@surfaceLo" radius="4"/>
+      <label x="10" y="174" width="90%" height="18" text="Determinado 60%" font sans 12 color="@dim"/>
+      <progress id="pr_det" x="10" y="196" width="95%" height="18" value="0.6"
+                color="#44dd88" background="@surfaceLo" radius="4"/>
     </panel>
 
     <!-- celula 2: accordion -->
-    <panel x="0" y="0" w="100%" h="220" bg="@surface" border="@border" radius="6">
-      <label x="10" y="8" w="90%" h="18" text="Accordion" font sans 14 color="@dim"/>
-      <accordion id="ac_demo" x="10" y="32" w="95%" h="180" gap="4">
+    <panel x="0" y="0" width="100%" height="220" background="@surface" border="@border" radius="6">
+      <label x="10" y="8" width="90%" height="18" text="Accordion" font sans 14 color="@dim"/>
+      <accordion id="ac_demo" x="10" y="32" width="95%" height="180" gap="4">
         <section header="Transformacoes de Cena" expanded="true">
-          <label x="16" y="4" w="90%" h="18" text="Translation: X=0.0  Y=2.5  Z=0.0" font sans 12/>
-          <label x="16" y="4" w="90%" h="18" text="Scale: 1.0, 1.0, 1.0" font sans 12/>
+          <label x="16" y="4" width="90%" height="18" text="Translation: X=0.0  Y=2.5  Z=0.0" font sans 12/>
+          <label x="16" y="4" width="90%" height="18" text="Scale: 1.0, 1.0, 1.0" font sans 12/>
         </section>
         <section header="Rasterizacao e Shaders">
-          <label x="16" y="4" w="90%" h="18" text="Cull Face: GL_BACK" font sans 12/>
-          <label x="16" y="4" w="90%" h="18" text="Depth Test: GL_LESS" font sans 12/>
+          <label x="16" y="4" width="90%" height="18" text="Cull Face: GL_BACK" font sans 12/>
+          <label x="16" y="4" width="90%" height="18" text="Depth Test: GL_LESS" font sans 12/>
         </section>
         <section header="Spinners">
-          <spinner x="16" y="2" w="180" h="22" variant="glyph" speed="10"/>
-          <spinner x="16" y="2" w="220" h="22" text="texturas" variant="blocks" speed="7"/>
+          <spinner x="16" y="2" width="180" height="22" variant="glyph" speed="10"/>
+          <spinner x="16" y="2" width="220" height="22" text="texturas" variant="blocks" speed="7"/>
         </section>
       </accordion>
     </panel>
 
     <!-- celula 3: sparkline -->
-    <panel x="0" y="0" w="100%" h="160" bg="@surface" border="@border" radius="6">
-      <label x="10" y="8" w="90%" h="18" text="Plot / Sparkline" font sans 14 color="@dim"/>
-      <sparkline id="sp_fps" x="10" y="32" w="95%" h="112" label="FPS:"
+    <panel x="0" y="0" width="100%" height="160" background="@surface" border="@border" radius="6">
+      <label x="10" y="8" width="90%" height="18" text="Plot / Sparkline" font sans 14 color="@dim"/>
+      <sparkline id="sp_fps" x="10" y="32" width="95%" height="112" label="FPS:"
                  values="58;60;59;61;57;60;62;58;59;60;55;60;61;59;60;62;63;58;52;60"
                  color="#44dd88"/>
     </panel>
 
     <!-- celula 4: modal trigger -->
-    <panel x="0" y="0" w="100%" h="160" bg="@surface" border="@border" radius="6">
-      <label x="10" y="8" w="90%" h="18" text="Modal / Toast" font sans 14 color="@dim"/>
-      <label x="10" y="34" w="95%" h="34" wrap="true" font sans 12 color="@dim"
+    <panel x="0" y="0" width="100%" height="160" background="@surface" border="@border" radius="6">
+      <label x="10" y="8" width="90%" height="18" text="Modal / Toast" font sans 14 color="@dim"/>
+      <label x="10" y="34" width="95%" height="34" wrap="true" font sans 12 color="@dim"
              text="Modal de confirmacao e banners de notificacao (toast) expiram em 3.5s."/>
-      <button id="btn_modal" x="10" y="96" w="150" h="30" text="Abrir modal"
-              bg="@accent" color="#ffffff" radius="6"/>
-      <button id="btn_toast" x="170" y="96" w="150" h="30" text="Toast info"
-              bg="@surfaceHi" color="@textBright" radius="6"/>
+      <button id="btn_modal" x="10" y="96" width="150" height="30" text="Abrir modal"
+              background="@accent" color="#ffffff" radius="6"/>
+      <button id="btn_toast" x="170" y="96" width="150" height="30" text="Toast info"
+              background="@surfaceHi" color="@textBright" radius="6"/>
     </panel>
 
     <!-- celula 5: cor e arquivo -->
-    <panel x="0" y="0" w="100%" h="120" bg="@surface" border="@border" radius="6">
-      <label x="10" y="8" w="90%" h="18" text="Cor / Arquivo" font sans 14 color="@dim"/>
-      <colorpicker id="cp_tint" x="10" y="36" w="110" h="28" color="@accent"
+    <panel x="0" y="0" width="100%" height="120" background="@surface" border="@border" radius="6">
+      <label x="10" y="8" width="90%" height="18" text="Cor / Arquivo" font sans 14 color="@dim"/>
+      <colorpicker id="cp_tint" x="10" y="36" width="110" height="28" color="@accent"
                    bind="cp_change"/>
-      <pathpicker id="pp_mesh" x="130" y="34" w="240" h="30"
+      <pathpicker id="pp_mesh" x="130" y="34" width="240" height="30"
                   placeholder="Selecionar malha..." path="assets" filter=".png"
                   bind="pp_change"/>
-      <label id="lbl_cp" x="10" y="76" w="95%" h="18" text="Clique no swatch ou em ..."
+      <label id="lbl_cp" x="10" y="76" width="95%" height="18" text="Clique no swatch ou em ..."
              font sans 12 color="@dim"/>
     </panel>
 
     <!-- celula 6: rampa de cor e curva bezier -->
-    <panel x="0" y="0" w="100%" h="150" bg="@surface" border="@border" radius="6">
-      <label x="10" y="8" w="90%" h="18" text="Rampa / Curva" font sans 14 color="@dim"/>
-      <rampeditor id="re_ramp" x="10" y="32" w="95%" h="26"
+    <panel x="0" y="0" width="100%" height="150" background="@surface" border="@border" radius="6">
+      <label x="10" y="8" width="90%" height="18" text="Rampa / Curva" font sans 14 color="@dim"/>
+      <rampeditor id="re_ramp" x="10" y="32" width="95%" height="26"
                   stops="0:#000000 0.5:#ff3300 1:#ffffaa" bind="re_change"/>
-      <curveeditor id="ce_curve" x="10" y="66" w="95%" h="72"
+      <curveeditor id="ce_curve" x="10" y="66" width="95%" height="72"
                    points="0,0 0.33,1 0.66,0 1,1" bind="ce_change"/>
     </panel>
 
     <!-- celula 7: chave liga/desliga -->
-    <panel x="0" y="0" w="100%" h="70" bg="@surface" border="@border" radius="6">
-      <label x="10" y="8" w="90%" h="18" text="Switch" font sans 14 color="@dim"/>
-      <toggleswitch id="ts_vsync" x="10" y="32" w="150" h="24" checked="true"
+    <panel x="0" y="0" width="100%" height="70" background="@surface" border="@border" radius="6">
+      <label x="10" y="8" width="90%" height="18" text="Switch" font sans 14 color="@dim"/>
+      <toggleswitch id="ts_vsync" x="10" y="32" width="150" height="24" checked="true"
                     text="VSync" bind="ts_change"/>
     </panel>
   </grid>
@@ -121,13 +121,13 @@
   </contextmenu>
 
   <!-- modal de confirmacao (por ultimo: cobre a tela quando aberto) -->
-  <modal id="md_confirm" x="0" y="0" w="100%" h="100%" title="Confirmação"
-         open="false" panelw="320" panelh="170">
-    <label x="24" y="34" w="80%" h="40" wrap="true" font sans 13
+  <modal id="md_confirm" x="0" y="0" width="100%" height="100%" title="Confirmação"
+         open="false" panel_width="320" panel_height="170">
+    <label x="24" y="34" width="80%" height="40" wrap="true" font sans 13
            text="Deseja regrava os shaders compilados antes de fechar o editor?"/>
-    <button id="btn_cancel" x="40" y="112" w="110" h="30" text="Cancelar"
-            bg="@surfaceHi" color="@textBright" radius="6"/>
-    <button id="btn_ok" x="180" y="112" w="110" h="30" text="Confirmar"
-            bg="@accent" color="#ffffff" radius="6"/>
+    <button id="btn_cancel" x="40" y="112" width="110" height="30" text="Cancelar"
+            background="@surfaceHi" color="@textBright" radius="6"/>
+    <button id="btn_ok" x="180" y="112" width="110" height="30" text="Confirmar"
+            background="@accent" color="#ffffff" radius="6"/>
   </modal>
 </screen>

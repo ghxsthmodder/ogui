@@ -359,6 +359,30 @@ std::map<std::string, std::string> XmlParser::parseAttributes() {
 
         skipWhitespace();
     }
+
+    // Full snake_case names are the authored spelling; normalize them to the
+    // parser's canonical (short) keys so both forms parse identically.
+    static const std::pair<const char*, const char*> kAliases[] = {
+        {"background","bg"},{"width","w"},{"height","h"},{"columns","cols"},
+        {"source","src"},{"font_size","fontsize"},{"border_width","borderwidth"},
+        {"border_color","bordercolor"},{"shadow_color","shadowcolor"},
+        {"button_color","buttoncolor"},{"thumb_color","thumbcolor"},
+        {"header_color","headercolor"},{"header_background","headerbg"},
+        {"header_height","headerheight"},{"row_height","rowheight"},
+        {"tab_height","theight"},{"active_color","activecolor"},
+        {"tab_color","tabcolor"},{"handle_color","handlecolor"},
+        {"handle_size","handlesize"},{"panel_width","panelw"},
+        {"panel_height","panelh"},{"scroll_x","scrollx"},{"scroll_y","scrolly"},
+        {"scroll_step","scrollstep"},{"scrolling_text","scrollingtext"},
+        {"auto_height","autoheight"},{"editable_cells","editablecells"},
+        {"on_click","onclick"},{"context_menu","contextmenu"},
+    };
+    for (const auto& a : kAliases) {
+        auto full = attrs.find(a.first);
+        if (full == attrs.end()) continue;
+        if (attrs.find(a.second) == attrs.end()) attrs[a.second] = full->second;
+        attrs.erase(full);
+    }
     return attrs;
 }
 

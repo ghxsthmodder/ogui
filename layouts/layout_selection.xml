@@ -1,11 +1,11 @@
 <screen id="selection">
-  <panel id="bg" x="0" y="0" w="100%" h="100%" bg="@screen"/>
-  <label id="lbl_group" x="1.25%" y="52" w="97.5%" h="20" text="Selecao: listas, arvore e combo"
+  <panel id="bg" x="0" y="0" width="100%" height="100%" background="@screen"/>
+  <label id="lbl_group" x="1.25%" y="52" width="97.5%" height="20" text="Selecao: listas, arvore e combo"
          font sans 16 color="#66ee66"/>
 
-  <label x="1.25%" y="84" w="45%" h="18" text="ListBox"/>
-  <listbox id="lb_items" x="1.25%" y="106" w="45%" h="20%" rowheight="22"
-           selected="0" bg="@window" color="@text" border="@accent">
+  <label x="1.25%" y="84" width="45%" height="18" text="ListBox"/>
+  <listbox id="lb_items" x="1.25%" y="106" width="45%" height="20%" row_height="22"
+           selected="0" background="@window" color="@text" border="@accent">
     <item label="Alpha"/>
     <item label="Beta"/>
     <item label="Gamma"/>
@@ -22,18 +22,18 @@
     <item label="Xi"/>
   </listbox>
 
-  <label x="48.75%" y="84" w="50%" h="18" text="ComboBox"/>
-  <combobox id="cmb_fps" x="48.75%" y="106" w="30%" h="28" selected="1" rowheight="22"
-            bg="@window" color="@text" border="@accent">
+  <label x="48.75%" y="84" width="50%" height="18" text="ComboBox"/>
+  <combobox id="cmb_fps" x="48.75%" y="106" width="30%" height="28" selected="1" row_height="22"
+            background="@window" color="@text" border="@accent">
     <option label="Fps: 30"/>
     <option label="Fps: 60"/>
     <option label="Fps: 120"/>
   </combobox>
 
-  <label x="48.75%" y="150" w="50%" h="18" text="TreeView (encolhe ao recolher)"/>
-  <tree id="tr_scene" x="48.75%" y="172" w="50%" h="30%"
-        rowheight="22"
-        bg="@window" color="@text" border="@accent" accent="#66ee66">
+  <label x="48.75%" y="150" width="50%" height="18" text="TreeView (encolhe ao recolher)"/>
+  <tree id="tr_scene" x="48.75%" y="172" width="50%" height="30%"
+        row_height="22"
+        background="@window" color="@text" border="@accent" accent="#66ee66">
     <treeitem label="Cena" expanded="true">
       <treeitem label="Luz"/>
       <treeitem label="Camera"/>

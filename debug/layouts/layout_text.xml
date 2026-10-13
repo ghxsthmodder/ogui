@@ -1,34 +1,34 @@
 <screen id="text">
-  <panel id="bg" x="0" y="0" w="100%" h="100%" bg="@screen"/>
-  <label id="lbl_group" x="1.25%" y="52" w="97.5%" h="20" text="Texto: entrada de dados"
+  <panel id="bg" x="0" y="0" width="100%" height="100%" background="@screen"/>
+  <label id="lbl_group" x="1.25%" y="52" width="97.5%" height="20" text="Texto: entrada de dados"
          font sans 16 color="#66ee66"/>
 
-  <label x="1.25%" y="84" w="92.5%" h="18" text="TextInput (linha unica)"/>
-  <textinput id="txt_name" x="1.25%" y="106" w="50%" h="30" text="Edite este texto"
-             bg="@window" color="@text" border="@accent" radius="6"/>
+  <label x="1.25%" y="84" width="92.5%" height="18" text="TextInput (linha unica)"/>
+  <textinput id="txt_name" x="1.25%" y="106" width="50%" height="30" text="Edite este texto"
+             background="@window" color="@text" border="@accent" radius="6"/>
 
-  <label x="1.25%" y="146" w="92.5%" h="18" text="TextArea (varias linhas + barra de rolagem)"/>
-  <textarea id="ta_notes" x="1.25%" y="168" w="92.5%" h="20%"
+  <label x="1.25%" y="146" width="92.5%" height="18" text="TextArea (varias linhas + barra de rolagem)"/>
+  <textarea id="ta_notes" x="1.25%" y="168" width="92.5%" height="20%"
             placeholder="Notas (Enter quebra linha)..."
-            bg="@window" color="@text" border="@accent" radius="6"/>
+            background="@window" color="@text" border="@accent" radius="6"/>
 
-  <label x="1.25%" y="50%" w="20%" h="18" text="SpinBox (inteiro)"/>
-  <spinbox id="sp_int" x="1.25%" y="53.7%" w="20%" h="30"
+  <label x="1.25%" y="50%" width="20%" height="18" text="SpinBox (inteiro)"/>
+  <spinbox id="sp_int" x="1.25%" y="53.7%" width="20%" height="30"
            min="0" max="10" value="3" step="1"
-           bg="@window" color="@text" border="@accent"/>
+           background="@window" color="@text" border="@accent"/>
 
-  <label x="23.75%" y="50%" w="25%" h="18" text="SpinBox (decimal com sufixo)"/>
-  <spinbox id="sp_dec" x="23.75%" y="53.7%" w="25%" h="30"
+  <label x="23.75%" y="50%" width="25%" height="18" text="SpinBox (decimal com sufixo)"/>
+  <spinbox id="sp_dec" x="23.75%" y="53.7%" width="25%" height="30"
            min="0" max="100" value="12.5" step="0.5" decimals="1" suffix=" kg"
-           bg="@window" color="@text" border="@accent"/>
+           background="@window" color="@text" border="@accent"/>
 
-  <label x="51.25%" y="50%" w="17.5%" h="18" text="SpinBox (wrap)"/>
-  <spinbox id="sp_wrap" x="51.25%" y="53.7%" w="17.5%" h="30"
+  <label x="51.25%" y="50%" width="17.5%" height="18" text="SpinBox (wrap)"/>
+  <spinbox id="sp_wrap" x="51.25%" y="53.7%" width="17.5%" height="30"
            min="1" max="12" value="12" step="1" wrap="true" prefix="Mes "
-           bg="@window" color="@text" border="@accent"/>
+           background="@window" color="@text" border="@accent"/>
 
-  <label x="1.25%" y="60%" w="92.5%" h="18" text="OptionSpin (opcoes de texto)"/>
-  <optionspin id="os_quality" x="1.25%" y="63.7%" w="27.5%" h="30"
+  <label x="1.25%" y="60%" width="92.5%" height="18" text="OptionSpin (opcoes de texto)"/>
+  <optionspin id="os_quality" x="1.25%" y="63.7%" width="27.5%" height="30"
               options="Baixo, Medio, Alto" value="Medio"
-              bg="@window" color="@text" border="@accent"/>
+              background="@window" color="@text" border="@accent"/>
 </screen>

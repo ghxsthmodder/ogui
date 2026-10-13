@@ -1,18 +1,18 @@
 <screen id="data">
-  <panel id="bg" x="0" y="0" w="100%" h="100%" bg="@screen"/>
-  <label id="lbl_group" x="1.25%" y="52" w="97.5%" h="20" text="Dados: tabela ordenavel, editavel e com marquee"
+  <panel id="bg" x="0" y="0" width="100%" height="100%" background="@screen"/>
+  <label id="lbl_group" x="1.25%" y="52" width="97.5%" height="20" text="Dados: tabela ordenavel, editavel e com marquee"
          font sans 16 color="#66ee66"/>
-  <label x="1.25%" y="78" w="97.5%" h="18"
+  <label x="1.25%" y="78" width="97.5%" height="18"
          text="Ordene clicando no cabecalho; arraste a borda de uma coluna para redimensionar; clique numa celula editavel (ou F2) para editar."/>
 
-  <table id="tb_people" x="1.25%" y="104" w="97.5%" h="60%" rowheight="22" headerheight="24"
-         selected="0" bg="@window" color="@text" border="@accent" highlight="#334455"
-         headerbg="#1c2733">
-    <th label="Nome" w="160" editable="true"/>
-    <th label="Idade" w="80" resizable="true" scrollingText="automatic"/>
-    <th label="Cidade" w="140"/>
-    <th label="cpf" w="150"/>
-    <th label="email" w="180" scrollingText="automatic"/>
+  <table id="tb_people" x="1.25%" y="104" width="97.5%" height="60%" row_height="22" header_height="24"
+         selected="0" background="@window" color="@text" border="@accent" highlight="#334455"
+         header_background="#1c2733">
+    <th label="Nome" width="160" editable="true"/>
+    <th label="Idade" width="80" resizable="true" scrollingText="automatic"/>
+    <th label="Cidade" width="140"/>
+    <th label="cpf" width="150"/>
+    <th label="email" width="180" scrollingText="automatic"/>
     <th label="estado civil"/>
     <tr resizable="true" editableCells="Nome;Cidade;email" scrollingText="automatic"
         cells="Zoe;30;Rio de Janeiro;000.000.000-00;usermail@myemail.com;solteiro(a)"/>
