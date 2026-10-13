@@ -63,17 +63,20 @@ Win32 + WGL demo directly (the project compiles the library sources itself).
 ## Tests
 
 ```sh
-cd build && ctest --output-on-failure      # parser, drawlist, kernel, golden
+cd build && ctest --output-on-failure      # parser, drawlist, kernel, screens, scrollbar, golden
 ```
 
 * `parser` — XML tokenizer, attributes, styles, error reporting.
 * `drawlist` — rasterizer geometry, text measurement and wrapping.
 * `kernel` — input dispatch, focus/capture, text editing, tabs, tooltip.
-* `golden` — renders a fixed layout through
-  `Kernel -> DrawList -> SoftwareRenderer` and diffs it against
-  `tests/golden/basic.png` (4/4/4 channel slack, 1% bad pixels allowed for
-  FP rounding; it **skips** instead of failing when the resolved font files
-  differ from the ones recorded in `tests/golden/basic.meta`).
+* `screens` — every manifest screen parses in both themes and keeps the ids the gallery binds to.
+* `scrollbar` — presses on the listbox/treeview/table bars scroll instead of selecting rows.
+* `golden` — renders a fixed `@token` layout through
+  `Kernel -> DrawList -> SoftwareRenderer` in both themes and diffs it
+  against `tests/golden/basic.png` (dark) and `tests/golden/basic_light.png`
+  (4/4/4 channel slack, 1% bad pixels allowed for FP rounding; it **skips**
+  instead of failing when the resolved font files differ from the ones
+  recorded in the matching `.meta`).
 
 Regenerate the golden after an intentional visual change:
 
