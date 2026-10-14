@@ -187,6 +187,14 @@ public:
     Widget* findWidget(const std::string& id);
     Widget* focusedWidget() const { return m_focus; }
     Widget* hoveredWidget() const { return m_hovered; }
+    // Drop cached pointers to a widget that is about to leave the tree
+    // (script-driven ogui.remove). Call before the last shared_ptr dies.
+    void forgetWidget(Widget* w) {
+        if (m_focus == w) m_focus = nullptr;
+        if (m_hovered == w) m_hovered = nullptr;
+        if (m_captured == w) m_captured = nullptr;
+        if (m_pressed == w) m_pressed = nullptr;
+    }
     // Last pointer position in screen coordinates (for per-region hover
     // effects inside one widget, e.g. SpinBox buttons).
     Offset2D mousePos() const { return {m_input.mouseX, m_input.mouseY}; }

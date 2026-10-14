@@ -8,11 +8,16 @@
 #include "ogui/kernel.hpp"
 #include "ogui/widget.hpp"
 #include "ogui/widgets.hpp"
+#include "ogui/xmlparser.hpp"
+#include "ogui/style.hpp"
 
 #include <fstream>
 #include <sstream>
 #include <cstring>
 #include <iterator>
+#include <string>
+#include <utility>
+#include <vector>
 
 #ifdef OGUI_HAS_LUA
 extern "C" {
@@ -445,6 +450,92 @@ int l_quit(lua_State* L) {
     return 0;
 }
 
+// ---- dynamic widgets --------------------------------------------------------
+
+// Recursive kernel hand-off so a just-added subtree can be reached (findWidget,
+// hover/focus APIs) before the next frame's walk assigns it.
+void adoptKernel(Widget* w, Kernel* k) {
+    w->setKernel(k);
+    for (const auto& c : w->children())
+        if (c) adoptKernel(c.get(), k);
+}
+
+// ogui.add(parentId, xmlFragment) -> first new id | nil, err
+int l_add(lua_State* L) {
+    const char* parentId = luaL_checkstring(L, 1);
+    size_t fragLen = 0;
+    const char* frag = luaL_checklstring(L, 2, &fragLen);
+    Kernel* k = kernelOf(L);
+    if (!k) { lua_pushnil(L); lua_pushliteral(L, "no kernel"); return 2; }
+    Widget* parent = k->findWidget(parentId);
+    if (!parent) {
+        lua_pushnil(L);
+        lua_pushstring(L, ("unknown parent: " + std::string(parentId)).c_str());
+        return 2;
+    }
+
+    XmlParser p;
+    XmlParser::ParseResult res = p.parse("<screen>" + std::string(frag, fragLen) + "</screen>",
+                                          &activeTheme());
+    if (!res.errors.empty()) {
+        lua_pushnil(L);
+        lua_pushstring(L, res.errors.front().c_str());
+        return 2;
+    }
+    if (!res.root) { lua_pushnil(L); lua_pushliteral(L, "empty fragment"); return 2; }
+
+    std::vector<Widget::Ptr> kids = res.root->takeChildren();
+    std::string firstId;
+    for (auto& c : kids) {
+        if (c && firstId.empty() && !c->id().empty()) firstId = c->id();
+        if (c) adoptKernel(c.get(), k);
+        parent->addChild(std::move(c));
+    }
+    k->invalidate();
+    lua_pushstring(L, firstId.c_str());
+    return 1;
+}
+
+// ogui.remove(id) -> true | nil, err
+int l_remove(lua_State* L) {
+    const char* id = luaL_checkstring(L, 1);
+    Kernel* k = kernelOf(L);
+    Widget* w = k ? k->findWidget(id) : nullptr;
+    if (!w) {
+        lua_pushnil(L);
+        lua_pushstring(L, ("unknown widget: " + std::string(id)).c_str());
+        return 2;
+    }
+    Widget* parent = w->parent();
+    if (!parent) {
+        lua_pushnil(L);
+        lua_pushliteral(L, "cannot remove parentless widget");
+        return 2;
+    }
+    // Nulls m_focus/m_hovered/m_captured/m_pressed if this widget is one of them
+    // (e.g. a handler removing the button it was pressed on), so the shared_ptr
+    // erase below cannot leave the kernel pointing at freed memory.
+    k->forgetWidget(w);
+    parent->removeChild(w);
+    k->invalidate();
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+// ogui.clear(id) -> count of removed children
+int l_clear(lua_State* L) {
+    const char* id = luaL_checkstring(L, 1);
+    Kernel* k = kernelOf(L);
+    Widget* w = k ? k->findWidget(id) : nullptr;
+    if (!w) { lua_pushinteger(L, 0); return 1; }
+    std::vector<Widget::Ptr> kids = w->takeChildren();
+    for (const auto& c : kids)
+        if (c) k->forgetWidget(c.get());
+    k->invalidate();
+    lua_pushinteger(L, static_cast<int>(kids.size()));
+    return 1;
+}
+
 const luaL_Reg oguiLib[] = {
     {"set",        l_set},
     {"get",        l_get},
@@ -467,6 +558,9 @@ const luaL_Reg oguiLib[] = {
     {"every",      l_every},
     {"cancel",     l_cancel},
     {"quit",       l_quit},
+    {"add",        l_add},
+    {"remove",     l_remove},
+    {"clear",      l_clear},
     {nullptr, nullptr},
 };
 

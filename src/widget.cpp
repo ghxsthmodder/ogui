@@ -42,15 +42,28 @@ void Widget::addChild(Ptr child) {
 }
 
 void Widget::removeChild(Ptr child) {
+    removeChild(child.get());
+}
+
+void Widget::removeChild(Widget* child) {
     if (!child) return;
     for (auto it = m_children.begin(); it != m_children.end(); ++it) {
-        if (it->get() == child.get()) {
+        if (it->get() == child) {
             if (child->m_parent == this) child->m_parent = nullptr;
             m_children.erase(it);
             if (m_kernel) m_kernel->invalidate();
             break;
         }
     }
+}
+
+std::vector<Widget::Ptr> Widget::takeChildren() {
+    std::vector<Ptr> out;
+    out.swap(m_children);
+    for (auto& c : out)
+        if (c && c->m_parent == this) c->m_parent = nullptr;
+    if (m_kernel) m_kernel->invalidate();
+    return out;
 }
 
 void Widget::resolveGeometry(float parentW, float parentH) {

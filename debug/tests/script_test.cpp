@@ -467,6 +467,71 @@ int main() {
         k.popScreen();
     }
 
+    // ---- dynamic widgets: ogui.add / remove / clear ---------------------------
+    {
+        XmlParser p;
+        auto res = p.parse(R"(<screen id="dyn">
+  <panel id="box" x="10" y="10" width="400" height="300"/>
+  <button id="boom" text="boom" x="20" y="330" width="80" height="30"/>
+  <label id="dyn_out" text="start" x="120" y="330" width="200" height="30"/>
+</screen>)");
+        assert(res.root);
+        auto s = std::make_shared<Screen>("dyn");
+        s->widgets.push_back(res.root);
+        s->scripts.push_back({R"(
+function ogui_on_click(key)
+  if key == "boom" then
+    ogui.set("dyn_out", "text", "boom clicked")
+    ogui.remove("boom")
+  end
+end
+)", false});
+        s->width = 800; s->height = 600;
+        k.pushScreen(s);
+        CHECK(k.script().errors().empty());
+
+        k.script().loadString(R"(
+            local id = ogui.add("box", '<button id="b1" text="one" x="0" y="0" width="60" height="24"/>')
+            assert(id == "b1")
+            assert(ogui.exists("b1"))
+            local r = ogui.add("box", '<button id="b2" x="0" y="30" width="60" height="24"/><label id="b3" x="0" y="60"/>')
+            assert(r == "b2")
+            local bad, err = ogui.add("box", '<notatag/>')
+            assert(bad == nil and err ~= nil)
+            local miss, err2 = ogui.add("nope", '<button/>')
+            assert(miss == nil and err2 ~= nil)
+        )", "dyn-add");
+        CHECK(k.script().errors().empty());
+        CHECK(k.findWidget("b1") != nullptr);
+        CHECK(k.findWidget("b2") != nullptr);
+        CHECK(k.findWidget("b3") != nullptr);
+        CHECK(k.getText("b1") == "one");
+
+        // Removing the pressed widget from inside its own click hook must not
+        // dangle: forgetWidget nulls m_pressed before the shared_ptr dies.
+        InputState sd = makeInput();
+        sd.time = 12.0f;
+        k.frame(sd);
+        pressAt(k, sd, 60.0f, 345.0f);   // boom: x=20..100, y=330..360
+        release(k, sd);
+        CHECK(k.getText("dyn_out") == "boom clicked");
+        CHECK(k.findWidget("boom") == nullptr);
+        k.frame(sd);   // a follow-up frame with m_pressed cleared must not crash
+
+        k.script().loadString(R"(
+            local n = ogui.clear("box")
+            assert(n == 3)
+            assert(not ogui.exists("b1"))
+            assert(not ogui.exists("b2"))
+            assert(not ogui.exists("b3"))
+            assert(ogui.clear("missing") == 0)
+            assert(ogui.remove("missing") == nil)
+        )", "dyn-clear");
+        CHECK(k.script().errors().empty());
+        k.popScreen();
+        CHECK(k.getText("out") == "loaded");
+    }
+
     // ---- ogui.quit ------------------------------------------------------------
     {
         CHECK(!k.quitRequested());

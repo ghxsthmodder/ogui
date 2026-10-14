@@ -76,6 +76,10 @@ class Widget;
 //                            engine, fires outside any hook)
 //   ogui.every(secs, fn)     repeating timer -> id (one fire per frame max)
 //   ogui.cancel(id)          stop a timer -> bool
+//   ogui.add(parentId, frag) parse a widget snippet and attach it under
+//                            parentId -> first new id | nil, err
+//   ogui.remove(id)          drop a widget (safe on the pressed one)
+//   ogui.clear(id)           detach every child of a container -> count
 //   ogui.quit()              Kernel::requestQuit
 //
 // Runtime errors are captured (never thrown): recorded in errors() and

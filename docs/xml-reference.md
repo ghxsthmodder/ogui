@@ -345,6 +345,9 @@ API table `ogui` (all calls are safe on unknown ids):
 | `ogui.after(secs, fn)` | one-shot timer → id; fires from the frame loop, outside any hook |
 | `ogui.every(secs, fn)` | repeating timer → id (one fire per frame max) |
 | `ogui.cancel(id)` | stop a timer → boolean; timers also die on screen swaps |
+| `ogui.add(parentId, xmlFragment)` | parse `xmlFragment` (a snippet of `<screen>` body) and attach it as children of `parentId`; returns the first new widget's id, or `nil, err` if the parent is missing or the fragment fails to parse |
+| `ogui.remove(id)` | drop a widget from its parent → `true`, or `nil, err` for a missing id or an orphan. Safe to call on the widget currently being pressed: the Kernel forgets focus/hover/press bindings before the shared_ptr disappears |
+| `ogui.clear(id)` | detach every child of a container → count removed |
 | `ogui.quit()` | `Kernel::requestQuit` |
 
 Example:

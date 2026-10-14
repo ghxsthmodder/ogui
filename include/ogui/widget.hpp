@@ -72,6 +72,12 @@ public:
 
     void addChild(Ptr child);
     void removeChild(Ptr child);
+    // Raw-pointer identity removal (script-driven ogui.remove): no shared_ptr
+    // at hand to compare against.
+    void removeChild(Widget* child);
+    // Detach and return every child (parent cleared); used to move parsed
+    // fragments into the tree and to empty a container.
+    std::vector<Ptr> takeChildren();
 
     // Kernel that owns this widget tree, refreshed by the Kernel at the top
     // of every frame; lets widgets reach popup/event APIs from handlers.

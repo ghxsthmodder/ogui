@@ -464,16 +464,21 @@ void Kernel::update() {
                 return (it != m_bindings.end()) ? it->second : nullptr;
             };
             bool handled = false;
+            std::string pressedId = m_pressed->id();
             if (auto fn = lookup(m_pressed->binding())) { fn(); handled = true; }
             else if (auto fn2 = lookup(m_pressed->id())) { fn2(); handled = true; }
             else if (const auto& h = m_pressed->clickHandler()) { h(); handled = true; }
             // Nothing C++-bound: route the click to the screen's Lua
             // ogui_on_click hook with the widget id (onclick name if set).
-            if (!handled && !m_pressed->id().empty())
-                m_script.notifyClick(m_pressed->binding().empty()
-                                         ? m_pressed->id()
-                                         : m_pressed->binding());
-            m_pressed->dispatchEvent(EventType::MouseButton, p);
+            if (!handled && !pressedId.empty())
+                m_script.notifyClick(m_pressed ?
+                                         (m_pressed->binding().empty()
+                                              ? m_pressed->id()
+                                              : m_pressed->binding())
+                                         : pressedId);
+            // A handler may have removed the pressed widget from the tree
+            // (ogui.remove); forgetWidget nulls m_pressed in that case.
+            if (m_pressed) m_pressed->dispatchEvent(EventType::MouseButton, p);
         }
         m_captured = nullptr;
         m_pressed = nullptr;
