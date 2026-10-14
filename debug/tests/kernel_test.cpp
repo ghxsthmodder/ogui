@@ -2318,6 +2318,122 @@ static void testPropertyGrid() {
     CHECK(pg->count() == 0 && pg->valueOf("visible").empty());
 }
 
+static void testTreeTable() {
+    Kernel k;
+    k.init();
+    XmlParser p;
+    auto res = p.parse(R"XML(<screen id="s">
+  <treetable id="tt" x="20" y="20" width="360" height="180" rowheight="22" headerheight="24">
+    <th label="Name" width="160"/>
+    <th label="Size" width="80"/>
+    <th label="Kind"/>
+    <tnode label="src" cells=";dir">
+      <tnode label="main.cpp" cells="120;file"/>
+      <tnode label="util.cpp" cells="80;file"/>
+    </tnode>
+    <tnode label="docs" cells=";dir" expanded="false">
+      <tnode label="readme.md" cells="10;file"/>
+    </tnode>
+  </treetable>
+</screen>)XML");
+    CHECK(res.root != nullptr);
+    if (!res.root) return;
+    auto s = std::make_shared<Screen>("s");
+    s->widgets.push_back(res.root);
+    s->width = 800;
+    s->height = 600;
+    k.pushScreen(s);
+    auto* tt = dynamic_cast<TreeTable*>(k.findWidget("tt"));
+    CHECK(tt != nullptr);
+    if (!tt) return;
+
+    InputState st = makeInput();
+    idle(k, st);   // first layout collects <th> columns and flattens nodes
+    CHECK(tt->columnCount() == 3);
+    CHECK(tt->columnLabel(1) == "Size");
+    CHECK(tt->rowCount() == 4);   // src, main, util, docs (docs collapsed)
+    CHECK(tt->cell(0, 0) == "src");
+    CHECK(tt->cell(1, 1) == "120");
+    CHECK(tt->cell(1, 2) == "file");
+    CHECK(!tt->isExpanded(3));
+    CHECK(!k.buildDrawList().empty());
+
+    int changed = -99;
+    tt->setOnChanged([&](int r) { changed = r; });
+
+    // Click a data row (column 0, outside the triangle band) selects it.
+    pressAt(k, st, 20 + 100, 20 + 24 + 1 * 22 + 11);
+    releaseAt(k, st);
+    CHECK(tt->selectedIndex() == 1);
+    CHECK(changed == 1);
+
+    // Silent programmatic select.
+    changed = -99;
+    tt->setSelectedIndex(0);
+    CHECK(tt->selectedIndex() == 0 && changed == -99);
+
+    // Clicking the triangle on src (depth 0, band [6,22)+origin) collapses
+    // its children: rows shrink to src + docs.
+    pressAt(k, st, 20 + 12, 20 + 24 + 0 * 22 + 11);
+    releaseAt(k, st);
+    CHECK(tt->rowCount() == 2);
+    CHECK(!tt->isExpanded(0));
+    pressAt(k, st, 20 + 12, 20 + 24 + 0 * 22 + 11);
+    releaseAt(k, st);
+    CHECK(tt->rowCount() == 4);
+
+    // Keyboard: Right expands a collapsed node without firing change.
+    tt->setSelectedIndex(3);          // docs
+    changed = -99;
+    tapKey(k, st, Key_Right);
+    CHECK(tt->rowCount() == 5 && tt->isExpanded(3));
+    CHECK(tt->selectedIndex() == 3 && changed == -99);
+    tapKey(k, st, Key_Left);          // collapse again
+    CHECK(tt->rowCount() == 4);
+    tapKey(k, st, Key_Left);          // already collapsed -> go to parent
+    CHECK(tt->selectedIndex() == 3);  // depth 0: no parent row, stays
+    tt->setSelectedIndex(1);          // main.cpp (depth 1)
+    tapKey(k, st, Key_Left);          // leaf -> select parent src
+    CHECK(tt->selectedIndex() == 0 && changed == 0);
+    tapKey(k, st, Key_End);
+    CHECK(tt->selectedIndex() == 3);
+    tapKey(k, st, Key_Home);
+    CHECK(tt->selectedIndex() == 0);
+
+    // Sorting by the Size header reorders siblings at every level; the
+    // numeric-aware compare puts 80 before 120.
+    pressAt(k, st, 20 + 180, 20 + 12);   // "Size" header (x in [160,240))
+    releaseAt(k, st);
+    CHECK(tt->sortColumn() == 1 && tt->sortAscending());
+    CHECK(tt->cell(1, 1) == "80" && tt->cell(2, 1) == "120");
+    pressAt(k, st, 20 + 180, 20 + 12);   // re-click flips direction
+    releaseAt(k, st);
+    CHECK(!tt->sortAscending());
+    CHECK(tt->cell(1, 1) == "120" && tt->cell(2, 1) == "80");
+
+    // Selection rides with its node across sorts.
+    tt->setSelectedIndex(2);             // descending: row 2 = util.cpp (80)
+    CHECK(tt->cell(2, 0) == "util.cpp");
+    pressAt(k, st, 20 + 180, 20 + 12);   // flip back to ascending
+    releaseAt(k, st);
+    CHECK(tt->cell(1, 0) == "util.cpp" && tt->selectedIndex() == 1);
+
+    // expandAll / collapseAll.
+    tt->expandAll();
+    CHECK(tt->rowCount() == 5);
+    tt->collapseAll();
+    CHECK(tt->rowCount() == 2);
+    tt->expandAll();
+
+    // Wheel scroll is clamped (content fits the viewport -> no movement).
+    st.scrollY = 1.0f;
+    k.frame(st);
+    st.scrollY = 0.0f;
+    idle(k, st);
+    idle(k, st);
+    CHECK(tt->rowCount() == 5);
+}
+
 static void testTreeView() {
     Kernel k;
     k.init();
@@ -3099,6 +3215,7 @@ int main() {
     testRowWrap();
     testVirtualList();
     testPropertyGrid();
+    testTreeTable();
     testHost();
 
     if (g_failures) {

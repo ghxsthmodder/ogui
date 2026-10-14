@@ -706,7 +706,7 @@ menos lógica repetida.
 -   [x] VirtualList.
 -   [x] PropertyGrid.
 -   [x] Console/LogView.
--   [ ] TreeTable.
+-   [x] TreeTable.
 -   [ ] Painéis divisíveis e, se necessário, docking.
 -   [ ] NumberInput, Keybind, Breadcrumb e StatusBar conforme a demanda.
 

@@ -124,6 +124,7 @@ bool selGet(Widget* w, int& out) {
     if (auto* l = dynamic_cast<ListBox*>(w))     { out = l->selectedIndex(); return true; }
     if (auto* t = dynamic_cast<Table*>(w))       { out = t->selectedIndex(); return true; }
     if (auto* v = dynamic_cast<TreeView*>(w))    { out = v->selectedIndex(); return true; }
+    if (auto* tt = dynamic_cast<TreeTable*>(w))  { out = tt->selectedIndex(); return true; }
     if (auto* o = dynamic_cast<OptionSpin*>(w))  { out = o->index(); return true; }
     return false;
 }
@@ -133,6 +134,7 @@ bool selSet(Widget* w, int v) {
     if (auto* l = dynamic_cast<ListBox*>(w))     { l->setSelectedIndex(v); return true; }
     if (auto* t = dynamic_cast<Table*>(w))       { t->setSelectedIndex(v); return true; }
     if (auto* tv = dynamic_cast<TreeView*>(w))   { tv->setSelectedIndex(v); return true; }
+    if (auto* tt = dynamic_cast<TreeTable*>(w))  { tt->setSelectedIndex(v); return true; }
     if (auto* o = dynamic_cast<OptionSpin*>(w))  { o->setIndex(v); return true; }
     return false;
 }

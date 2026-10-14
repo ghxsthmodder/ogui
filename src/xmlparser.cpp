@@ -1258,6 +1258,42 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         if (const std::string* v = get("folder")) ti->setFolder(toBool(*v));
         else if (const std::string* v = get("file")) ti->setFolder(!toBool(*v));
         if (const std::string* v = get("checked")) ti->setChecked(toBool(*v));
+    } else if (auto* tt = dynamic_cast<TreeTable*>(w.get())) {
+        if (const std::string* v = get("rowheight")) {
+            float rh = 22.0f;
+            toFloat(*v, rh);
+            tt->setRowHeight(rh);
+        }
+        if (const std::string* v = get("headerheight")) {
+            float hh = 24.0f;
+            toFloat(*v, hh);
+            tt->setHeaderHeight(hh);
+        }
+        if (const std::string* v = get("indent")) {
+            float ind = 16.0f;
+            toFloat(*v, ind);
+            tt->setIndent(ind);
+        }
+        if (const std::string* v = get("selected")) {
+            int idx = 0;
+            toInt(*v, idx);
+            tt->setSelectedIndex(idx);
+        }
+        if (const std::string* v = get("sortable")) tt->setSortable(toBool(*v));
+        if (const std::string* v = get("expanded")) { if (toBool(*v)) tt->expandAll(); }
+        if (const std::string* v = get("color")) tt->setTextColor(colorOf(*v));
+        if (const std::string* v = get("background")) tt->setBgColor(colorOf(*v));
+        if (const std::string* v = get("headerbackground")) tt->setHeaderBgColor(colorOf(*v));
+        if (const std::string* v = get("bordercolor")) tt->setBorderColor(colorOf(*v));
+        else if (const std::string* v = get("border")) tt->setBorderColor(colorOf(*v));
+        if (const std::string* v = get("highlight")) tt->setHighlightColor(colorOf(*v));
+        if (const std::string* v = get("accent")) tt->setAccentColor(colorOf(*v));
+        if (hasStyle) { tt->setFontFamily(st.fontFamily); tt->setFontSize(st.fontSize); }
+    } else if (auto* tn = dynamic_cast<TreeTableNode*>(w.get())) {
+        if (const std::string* v = get("label")) tn->setLabel(*v);
+        else if (const std::string* v = get("text")) tn->setLabel(*v);
+        if (const std::string* v = get("cells")) tn->setCells(*v);
+        if (const std::string* v = get("expanded")) tn->setExpanded(toBool(*v));
     } else if (auto* ts = dynamic_cast<ToggleSwitch*>(w.get())) {
         if (const std::string* v = get("checked")) ts->setState(toBool(*v));
         else if (const std::string* v = get("on")) ts->setState(toBool(*v));

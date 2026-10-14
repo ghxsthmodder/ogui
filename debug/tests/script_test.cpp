@@ -295,6 +295,14 @@ int main() {
     <property name="visible" type="bool" value="true" category="Base"/>
     <property name="size" type="number" value="12"/>
   </propertygrid>
+  <treetable id="tt" x="400" y="10" width="240" height="120">
+    <th label="Name"/>
+    <th label="Kind" width="80"/>
+    <tnode label="src" cells="dir">
+      <tnode label="main.cpp" cells="file"/>
+      <tnode label="util.cpp" cells="file"/>
+    </tnode>
+  </treetable>
 </screen>)");
         assert(res.root);
         auto s = std::make_shared<Screen>("lists");
@@ -352,6 +360,16 @@ int main() {
             ogui.prop("pg", "select", 0)
             assert(ogui.prop("pg", "selected") == 0)
             assert(not pcall(ogui.prop, "tip", "count"))
+            -- treetable: selected is readable/settable through the shared path
+            assert(ogui.get("tt", "selected") == -1)
+            assert(ogui.set("tt", "selected", 1))
+            assert(ogui.get("tt", "selected") == 1)
+            ogui.set("tt", "selected", 99)             -- clamped out of range
+            assert(ogui.get("tt", "selected") == -1)
+            -- treetable: selected readable/writable through the generic attr
+            assert(ogui.get("tt", "selected") == -1)
+            ogui.set("tt", "selected", 1)
+            assert(ogui.get("tt", "selected") == 1)
             assert(ogui.set("combo", "selected", 1))
             assert(ogui.get("combo", "selected") == 1)
         )", "lists");

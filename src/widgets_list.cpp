@@ -2943,4 +2943,510 @@ void PropertyGrid::onDraw(Rasterizer& r) const {
     r.endFrame();
 }
 
+// ------------------------------------------------------------------
+// TreeTableNode / TreeTable
+// ------------------------------------------------------------------
+void TreeTableNode::setCells(const std::string& semicolonSeparated) {
+    m_cells.clear();
+    size_t start = 0;
+    while (true) {
+        const size_t semi = semicolonSeparated.find(';', start);
+        m_cells.push_back(semicolonSeparated.substr(
+            start, semi == std::string::npos ? std::string::npos
+                                             : semi - start));
+        if (semi == std::string::npos) break;
+        start = semi + 1;
+    }
+}
+
+TreeTable::TreeTable() = default;
+TreeTable::~TreeTable() = default;
+
+void TreeTable::setColumns(const std::vector<Column>& cols) {
+    m_cols = cols;
+    if (m_sortCol >= static_cast<int>(m_cols.size())) m_sortCol = -1;
+    m_colsResolved = true;
+    if (m_kernel) m_kernel->invalidate();
+}
+
+std::string TreeTable::columnLabel(int col) const {
+    return col >= 0 && col < static_cast<int>(m_cols.size())
+               ? m_cols[static_cast<size_t>(col)].label : std::string();
+}
+
+void TreeTable::rebuildColumns() {
+    if (m_colsResolved) return;
+    m_colsResolved = true;
+    if (!m_cols.empty()) return;
+    for (const auto& c : children()) {
+        if (auto* th = dynamic_cast<TableColumn*>(c.get()))
+            m_cols.push_back({th->label(), th->width()});
+    }
+    if (m_cols.empty()) m_cols.push_back({"Name", 0.0f});
+}
+
+void TreeTable::flatten() {
+    // Snapshot the selected node before rebuilding so the selection can
+    // ride along across expand/collapse/sort (it lives at a new index).
+    TreeTableNode* want = m_selected >= 0 &&
+        m_selected < static_cast<int>(m_rows.size())
+            ? m_rows[static_cast<size_t>(m_selected)].node : nullptr;
+    m_rows.clear();
+    std::function<void(Widget*, int)> walk = [&](Widget* parent, int depth) {
+        for (const auto& c : parent->children()) {
+            auto* node = dynamic_cast<TreeTableNode*>(c.get());
+            if (!node) continue;
+            m_rows.push_back({node, depth});
+            if (node->expanded()) walk(node, depth + 1);
+        }
+    };
+    walk(this, 0);
+    if (!m_wantedApplied && m_wantedSelected >= 0 && !m_rows.empty()) {
+        m_selected = std::min(m_wantedSelected,
+                              static_cast<int>(m_rows.size()) - 1);
+        want = nullptr;
+    }
+    m_wantedApplied = true;
+    if (want) {
+        m_selected = -1;
+        for (size_t i = 0; i < m_rows.size(); ++i)
+            if (m_rows[i].node == want) { m_selected = static_cast<int>(i); break; }
+    } else if (m_selected >= static_cast<int>(m_rows.size())) {
+        m_selected = static_cast<int>(m_rows.size()) - 1;
+    }
+    if (m_selected >= static_cast<int>(m_rows.size())) m_selected = -1;
+    clampScroll();
+}
+
+bool TreeTable::hasChildren(const TreeTableNode* node) const {
+    if (!node) return false;
+    for (const auto& c : node->children())
+        if (dynamic_cast<const TreeTableNode*>(c.get())) return true;
+    return false;
+}
+
+namespace {
+
+// Column text used for sorting: col 0 is the label, col c the (c-1)-th cell.
+std::string ttCellKey(const TreeTableNode* n, int col) {
+    if (col <= 0) return n->label();
+    const auto& cells = n->cells();
+    const size_t i = static_cast<size_t>(col - 1);
+    return i < cells.size() ? cells[i] : std::string();
+}
+
+bool ttCellLess(const std::string& a, const std::string& b) {
+    auto numeric = [](const std::string& s, double& out) {
+        if (s.empty()) return false;
+        size_t pos = 0;
+        try { out = std::stod(s, &pos); } catch (...) { return false; }
+        return pos == s.size();
+    };
+    double da = 0.0, db = 0.0;
+    if (numeric(a, da) && numeric(b, db)) return da < db;
+    return std::lexicographical_compare(
+        a.begin(), a.end(), b.begin(), b.end(), [](char x, char y) {
+            return std::tolower(static_cast<unsigned char>(x)) <
+                   std::tolower(static_cast<unsigned char>(y));
+        });
+}
+
+} // namespace
+
+void TreeTable::resort() {
+    if (m_sortCol < 0 || m_sortCol >= static_cast<int>(m_cols.size())) {
+        flatten();
+        return;
+    }
+    const int col = m_sortCol;
+    const bool asc = m_sortAsc;
+    std::function<void(Widget*)> sortLevel = [&](Widget* parent) {
+        // Collect the node children, sort them, then re-adopt in order.
+        std::vector<Ptr> nodes, others;
+        for (auto& c : parent->takeChildren()) {
+            if (dynamic_cast<TreeTableNode*>(c.get())) nodes.push_back(std::move(c));
+            else others.push_back(std::move(c));
+        }
+        std::stable_sort(nodes.begin(), nodes.end(), [&](const Ptr& a, const Ptr& b) {
+            const auto* na = static_cast<const TreeTableNode*>(a.get());
+            const auto* nb = static_cast<const TreeTableNode*>(b.get());
+            return asc ? ttCellLess(ttCellKey(na, col), ttCellKey(nb, col))
+                       : ttCellLess(ttCellKey(nb, col), ttCellKey(na, col));
+        });
+        for (auto& c : nodes) sortLevel(c.get());
+        for (auto& c : nodes) parent->addChild(std::move(c));
+        for (auto& c : others) parent->addChild(std::move(c));
+    };
+    sortLevel(this);
+    flatten();
+}
+
+void TreeTable::sortBy(int col) {
+    if (col < 0 || col >= static_cast<int>(m_cols.size())) return;
+    if (m_sortCol == col) m_sortAsc = !m_sortAsc;
+    else { m_sortCol = col; m_sortAsc = true; }
+    resort();
+    if (m_kernel) m_kernel->invalidate();
+}
+
+void TreeTable::layout(float parentWidth, float parentHeight) {
+    rebuildColumns();
+    flatten();
+    Widget::layout(parentWidth, parentHeight);
+}
+
+float TreeTable::columnW(int col) const {
+    if (col < 0 || col >= static_cast<int>(m_cols.size())) return 0.0f;
+    if (m_cols[static_cast<size_t>(col)].width > 0.0f)
+        return m_cols[static_cast<size_t>(col)].width;
+    float used = 0.0f;
+    int flexible = 0;
+    for (const auto& c : m_cols) {
+        if (c.width > 0.0f) used += c.width;
+        else ++flexible;
+    }
+    if (flexible == 0) return 0.0f;
+    return std::max((bounds().w - used) / static_cast<float>(flexible), 40.0f);
+}
+
+float TreeTable::columnX(int col) const {
+    float x = 0.0f;
+    for (int i = 0; i < col && i < static_cast<int>(m_cols.size()); ++i)
+        x += columnW(i);
+    return x;
+}
+
+float TreeTable::columnWidth(int col) const { return columnW(col); }
+
+int TreeTable::colAt(float localX) const {
+    float x = 0.0f;
+    for (int i = 0; i < static_cast<int>(m_cols.size()); ++i) {
+        const float w = columnW(i);
+        if (localX >= x && localX < x + w) return i;
+        x += w;
+    }
+    return -1;
+}
+
+void TreeTable::clampScroll() {
+    const float viewH = std::max(bounds().h - m_headH, 0.0f);
+    const float total = m_rowH * static_cast<float>(m_rows.size());
+    m_scroll = std::clamp(m_scroll, 0.0f, std::max(total - viewH, 0.0f));
+}
+
+void TreeTable::ensureVisible(int row) {
+    if (row < 0) return;
+    const float y = static_cast<float>(row) * m_rowH;
+    const float viewH = std::max(bounds().h - m_headH, 0.0f);
+    if (y + m_rowH - m_scroll > viewH) m_scroll = y + m_rowH - viewH;
+    if (y < m_scroll) m_scroll = y;
+    clampScroll();
+}
+
+int TreeTable::rowAt(float localY) const {
+    if (localY < m_headH) return -1;
+    if (m_rowH <= 0.0f || m_rows.empty()) return -1;
+    const int row = static_cast<int>((localY - m_headH + m_scroll) / m_rowH);
+    return (row >= 0 && row < static_cast<int>(m_rows.size())) ? row : -1;
+}
+
+bool TreeTable::toggleAt(float localX, const FlatRow& row) const {
+    // The triangle lives in column 0 at [pad + depth*indent, +indent).
+    const float x0 = 6.0f + static_cast<float>(row.depth) * m_indent;
+    return localX >= x0 && localX < x0 + m_indent;
+}
+
+TreeTableNode* TreeTable::nodeAt(int row) {
+    if (row < 0 || row >= static_cast<int>(m_rows.size())) return nullptr;
+    return m_rows[static_cast<size_t>(row)].node;
+}
+
+std::string TreeTable::cell(int row, int col) const {
+    if (row < 0 || row >= static_cast<int>(m_rows.size())) return {};
+    const TreeTableNode* n = m_rows[static_cast<size_t>(row)].node;
+    if (col <= 0) return n->label();
+    const size_t i = static_cast<size_t>(col - 1);
+    return i < n->cells().size() ? n->cells()[i] : std::string();
+}
+
+void TreeTable::commit(int row) {
+    if (row < 0 || row >= static_cast<int>(m_rows.size())) return;
+    m_selected = row;
+    ensureVisible(row);
+    if (m_onChanged) m_onChanged(row);
+    announceChange();
+    if (m_kernel) m_kernel->invalidate();
+}
+
+void TreeTable::setSelectedIndex(int index) {
+    // Before the first flatten (e.g. the parser's selected= attr) the row
+    // list is empty; remember the wanted index and apply it on flatten.
+    if (m_rows.empty() && !m_wantedApplied) {
+        m_wantedSelected = index;
+        return;
+    }
+    if (index < 0 || index >= static_cast<int>(m_rows.size())) index = -1;
+    m_selected = index;
+    if (m_selected >= 0) ensureVisible(m_selected);
+    if (m_kernel) m_kernel->invalidate();
+}
+
+void TreeTable::setExpanded(int row, bool on) {
+    auto* node = nodeAt(row);
+    if (!node || node->expanded() == on) return;
+    node->setExpanded(on);
+    flatten();
+    if (m_kernel) m_kernel->invalidate();
+}
+
+bool TreeTable::isExpanded(int row) const {
+    if (row < 0 || row >= static_cast<int>(m_rows.size())) return false;
+    return m_rows[static_cast<size_t>(row)].node->expanded();
+}
+
+void TreeTable::expandAll() {
+    std::function<void(Widget*)> walk = [&](Widget* w) {
+        for (const auto& c : w->children())
+            if (auto* n = dynamic_cast<TreeTableNode*>(c.get())) {
+                n->setExpanded(true);
+                walk(n);
+            }
+    };
+    walk(this);
+    flatten();
+    if (m_kernel) m_kernel->invalidate();
+}
+
+void TreeTable::collapseAll() {
+    std::function<void(Widget*)> walk = [&](Widget* w) {
+        for (const auto& c : w->children())
+            if (auto* n = dynamic_cast<TreeTableNode*>(c.get())) {
+                n->setExpanded(false);
+                walk(n);
+            }
+    };
+    walk(this);
+    flatten();
+    if (m_kernel) m_kernel->invalidate();
+}
+
+void TreeTable::toggleRow(int row) {
+    auto* node = nodeAt(row);
+    if (!node || !hasChildren(node)) return;
+    setExpanded(row, !node->expanded());
+}
+
+bool TreeTable::barVisible() const {
+    const float total = m_rowH * static_cast<float>(m_rows.size());
+    return total - std::max(bounds().h - m_headH, 0.0f) > 1.0f;
+}
+
+Rect TreeTable::barTrack() const {
+    const Rect b = bounds();
+    return Rect{b.w - kBarW - kBarMargin, m_headH + kBarMargin,
+                kBarW, std::max(b.h - m_headH - 2.0f * kBarMargin, 0.0f)};
+}
+
+Rect TreeTable::barThumb() const {
+    const float viewH = std::max(bounds().h - m_headH, 0.0f);
+    const float total = m_rowH * static_cast<float>(m_rows.size());
+    return barThumbRect(barTrack(), viewH, total, m_scroll);
+}
+
+void TreeTable::onPointerDown(MouseButton, const Offset2D& p) {
+    const Offset2D o = absoluteOrigin();
+    const float lx = static_cast<float>(p.x) - o.x;
+    const float ly = static_cast<float>(p.y) - o.y;
+    if (barVisible()) {
+        const Rect trk = barTrack();
+        if (lx >= trk.x && lx <= trk.x + trk.w &&
+            ly >= trk.y && ly <= trk.y + trk.h) {
+            m_barDrag = true;
+            const float viewH = std::max(bounds().h - m_headH, 0.0f);
+            const float total = m_rowH * static_cast<float>(m_rows.size());
+            const Rect th = barThumb();
+            if (ly >= th.y && ly <= th.y + th.h) {
+                m_barGrab = ly - th.y;
+            } else {
+                m_barGrab = th.h * 0.5f;
+                m_scroll = barScrollAt(trk, viewH, total, ly, m_barGrab);
+                clampScroll();
+            }
+            if (m_kernel) m_kernel->invalidate();
+            return;
+        }
+    }
+    if (ly < m_headH) {                       // header: sort by the column
+        if (m_sortable) sortBy(colAt(lx));
+        return;
+    }
+    const int row = rowAt(ly);
+    if (row < 0) return;
+    const FlatRow& fr = m_rows[static_cast<size_t>(row)];
+    if (lx < columnW(0) && toggleAt(lx, fr) && hasChildren(fr.node)) {
+        toggleRow(row);
+        if (m_kernel) m_kernel->invalidate();
+        return;
+    }
+    commit(row);
+}
+
+void TreeTable::onPointerUp(MouseButton) {
+    m_barDrag = false;
+}
+
+void TreeTable::onPointerMove(const Offset2D& p) {
+    const Offset2D o = absoluteOrigin();
+    const float ly = static_cast<float>(p.y) - o.y;
+    if (m_barDrag) {
+        const float viewH = std::max(bounds().h - m_headH, 0.0f);
+        const float total = m_rowH * static_cast<float>(m_rows.size());
+        m_scroll = barScrollAt(barTrack(), viewH, total, ly, m_barGrab);
+        clampScroll();
+        if (m_kernel) m_kernel->invalidate();
+        return;
+    }
+    m_hover = rowAt(ly);
+}
+
+void TreeTable::onPointerScroll(float, float dy) {
+    m_scroll -= dy * m_rowH * 3.0f;
+    clampScroll();
+    if (m_kernel) m_kernel->invalidate();
+}
+
+void TreeTable::onKeyDown(KeyCode key, uint32_t) {
+    if (m_rows.empty()) return;
+    const int last = static_cast<int>(m_rows.size()) - 1;
+    int row = m_selected < 0 ? 0 : m_selected;
+    switch (key) {
+        case Key_Up:    row = std::max(row - 1, 0); break;
+        case Key_Down:  row = std::min(row + 1, last); break;
+        case Key_Home:  row = 0; break;
+        case Key_End:   row = last; break;
+        case Key_Right: {
+            auto* node = m_rows[static_cast<size_t>(row)].node;
+            if (!hasChildren(node) || node->expanded()) return;
+            node->setExpanded(true);
+            flatten();
+            return;
+        }
+        case Key_Left: {
+            auto* node = m_rows[static_cast<size_t>(row)].node;
+            if (hasChildren(node) && node->expanded()) {
+                node->setExpanded(false);
+                flatten();
+                return;
+            }
+            if (auto* parent = dynamic_cast<TreeTableNode*>(node->parent())) {
+                for (int i = 0; i < static_cast<int>(m_rows.size()); ++i)
+                    if (m_rows[static_cast<size_t>(i)].node == parent) {
+                        commit(i);
+                        return;
+                    }
+            }
+            return;
+        }
+        case Key_Enter:
+        case Key_Space:
+            if (m_selected < 0) { commit(row); return; }
+            toggleRow(m_selected);
+            return;
+        default: return;
+    }
+    commit(row);
+}
+
+void TreeTable::onDraw(Rasterizer& r) const {
+    if (!m_style.isVisible) return;
+    const Rect b = bounds();
+    if (m_bg.a > 0) r.drawRect(b, m_bg);
+
+    const Font* f = r.resolveFont(m_fontFam, m_fontSize);
+
+    // ---- rows (clipped below the header; only the viewport draws) ------
+    r.beginFrame(Rect{b.x, b.y + m_headH, b.w, std::max(b.h - m_headH, 0.0f)});
+    for (size_t i = 0; i < m_rows.size(); ++i) {
+        const float y = b.y + m_headH + static_cast<float>(i) * m_rowH - m_scroll;
+        if (y + m_rowH < b.y + m_headH) continue;
+        if (y > b.y + b.h) break;             // virtualized: rest is off-view
+        const FlatRow& fr = m_rows[i];
+        const bool sel = static_cast<int>(i) == m_selected;
+        const bool hov = static_cast<int>(i) == m_hover && !sel;
+        const Rect rowRect{b.x, y, b.w, m_rowH};
+        if (sel) {
+            r.drawRect(rowRect, m_highlight);
+            r.drawRect({b.x, y, 2.0f, m_rowH}, m_border);
+        } else if (hov) {
+            Color soft = m_highlight;
+            soft.a = 120;
+            r.drawRect(rowRect, soft);
+        }
+        if (!f) continue;
+        const Color col = sel ? palette().white : m_text;
+        const float ty = y + (m_rowH - m_fontSize) * 0.5f;
+        // Column 0: triangle slot, indent, label.
+        const float tx = b.x + 6.0f + static_cast<float>(fr.depth) * m_indent;
+        if (hasChildren(fr.node)) {
+            const float cy = y + m_rowH * 0.5f;
+            const float s = 4.0f;
+            if (fr.node->expanded())
+                r.drawTriangle({tx + 2.0f, cy - s * 0.6f},
+                               {tx + 2.0f + 2 * s, cy - s * 0.6f},
+                               {tx + 2.0f + s, cy + s * 0.8f}, m_accent);
+            else
+                r.drawTriangle({tx + 2.0f, cy - s}, {tx + 2.0f + 2 * s, cy},
+                               {tx + 2.0f, cy + s}, m_accent);
+        }
+        r.drawTextShifted(fr.node->label().c_str(),
+                          tx + m_indent + 2.0f, ty, m_fontSize, *f, col);
+        // Remaining columns: node cells.
+        for (int c = 1; c < static_cast<int>(m_cols.size()); ++c) {
+            const size_t k = static_cast<size_t>(c - 1);
+            if (k >= fr.node->cells().size()) continue;
+            const std::string& text = fr.node->cells()[k];
+            if (text.empty()) continue;
+            r.beginFrame(Rect{b.x + columnX(c) + 6.0f, y,
+                              std::max(columnW(c) - 12.0f, 1.0f), m_rowH});
+            r.drawTextShifted(text.c_str(), b.x + columnX(c) + 6.0f, ty,
+                              m_fontSize, *f, col);
+            r.endFrame();
+        }
+    }
+    r.endFrame();
+
+    // ---- header strip -----------------------------------------------------
+    const Rect head{b.x, b.y, b.w, m_headH};
+    r.drawRect(head, m_headerBg);
+    if (f) {
+        for (int c = 0; c < static_cast<int>(m_cols.size()); ++c) {
+            const float cx = b.x + columnX(c);
+            r.drawTextShifted(m_cols[static_cast<size_t>(c)].label.c_str(),
+                              cx + 6.0f, b.y + (m_headH - m_fontSize) * 0.5f,
+                              m_fontSize, *f, m_text);
+            if (m_sortable && c == m_sortCol) {
+                const float ax = cx + columnW(c) - 14.0f;
+                const float ay = b.y + m_headH * 0.5f;
+                const Color ac = palette().focus;
+                if (m_sortAsc)
+                    r.drawTriangle({ax, ay + 3.0f}, {ax + 6.0f, ay + 3.0f},
+                                   {ax + 3.0f, ay - 4.0f}, ac);
+                else
+                    r.drawTriangle({ax, ay - 3.0f}, {ax + 6.0f, ay - 3.0f},
+                                   {ax + 3.0f, ay + 4.0f}, ac);
+            }
+        }
+    }
+
+    r.drawRectBorder(b, m_border, 1.0f, 4.0f);
+    for (int c = 1; c < static_cast<int>(m_cols.size()); ++c)
+        r.drawLine({b.x + columnX(c), b.y}, {b.x + columnX(c), b.y + b.h},
+                   Color{60, 60, 60, 255}, 1.0f);
+
+    if (barVisible()) {
+        drawVerticalBar(r, offsetRect(barTrack(), b.x, b.y),
+                        offsetRect(barThumb(), b.x, b.y), m_barDrag);
+    }
+}
+
 } // namespace ogui

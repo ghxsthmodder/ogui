@@ -1906,6 +1906,148 @@ private:
 };
 
 // ------------------------------------------------------------------
+// TreeTableNode: one <tnode> of a TreeTable. The label is column 0;
+// cells="a;b;c" fills the remaining columns. Data only -- the grid
+// draws every row. Nest <tnode>s for children.
+// ------------------------------------------------------------------
+class TreeTableNode : public Widget {
+public:
+    void setLabel(const std::string& l) { m_label = l; }
+    const std::string& label() const { return m_label; }
+    // "a;b;c" -> cell values for columns 1..n (col 0 is the label).
+    void setCells(const std::string& semicolonSeparated);
+    void setCells(std::vector<std::string> c) { m_cells = std::move(c); }
+    const std::vector<std::string>& cells() const { return m_cells; }
+    void setExpanded(bool e) { m_expanded = e; }
+    bool expanded() const { return m_expanded; }
+
+private:
+    std::string m_label;
+    std::vector<std::string> m_cells;
+    bool m_expanded = true;
+};
+
+// ------------------------------------------------------------------
+// TreeTable: tree hierarchy inside tabular columns. Rows flatten from
+// nested <tnode> children; columns come from <th> children (TableColumn)
+// or setColumns(). Triangle or double... single click toggles expansion,
+// clicking a row selects it (change event); header clicks sort the
+// siblings at every level (re-click flips direction). Wheel scrolls,
+// Up/Down/Home/End move the selection, Left/Right collapse/expand.
+// Only the viewport rows are drawn, so deep trees stay cheap.
+// ------------------------------------------------------------------
+class TreeTable : public Widget {
+public:
+    using ChangedCallback = std::function<void(int)>;
+    struct Column {
+        std::string label;
+        float width = 0.0f;    // 0 == share the leftover evenly
+    };
+
+    TreeTable();
+    virtual ~TreeTable() override;
+
+    void setColumns(const std::vector<Column>& cols);
+    int columnCount() const { return static_cast<int>(m_cols.size()); }
+    std::string columnLabel(int col) const;
+    float columnWidth(int col) const;      // resolved px
+
+    int rowCount() const { return static_cast<int>(m_rows.size()); }
+    TreeTableNode* nodeAt(int row);
+    // Column 0 is the node label, columns 1..n are its cells.
+    std::string cell(int row, int col) const;
+    int selectedIndex() const { return m_selected; }
+    // Programmatic calls are silent (no change event).
+    void setSelectedIndex(int index);
+    void setOnChanged(ChangedCallback cb) { m_onChanged = std::move(cb); }
+
+    bool isExpanded(int row) const;
+    void setExpanded(int row, bool on);
+    void expandAll();
+    void collapseAll();
+
+    int sortColumn() const { return m_sortCol; }
+    bool sortAscending() const { return m_sortAsc; }
+    void setSortable(bool s) { m_sortable = s; }
+    void sortBy(int col);                  // toggle direction on re-click
+
+    void setRowHeight(float px) { m_rowH = px; }
+    void setHeaderHeight(float px) { m_headH = px; }
+    void setIndent(float px) { m_indent = px; }
+    void setFontFamily(const std::string& f) { m_fontFam = f; }
+    void setFontSize(int s) { m_fontSize = s; }
+    void setBgColor(const Color& c) { m_bg = c; }
+    void setHeaderBgColor(const Color& c) { m_headerBg = c; }
+    void setBorderColor(const Color& c) { m_border = c; }
+    void setTextColor(const Color& c) { m_text = c; }
+    void setHighlightColor(const Color& c) { m_highlight = c; }
+    void setAccentColor(const Color& c) { m_accent = c; }
+    bool isSelectedVisual() const override { return m_selected >= 0; }
+    void applyVisualColor(const std::string& prop, const Color& v) override {
+        if (prop == "background") setBgColor(v);
+        else if (prop == "color") setTextColor(v);
+        else if (prop == "border" || prop == "bordercolor") setBorderColor(v);
+    }
+
+    virtual void layout(float parentWidth, float parentHeight) override;
+    virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
+    virtual void onPointerUp(MouseButton btn) override;
+    virtual void onPointerMove(const Offset2D& p) override;
+    virtual void onPointerScroll(float dx, float dy) override;
+    virtual void onKeyDown(KeyCode key, uint32_t mods) override;
+    virtual void onDraw(Rasterizer& r) const override;
+    virtual bool wantsScroll() const override { return true; }
+
+private:
+    struct FlatRow { TreeTableNode* node = nullptr; int depth = 0; };
+
+    void rebuildColumns();          // collect <th> children once
+    void flatten();                 // visible nodes -> m_rows
+    void resort();                  // sort siblings at every level
+    bool hasChildren(const TreeTableNode* node) const;
+    float columnX(int col) const;
+    float columnW(int col) const;
+    int colAt(float localX) const;
+    void clampScroll();
+    void ensureVisible(int row);
+    int rowAt(float localY) const;  // -1 == header strip
+    bool toggleAt(float localX, const FlatRow& row) const;
+    void commit(int row);           // user select -> notify
+    void toggleRow(int row);
+    bool barVisible() const;
+    Rect barTrack() const;
+    Rect barThumb() const;
+
+    std::vector<Column> m_cols;
+    std::vector<FlatRow> m_rows;
+    bool m_colsResolved = false;    // <th> children collected
+    std::string m_fontFam = "sans";
+    int m_fontSize = 13;
+    float m_rowH = 22.0f;
+    float m_headH = 24.0f;
+    float m_indent = 16.0f;
+    float m_scroll = 0.0f;
+    int m_selected = -1;            // flattened row index
+    int m_wantedSelected = -1;      // selected= attr applied on flatten
+    bool m_wantedApplied = false;
+    int m_hover = -1;
+    int m_sortCol = -1;             // -1 == document order
+    bool m_sortAsc = true;
+    bool m_sortable = true;
+    Color m_bg{ogui::palette().window};
+    Color m_headerBg{ogui::palette().surface};
+    Color m_border{ogui::palette().accent};
+    Color m_text{ogui::palette().text};
+    Color m_highlight{ogui::hexColor("#334455")};
+    Color m_accent{ogui::palette().accent};
+    ChangedCallback m_onChanged;
+
+    // Scrollbar thumb drag.
+    bool m_barDrag = false;
+    float m_barGrab = 0.0f;
+};
+
+// ------------------------------------------------------------------
 // ToggleSwitch
 // ------------------------------------------------------------------
 class ToggleSwitch : public Widget {
