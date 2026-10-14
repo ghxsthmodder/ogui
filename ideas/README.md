@@ -691,12 +691,12 @@ a execução de forma segura e previsível.
 
 ### Fase 3 --- Componentes e layout declarativo
 
--   [ ] Templates/componentes reutilizáveis.
+-   [ ] Templates/componentes reutilizáveis. *(adiado — o próprio plano recomenda estabilizar antes; adiado conscientemente)*
 -   [ ] Parâmetros, slots e escopo local de IDs.
--   [ ] Layout flexível com limites e espaçamento consistente.
--   [ ] Estados visuais em estilos.
--   [ ] Bindings unidirecionais.
--   [ ] Transições declarativas para propriedades selecionadas.
+-   [x] Layout flexível com limites e espaçamento consistente.
+-   [x] Estados visuais em estilos.
+-   [x] Bindings unidirecionais.
+-   [x] Transições declarativas para propriedades selecionadas.
 
 **Resultado esperado:** interfaces mais reutilizáveis e adaptáveis, com
 menos lógica repetida.
@@ -705,7 +705,7 @@ menos lógica repetida.
 
 -   [ ] VirtualList.
 -   [ ] PropertyGrid.
--   [ ] Console/LogView.
+-   [x] Console/LogView.
 -   [ ] TreeTable.
 -   [ ] Painéis divisíveis e, se necessário, docking.
 -   [ ] NumberInput, Keybind, Breadcrumb e StatusBar conforme a demanda.

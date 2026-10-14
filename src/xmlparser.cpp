@@ -1239,6 +1239,7 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
             row->setChildValign(*v == "middle" ? VertAlign::Middle
                                                : (*v == "bottom" ? VertAlign::Bottom : VertAlign::Top));
         }
+        if (const std::string* v = get("wrap")) row->setWrap(toBool(*v));
     }
 
     if (tag == "screen") {

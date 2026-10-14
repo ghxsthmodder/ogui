@@ -2806,6 +2806,41 @@ static void testVisualTransitions() {
     CHECK(!b->isAnimating());
 }
 
+static void testRowWrap() {
+    Kernel k;
+    k.init();
+    XmlParser p;
+    auto res = p.parse(R"XML(<screen id="s">
+  <row id="rw" x="0" y="0" width="120" height="0" gap="4" wrap="true" padding="0" valign="middle">
+    <panel id="a" width="50" height="20" background="#111"/>
+    <panel id="b" width="50" height="30" background="#222"/>
+    <panel id="c" width="50" height="20" background="#333"/>
+  </row>
+</screen>)XML");
+    assert(res.root);
+    auto s = std::make_shared<Screen>("s");
+    s->widgets.push_back(res.root);
+    s->width = 800;
+    s->height = 600;
+    k.pushScreen(s);
+    InputState st = makeInput();
+    k.frame(st);
+    auto* rw = dynamic_cast<Row*>(k.findWidget("rw"));
+    auto* a = dynamic_cast<Panel*>(k.findWidget("a"));
+    auto* b = dynamic_cast<Panel*>(k.findWidget("b"));
+    auto* c = dynamic_cast<Panel*>(k.findWidget("c"));
+    CHECK(rw && a && b && c);
+    // a and b share line 0 (50+4+50=104 <= 120); c wraps to line 1, whose
+    // top sits under the tallest member of line 0 (30) plus the gap.
+    // valign="middle" centres each child inside its own line band.
+    CHECK(a->bounds().x == 0.0f && a->bounds().y == 5.0f);
+    CHECK(b->bounds().x == 54.0f && b->bounds().y == 0.0f);
+    CHECK(c->bounds().x == 0.0f && c->bounds().y == 34.0f);
+    // The row box is the widest used line and the stacked heights.
+    CHECK(rw->bounds().w == 104.0f);  // 50 + gap 4 + 50
+    CHECK(rw->bounds().h == 54.0f);   // 30 + gap 4 + 20 (trailing gap dropped)
+}
+
 int main() {
     testDrawList();
     testHitTestAndFocus();
@@ -2846,6 +2881,7 @@ int main() {
     testConsoleWidget();
     testVisualStates();
     testVisualTransitions();
+    testRowWrap();
     testHost();
 
     if (g_failures) {

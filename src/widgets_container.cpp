@@ -277,6 +277,62 @@ void Row::layout(float parentWidth, float parentHeight) {
     float avail = refW - pad * 2.0f - fixedW - gapTotal;
     if (avail < 0.0f) avail = 0.0f;
 
+    if (m_wrap) {
+        // Flow layout: tile children left to right, starting a new line
+        // whenever the next one would cross the row's right content edge.
+        // The row's height becomes the stacked line heights.
+        struct RItem { Widget* c; float w, h; };
+        std::vector<RItem> items;
+        for (const auto& c : children()) {
+            if (!c) continue;
+            c->resolveGeometry(parentWidth, parentHeight);
+            const Rect cb = c->bounds();
+            const float cbw = cb.w > 0.0f ? cb.w : 100.0f;
+            const float cw = sumW > 0.0f && c->weight() > 0.0f && avail > 0.0f
+                ? avail * c->weight() / sumW : cbw;
+            items.push_back({c.get(), cw, cb.h > 0.0f ? cb.h : 24.0f});
+        }
+        const float maxRight = refW - pad;
+        std::vector<std::vector<size_t>> lines;
+        std::vector<float> lineH;
+        for (size_t i = 0; i < items.size();) {
+            lines.emplace_back();
+            lineH.push_back(0.0f);
+            float lx = pad;
+            while (i < items.size()) {
+                const RItem& it = items[i];
+                if (lx > pad && it.w > maxRight - lx) break;
+                lines.back().push_back(i);
+                lx += it.w + gap;
+                if (it.h > lineH.back()) lineH.back() = it.h;
+                ++i;
+            }
+        }
+        float lineY = 0.0f, usedW = 0.0f;
+        for (size_t li = 0; li < lines.size(); ++li) {
+            float lx = pad;
+            for (size_t idx : lines[li]) {
+                const RItem& it = items[idx];
+                const Rect cb = it.c->bounds();
+                float cy = lineY + cb.y;
+                if (m_valign == VertAlign::Middle)
+                    cy = lineY + (lineH[li] - it.h) * 0.5f;
+                else if (m_valign == VertAlign::Bottom)
+                    cy = lineY + lineH[li] - it.h;
+                it.c->setBounds(Rect{lx, cy, it.w, it.h});
+                it.c->layout(it.w, it.h);
+                Rect after = it.c->bounds();
+                lx += after.w + gap;
+                if (lx - gap > usedW) usedW = lx - gap;
+            }
+            lineY += lineH[li] + gap;
+        }
+        m_bounds = Rect{m_bounds.x, m_bounds.y,
+                        usedW > pad ? usedW : pad,
+                        lines.empty() ? 0.0f : lineY - gap};
+        return;
+    }
+
     if (m_valign != VertAlign::Top) {
         // First pass: the tallest child defines the band shorter children
         // are centred or bottom-aligned inside.

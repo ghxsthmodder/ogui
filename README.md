@@ -363,7 +363,7 @@ theme default.
 | `panel` | plain rectangle container | — |
 | `window` | bordered panel with a title bar (children are offset by it) | `title`, `titleVisible` |
 | `column` | stacks children vertically (gap 4 or `gap`, honours `padding`/`margin`); stretches to the parent's width | `gap`, `align` (`center`/`right` place children horizontally, `left` keeps the authored x), `weight` on children (split leftover height) |
-| `row` | lays children out horizontally, tiling authored widths with a gap | `gap`, `valign` (`middle`/`bottom` place shorter children against the tallest), `weight` on children (split leftover width when the row has an authored width or room from its parent) |
+| `row` | lays children out horizontally, tiling authored widths with a gap | `gap`, `valign` (`middle`/`bottom` place shorter children against the tallest), `wrap` (`true`: children past the row width flow to a new line, growing the height), `weight` on children (split leftover width when the row has an authored width or room from its parent) |
 | `grid` | row-major tiling over column tracks; children fill each cell origin (child `x`/`y` are ignored, percent/fill resolve against the cell) | `columns` (`"3"` = 3 equal tracks, or a list like `"120 1fr 25%"`: px, fractional, percent), `gap` (px, default 4), `rowHeight` (px; default is auto = tallest child of the row) |
 | `label` | text | `text`, `wrap`, `align="left\|center\|right"` |
 | `button` | clickable button, press/release feedback | `text`, `align="left\|center\|right"`, `textPadding` (inset for left/right) |

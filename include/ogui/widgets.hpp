@@ -429,10 +429,15 @@ public:
     // Vertical placement of children shorter than the tallest row member:
     // top keeps the authored y; middle/bottom align them.
     void setChildValign(VertAlign a) { m_valign = a; }
+    // wrap="true": children that do not fit the row width continue on the
+    // next line; the row grows in height to hold the extra lines.
+    void setWrap(bool w) { m_wrap = w; }
+    bool wrap() const { return m_wrap; }
     virtual void layout(float parentWidth, float parentHeight) override;
 
 private:
     VertAlign m_valign = VertAlign::Top;
+    bool m_wrap = false;
 };
 
 // ------------------------------------------------------------------

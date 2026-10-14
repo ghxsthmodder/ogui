@@ -298,7 +298,7 @@ no room below).
 | `group` | `name` (box caption) | any widget |
 | `window` | `title`, `titleVisible` | any widget |
 | `scrollview` | `scrollStep`, `scrollX`, `scrollY` | any widget |
-| `column` / `row` | `gap` (child spacing px, falls back to `margin` then 4), `align` on `column` (`center`/`right` child placement), `valign` on `row` (`middle`/`bottom` against the tallest child) | any widget (stacked; children may set `weight` to split leftover height/width) |
+| `column` / `row` | `gap` (child spacing px, falls back to `margin` then 4), `align` on `column` (`center`/`right` child placement), `valign` on `row` (`middle`/`bottom` against the tallest child), `wrap` on `row` (children that exceed the width continue on a new line and the row grows in height) | any widget (stacked; children may set `weight` to split leftover height/width) |
 | `grid` | `columns`, `gap`, `rowHeight` | any widget |
 | `splitter` | `orientation`/`vertical`, `split` (0..1), `handleSize`, `handleColor` | two panels |
 | `tabs` | `active`, `tabHeight`, `headerColor`, `tabColor`, `activeColor`, `accent`, `scrolling` (`true`: the header is a drag/wheel-scrollable strip instead of a `...` overflow) | `tab` |
