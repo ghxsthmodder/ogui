@@ -710,6 +710,8 @@ menos lógica repetida.
 -   [x] Painéis divisíveis (`splitter`, aninhável); docking completo fica para
     depois, sem demanda concreta ainda.
 -   [x] NumberInput (`spinbox` já cobre), Keybind, Breadcrumb e StatusBar.
+-   [x] CommandPalette (busca incremental, histórico e `ogui.cmd`); um
+    terminal completo ainda não tem demanda.
 
 **Resultado esperado:** a biblioteca atende melhor interfaces de
 configuração, ferramentas e aplicações com dados extensos.

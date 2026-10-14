@@ -3172,6 +3172,105 @@ static void testRowWrap() {
     CHECK(rw->bounds().h == 54.0f);   // 30 + gap 4 + 20 (trailing gap dropped)
 }
 
+static void testCommandPalette() {
+    Kernel k;
+    k.init();
+    XmlParser p;
+    auto res = p.parse(R"XML(<screen id="s">
+  <commandpalette id="cp" x="20" y="20" width="300" height="120"
+                  placeholder="Search...">
+    <cmd name="New File" hint="create" key="ctrl+n"/>
+    <cmd name="Open File" hint="load from disk" key="ctrl+o"/>
+    <cmd name="Save" hint="write to disk" key="ctrl+s"/>
+    <cmd label="Close Editor"/>
+  </commandpalette>
+</screen>)XML");
+    CHECK(res.root != nullptr);
+    if (!res.root) return;
+    auto s = std::make_shared<Screen>("s");
+    s->widgets.push_back(res.root);
+    s->width = 800;
+    s->height = 600;
+    k.pushScreen(s);
+
+    InputState st = makeInput();
+    idle(k, st);
+    auto* cp = dynamic_cast<CommandPalette*>(k.findWidget("cp"));
+    CHECK(cp != nullptr);
+    if (!cp) return;
+    CHECK(cp->count() == 4);
+    CHECK(cp->name(0) == "New File");
+    CHECK(cp->hint(0) == "create");
+    CHECK(cp->key(0) == "ctrl+n");
+    CHECK(cp->name(3) == "Close Editor");
+    CHECK(!k.buildDrawList().empty());
+
+    // Filtering: name hits rank above hint-only hits, authored order kept.
+    cp->setQuery("file");
+    CHECK(cp->matchCount() == 2);          // New File, Open File (names)
+    cp->setQuery("disk");                  // hint-only matches
+    CHECK(cp->matchCount() == 2);
+    CHECK(cp->match(0) == "Open File");
+    CHECK(cp->match(1) == "Save");
+    CHECK(cp->selectedIndex() == 0);
+    CHECK(cp->query() == "disk");
+
+    // Programmatic exec is silent but runs and records history.
+    std::vector<std::string> runs;
+    cp->setOnRun([&](const std::string& n) { runs.push_back(n); });
+    CHECK(cp->exec("Save"));
+    CHECK(runs.size() == 1 && runs[0] == "Save");
+    CHECK(cp->historyCount() == 1 && cp->history(0) == "Save");
+    CHECK(!cp->exec("Ghost"));
+    cp->setQuery("save");
+    CHECK(cp->matchCount() == 1);
+    CHECK(cp->exec("Save"));               // history dedupes to the front
+    CHECK(cp->historyCount() == 1);
+    cp->setQuery("x");
+    CHECK(cp->match(9) == std::string());
+
+    // Typing over the focused palette filters live; Enter runs the
+    // selection; Backspace edits the query.
+    pressAt(k, st, 40.0f, 30.0f);          // header click focuses the widget
+    releaseAt(k, st);
+    cp->setQuery("");
+    st.lastChar = 's';
+    k.frame(st);
+    st.lastChar = 0;
+    CHECK(cp->query() == "s");
+    CHECK(cp->matchCount() == 3);          // names: Save, Close Editor; hint: Open File
+    CHECK(cp->match(0) == "Save");
+    tapKey(k, st, Key_Enter);              // runs row 0
+    CHECK(runs.size() == 3 && runs[2] == "Save");
+    CHECK(cp->history(0) == "Save");
+
+    tapKey(k, st, Key_Backspace);          // query back to empty
+    CHECK(cp->query().empty());
+    CHECK(cp->matchCount() == 4);
+
+    // Up/Down walk the filtered rows without running anything.
+    tapKey(k, st, Key_Down);
+    CHECK(cp->selectedIndex() == 1);
+    tapKey(k, st, Key_Up);
+    tapKey(k, st, Key_Up);                 // clamps at 0
+    CHECK(cp->selectedIndex() == 0);
+    tapKey(k, st, Key_End);
+    CHECK(cp->selectedIndex() == 3);
+    tapKey(k, st, Key_Home);
+    CHECK(cp->selectedIndex() == 0);
+    CHECK(runs.size() == 3);
+
+    // Clicking a row runs it (rows sit under the 26px header, 22px tall).
+    pressAt(k, st, 60.0f, 20.0f + 26.0f + 22.0f + 11.0f);
+    releaseAt(k, st);
+    CHECK(runs.size() == 4 && runs[3] == "Open File");
+    CHECK(cp->historyCount() == 2 && cp->history(0) == "Open File");
+
+    // Re-running the newest command dedupes: size stays 2, order flips.
+    cp->exec("Save");
+    CHECK(cp->historyCount() == 2 && cp->history(0) == "Save");
+}
+
 static void testOnDemandWidgets() {
     Kernel k;
     k.init();
@@ -3340,6 +3439,7 @@ int main() {
     testPropertyGrid();
     testTreeTable();
     testOnDemandWidgets();
+    testCommandPalette();
     testHost();
 
     if (g_failures) {

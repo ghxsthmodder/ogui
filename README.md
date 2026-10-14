@@ -26,6 +26,7 @@ creates for you (`ogui::Host`, a built-in Win32/WGL window and event loop).
   input queries (`mouse`/`key`/`mods`), focus/hover, list content
   (full `items` or incremental `ogui.list` insert/remove/set),
   `ogui.prop` reads/writes `propertygrid` models by name,
+  `ogui.cmd` drives `commandpalette` models and histories,
   engine-driven `tween` animations, `after`/`every` timers, dynamic
   widget creation (`add`/`remove`/`clear`), tree navigation
   (`children`/`parent`/`index`), per-widget event
@@ -388,6 +389,8 @@ theme default.
 | `breadcrumb` | clickable path segments joined by a separator: clicking sets the active segment, fires the widget `bind()` and any `onSelected` callback; segments come from a `path` string or nested `<crumb>` children | `path="a/b/c"`, `separator` (default `/`), `current` (index, omitted = last), `color`, `dimcolor`, `accent` (separator), `size` + `<crumb>` children |
 | `crumb` | a `breadcrumb` segment (data only) | `label` / `text` |
 | `keybind` | shortcut capture box: click or keypress arms capture, a modifier+key combo records the binding (`change` fires), Backspace/Delete clears, Esc cancels; combos are validated `ctrl+alt+shift+super+x` strings | `value`, `placeholder`, `color`, `background`, `bordercolor`/`border` (focus/capture tint), `radius`, `size` |
+| `commandpalette` | incremental-search launcher over registered commands: type to filter (name matches rank above hint matches), Up/Down/Home/End walk the matches, Enter or a click runs the selection (`change`) and lands in a deduplicated newest-first history, Esc fires `submit` so the host can close it | `query`/`filter`, `placeholder`, `maxHistory`, `rowHeight`, `headerHeight`, `color`, `dimcolor`, `accent`, `highlight`, `background`, `size` + `<cmd>` children |
+| `cmd` | a `commandpalette` entry (data only) | `name` / `label` / `text`, `hint` / `desc`, `key` / `shortcut` |
 | `toggleswitch` / `toggle` | compact pill switch for a binary mode: click slides the knob over an accent-tinted track, firing `onChanged(bool)` and the widget `bind()` | `checked`/`on`, `text` (trailing label) |
 | `checkbox` | toggle + label | `text`, `checked` |
 | `radiobutton` | radio toggle in group | `text`, `checked`, `group` |

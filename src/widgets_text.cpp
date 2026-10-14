@@ -900,4 +900,345 @@ void Console::onDraw(Rasterizer& r) const {
     clampScroll();
 }
 
+// ------------------------------------------------------------------
+// CommandAction / CommandPalette
+// ------------------------------------------------------------------
+CommandAction::CommandAction() = default;
+CommandAction::~CommandAction() = default;
+
+CommandPalette::CommandPalette() = default;
+CommandPalette::~CommandPalette() = default;
+
+namespace {
+
+std::string palLower(std::string s) {
+    for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return s;
+}
+
+float palViewH(const Rect& b, float headH) { return std::max(b.h - headH, 0.0f); }
+
+void palAppendUtf8(std::string& s, uint32_t cp) {
+    if (cp < 0x80) { s += static_cast<char>(cp); return; }
+    if (cp < 0x800) {
+        s += static_cast<char>(0xC0 | (cp >> 6));
+        s += static_cast<char>(0x80 | (cp & 0x3F));
+    } else if (cp < 0x10000) {
+        s += static_cast<char>(0xE0 | (cp >> 12));
+        s += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        s += static_cast<char>(0x80 | (cp & 0x3F));
+    } else {
+        s += static_cast<char>(0xF0 | (cp >> 18));
+        s += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+        s += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        s += static_cast<char>(0x80 | (cp & 0x3F));
+    }
+}
+
+} // namespace
+
+void CommandPalette::collect() {
+    if (m_collected) return;
+    m_collected = true;
+    for (const auto& c : children())
+        if (auto* a = dynamic_cast<CommandAction*>(c.get()))
+            m_cmds.push_back(Cmd{a->name(), a->hint(), a->key()});
+    m_dirty = true;
+}
+
+void CommandPalette::addCommand(const std::string& name,
+                                const std::string& hint,
+                                const std::string& key) {
+    m_cmds.push_back(Cmd{name, hint, key});
+    m_dirty = true;
+    if (m_kernel) m_kernel->invalidate();
+}
+
+bool CommandPalette::removeCommand(const std::string& name) {
+    for (size_t i = 0; i < m_cmds.size(); ++i) {
+        if (m_cmds[i].name == name) {
+            m_cmds.erase(m_cmds.begin() + static_cast<long>(i));
+            m_dirty = true;
+            if (m_kernel) m_kernel->invalidate();
+            return true;
+        }
+    }
+    return false;
+}
+
+void CommandPalette::clearCommands() {
+    m_cmds.clear();
+    m_rows.clear();
+    m_sel = -1;
+    m_dirty = false;
+    if (m_kernel) m_kernel->invalidate();
+}
+
+std::string CommandPalette::name(int i) const {
+    if (i < 0 || i >= static_cast<int>(m_cmds.size())) return {};
+    return m_cmds[static_cast<size_t>(i)].name;
+}
+
+std::string CommandPalette::hint(int i) const {
+    if (i < 0 || i >= static_cast<int>(m_cmds.size())) return {};
+    return m_cmds[static_cast<size_t>(i)].hint;
+}
+
+std::string CommandPalette::key(int i) const {
+    if (i < 0 || i >= static_cast<int>(m_cmds.size())) return {};
+    return m_cmds[static_cast<size_t>(i)].key;
+}
+
+// Name hits rank above hint-only hits; order within a rank is authored order.
+void CommandPalette::refilter() {
+    const std::string q = palLower(m_query);
+    m_rows.clear();
+    if (q.empty()) {
+        for (size_t i = 0; i < m_cmds.size(); ++i) m_rows.push_back(i);
+    } else {
+        for (size_t i = 0; i < m_cmds.size(); ++i)
+            if (palLower(m_cmds[i].name).find(q) != std::string::npos)
+                m_rows.push_back(i);
+        for (size_t i = 0; i < m_cmds.size(); ++i)
+            if (palLower(m_cmds[i].name).find(q) == std::string::npos &&
+                palLower(m_cmds[i].hint).find(q) != std::string::npos)
+                m_rows.push_back(i);
+    }
+    if (m_rows.empty()) m_sel = -1;
+    else if (m_sel < 0 || m_sel >= static_cast<int>(m_rows.size())) m_sel = 0;
+    m_dirty = false;
+    clampScroll();
+}
+
+void CommandPalette::setQuery(const std::string& q) {
+    m_query = q;
+    refilter();
+    m_sel = m_rows.empty() ? -1 : 0;
+    m_scroll = 0.0f;
+    if (m_kernel) m_kernel->invalidate();
+}
+
+int CommandPalette::matchCount() const {
+    const_cast<CommandPalette*>(this)->collect();
+    if (const_cast<CommandPalette*>(this)->m_dirty)
+        const_cast<CommandPalette*>(this)->refilter();
+    return static_cast<int>(m_rows.size());
+}
+
+std::string CommandPalette::match(int row) const {
+    matchCount();   // refresh
+    if (row < 0 || row >= static_cast<int>(m_rows.size())) return {};
+    return m_cmds[m_rows[static_cast<size_t>(row)]].name;
+}
+
+void CommandPalette::setSelectedIndex(int i) {
+    matchCount();   // refresh
+    if (i < -1 || i >= static_cast<int>(m_rows.size())) i = -1;
+    m_sel = i;
+    ensureVisible();
+    if (m_kernel) m_kernel->invalidate();
+}
+
+void CommandPalette::clampScroll() {
+    const Rect b = bounds();
+    const float content = static_cast<float>(m_rows.size()) * m_rowH;
+    const float max = content - palViewH(b, m_headH);
+    if (m_scroll > max) m_scroll = max > 0.0f ? max : 0.0f;
+    if (m_scroll < 0.0f) m_scroll = 0.0f;
+}
+
+void CommandPalette::ensureVisible() {
+    if (m_sel < 0) return;
+    const Rect b = bounds();
+    const float vh = palViewH(b, m_headH);
+    const float top = static_cast<float>(m_sel) * m_rowH;
+    if (top < m_scroll) m_scroll = top;
+    if (top + m_rowH > m_scroll + vh) m_scroll = top + m_rowH - vh;
+    clampScroll();
+}
+
+int CommandPalette::rowAt(float ly) const {
+    if (ly < m_headH) return -1;
+    const int row = static_cast<int>((ly - m_headH + m_scroll) / m_rowH);
+    if (row < 0 || row >= static_cast<int>(m_rows.size())) return -1;
+    return row;
+}
+
+void CommandPalette::trimHistory() {
+    if (static_cast<int>(m_history.size()) > m_maxHistory)
+        m_history.resize(static_cast<size_t>(std::max(m_maxHistory, 0)));
+}
+
+void CommandPalette::pushHistory(const std::string& name) {
+    for (size_t i = 0; i < m_history.size(); ++i)
+        if (m_history[i] == name) {
+            m_history.erase(m_history.begin() + static_cast<long>(i));
+            break;
+        }
+    if (m_maxHistory > 0) m_history.insert(m_history.begin(), name);
+    trimHistory();
+}
+
+bool CommandPalette::exec(const std::string& name) {
+    collect();
+    for (const auto& c : m_cmds)
+        if (c.name == name) {
+            pushHistory(name);
+            if (m_onRun) m_onRun(name);
+            if (m_kernel) m_kernel->invalidate();
+            return true;
+        }
+    return false;
+}
+
+void CommandPalette::runRow(int row) {
+    if (row < 0 || row >= static_cast<int>(m_rows.size())) return;
+    const std::string nm = m_cmds[m_rows[static_cast<size_t>(row)]].name;
+    exec(nm);
+    announceChange();
+}
+
+std::string CommandPalette::history(int i) const {
+    if (i < 0 || i >= static_cast<int>(m_history.size())) return {};
+    return m_history[static_cast<size_t>(i)];
+}
+
+void CommandPalette::clearHistory() {
+    m_history.clear();
+    if (m_kernel) m_kernel->invalidate();
+}
+
+void CommandPalette::layout(float parentWidth, float parentHeight) {
+    collect();
+    if (m_dirty) refilter();
+    Widget::layout(parentWidth, parentHeight);
+    clampScroll();
+}
+
+void CommandPalette::onPointerDown(MouseButton btn, const Offset2D& p) {
+    if (btn != Mouse_Left) return;
+    collect();
+    if (m_dirty) refilter();
+    const Offset2D o = absoluteOrigin();
+    const int row = rowAt(static_cast<float>(p.y) - o.y);
+    if (row < 0) return;
+    m_sel = row;
+    ensureVisible();
+    runRow(row);
+}
+
+void CommandPalette::onPointerScroll(float, float dy) {
+    collect();
+    if (m_dirty) refilter();
+    m_scroll -= dy * m_rowH * 3.0f;   // one notch = three rows
+    clampScroll();
+}
+
+void CommandPalette::onKeyDown(KeyCode key, uint32_t) {
+    collect();
+    if (m_dirty) refilter();
+    switch (key) {
+        case Key_Up:
+            if (m_sel > 0) { --m_sel; ensureVisible(); }
+            break;
+        case Key_Down:
+            if (m_sel + 1 < static_cast<int>(m_rows.size())) { ++m_sel; ensureVisible(); }
+            break;
+        case Key_Home:
+            if (!m_rows.empty()) { m_sel = 0; m_scroll = 0.0f; ensureVisible(); }
+            break;
+        case Key_End:
+            if (!m_rows.empty()) { m_sel = static_cast<int>(m_rows.size()) - 1; ensureVisible(); }
+            break;
+        case Key_Enter:
+        case Key_KP_Enter:
+            runRow(m_sel);
+            break;
+        case Key_Backspace:
+            if (!m_query.empty()) {
+                const size_t start = utf8PrevBoundary(m_query, m_query.size());
+                m_query.erase(start);
+                refilter();
+                m_sel = m_rows.empty() ? -1 : 0;
+                m_scroll = 0.0f;
+            }
+            break;
+        case Key_Escape:
+            announceSubmit();   // the host listens for this to close the palette
+            break;
+        default:
+            break;
+    }
+    if (m_kernel) m_kernel->invalidate();
+}
+
+void CommandPalette::onChar(uint32_t ch) {
+    if (ch < 0x20 || ch == 0x7F) return;
+    collect();
+    palAppendUtf8(m_query, ch);
+    refilter();
+    m_sel = m_rows.empty() ? -1 : 0;
+    m_scroll = 0.0f;
+    if (m_kernel) m_kernel->invalidate();
+}
+
+void CommandPalette::onDraw(Rasterizer& r) const {
+    if (!m_style.isVisible) return;
+    matchCount();   // const-safe collect + refilter
+    const Rect b = bounds();
+    r.drawRect(b, m_bgColor);
+    r.drawRectBorder(b, ogui::palette().border, 1.0f, 0.0f);
+
+    const Font* f = FontManager::instance().get(m_fontFam, m_fontSize);
+    const bool haveFont = f && f->loaded();
+    const auto textW = [&](const std::string& s) {
+        return haveFont ? f->measure(s.c_str())
+                        : static_cast<float>(s.size()) * m_fontSize * 0.55f;
+    };
+
+    // Header: the query line, caret after the text, placeholder when empty.
+    const float hx = b.x + 8.0f;
+    const float headMid = b.y + m_headH * 0.5f;
+    if (m_query.empty()) {
+        r.drawText(m_placeholder.c_str(), hx, headMid, m_fontSize, m_fontFam,
+                   m_dimColor, Align::Left, VertAlign::Middle);
+    } else {
+        r.drawText(m_query.c_str(), hx, headMid, m_fontSize, m_fontFam,
+                   m_textColor, Align::Left, VertAlign::Middle);
+        r.drawRect({hx + textW(m_query) + 1.0f, b.y + 5.0f, 1.0f,
+                    m_headH - 10.0f}, m_accentColor);
+    }
+    r.drawLine({b.x, b.y + m_headH}, {b.x + b.w, b.y + m_headH},
+               ogui::palette().border, 1.0f);
+
+    const float vh = palViewH(b, m_headH);
+    float y = b.y + m_headH - m_scroll;
+    const size_t first = static_cast<size_t>(m_scroll / m_rowH);
+    for (size_t i = first; i < m_rows.size(); ++i) {
+        if (y > b.y + m_headH + vh) break;
+        if (y + m_rowH > b.y + m_headH) {
+            const Cmd& c = m_cmds[m_rows[i]];
+            const float mid = y + m_rowH * 0.5f;
+            if (static_cast<int>(i) == m_sel)
+                r.drawRect({b.x + 1.0f, y, b.w - 2.0f, m_rowH}, m_highlightColor);
+            r.drawText(c.name.c_str(), hx, mid, m_fontSize, m_fontFam,
+                       m_textColor, Align::Left, VertAlign::Middle);
+            if (!c.hint.empty())
+                r.drawText(c.hint.c_str(), hx + textW(c.name) + 10.0f, mid,
+                           m_fontSize, m_fontFam, m_dimColor, Align::Left,
+                           VertAlign::Middle);
+            if (!c.key.empty())
+                r.drawText(c.key.c_str(), b.x + b.w - 8.0f, mid, m_fontSize,
+                           m_fontFam, m_accentColor, Align::Right,
+                           VertAlign::Middle);
+        }
+        y += m_rowH;
+    }
+    if (m_rows.empty() && !m_query.empty())
+        r.drawText("no matches", hx, b.y + m_headH + m_rowH * 0.5f, m_fontSize,
+                   m_fontFam, m_dimColor, Align::Left, VertAlign::Middle);
+
+    const_cast<CommandPalette*>(this)->clampScroll();
+}
+
 } // namespace ogui

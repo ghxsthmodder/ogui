@@ -396,6 +396,8 @@ std::map<std::string, WidgetFactory>& widgetRegistry() {
         reg["breadcrumb"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Breadcrumb>(); };
         reg["crumb"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<CrumbItem>(); };
         reg["keybind"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Keybind>(); };
+        reg["commandpalette"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<CommandPalette>(); };
+        reg["cmd"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<CommandAction>(); };
         reg["table"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Table>(); };
         reg["th"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<TableColumn>(); };
         reg["tr"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<TableRow>(); };

@@ -2291,6 +2291,129 @@ private:
 };
 
 // ------------------------------------------------------------------
+// CommandAction: data-only row feeding a CommandPalette.
+// ------------------------------------------------------------------
+class CommandAction : public Widget {
+public:
+    CommandAction();
+    virtual ~CommandAction() override;
+
+    void setName(const std::string& n) { m_name = n; }
+    const std::string& name() const { return m_name; }
+    void setHint(const std::string& h) { m_hint = h; }
+    const std::string& hint() const { return m_hint; }
+    void setKey(const std::string& k) { m_key = k; }
+    const std::string& key() const { return m_key; }
+
+private:
+    std::string m_name;
+    std::string m_hint;
+    std::string m_key;
+};
+
+// ------------------------------------------------------------------
+// CommandPalette: incremental-search launcher over registered actions.
+// Type to filter (case-insensitive substring on name, then hint),
+// Up/Down/Home/End walk the matches, Enter or a click runs the
+// selection and fires the widget "change" event, Escape fires
+// "submit" so the host can close it. Runs are kept in a deduplicated
+// newest-first history.
+// ------------------------------------------------------------------
+class CommandPalette : public Widget {
+public:
+    using RunCallback = std::function<void(const std::string&)>;
+
+    CommandPalette();
+    virtual ~CommandPalette() override;
+
+    // Model (silent — the palette never re-announces programmatic edits).
+    void addCommand(const std::string& name, const std::string& hint = {},
+                    const std::string& key = {});
+    bool removeCommand(const std::string& name);
+    void clearCommands();
+    int count() const { return static_cast<int>(m_cmds.size()); }
+    std::string name(int i) const;
+    std::string hint(int i) const;
+    std::string key(int i) const;
+
+    void setQuery(const std::string& q);      // silent
+    const std::string& query() const { return m_query; }
+    int matchCount() const;                   // refreshes the filtered view
+    std::string match(int row) const;         // name of the row-th match
+    int selectedIndex() const { return m_sel; }
+    void setSelectedIndex(int i);             // silent
+
+    void setOnRun(RunCallback cb) { m_onRun = std::move(cb); }
+    bool exec(const std::string& name);       // silent: runs + history only
+
+    int historyCount() const { return static_cast<int>(m_history.size()); }
+    std::string history(int i) const;         // 0 = newest
+    void clearHistory();
+    void setMaxHistory(int n) { m_maxHistory = n < 0 ? 0 : n; trimHistory(); }
+
+    void setPlaceholder(const std::string& p) { m_placeholder = p; }
+    void setTextColor(const Color& c) { m_textColor = c; }
+    void setDimColor(const Color& c) { m_dimColor = c; }
+    void setAccentColor(const Color& c) { m_accentColor = c; }
+    void setHighlightColor(const Color& c) { m_highlightColor = c; }
+    void setBgColor(const Color& c) { m_bgColor = c; }
+    void setRowHeight(float h) { if (h > 0.0f) m_rowH = h; }
+    void setHeaderHeight(float h) { m_headH = h < 0.0f ? 0.0f : h; }
+    void setFontFamily(const std::string& f) { m_fontFam = f; }
+    void setFontSize(int s) { m_fontSize = s; }
+    void applyVisualColor(const std::string& prop, const Color& v) override {
+        if (prop == "color") m_textColor = v;
+        else if (prop == "background") m_bgColor = v;
+        else if (prop == "highlight") m_highlightColor = v;
+        else if (prop == "accent") m_accentColor = v;
+    }
+
+    virtual void layout(float parentWidth, float parentHeight) override;
+    virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
+    virtual void onPointerScroll(float dx, float dy) override;
+    virtual void onKeyDown(KeyCode key, uint32_t mods) override;
+    virtual void onChar(uint32_t ch) override;
+    virtual void onDraw(Rasterizer& r) const override;
+    virtual bool wantsScroll() const override { return true; }
+
+private:
+    struct Cmd { std::string name, hint, key; };
+
+    void collect();                 // adopt <cmd> children once
+    void refilter();
+    void clampScroll();
+    void ensureVisible();
+    int rowAt(float ly) const;      // filtered row under local y (-1 = none)
+    void runRow(int row);           // user run: exec + history + change event
+    void pushHistory(const std::string& name);
+    void trimHistory();
+
+    std::vector<Cmd> m_cmds;
+    std::vector<size_t> m_rows;     // filtered indices into m_cmds
+    bool m_dirty = true;
+    bool m_collected = false;
+
+    std::string m_query;
+    std::string m_placeholder = "Type to filter...";
+    int m_sel = -1;                 // index into m_rows
+    float m_scroll = 0.0f;
+
+    std::vector<std::string> m_history;   // newest first, deduplicated
+    int m_maxHistory = 50;
+
+    float m_rowH = 22.0f;
+    float m_headH = 26.0f;
+    std::string m_fontFam = "sans";
+    int m_fontSize = 13;
+    Color m_textColor{ogui::palette().textBright};
+    Color m_dimColor{ogui::palette().dim};
+    Color m_accentColor{ogui::palette().accent};
+    Color m_highlightColor{ogui::palette().surfaceHi};
+    Color m_bgColor{ogui::palette().window};
+    RunCallback m_onRun;
+};
+
+// ------------------------------------------------------------------
 // Spinner: animated loading indicator. variant="glyph" cycles |/-\,
 // variant="blocks" slides a filled window through [####......].
 // ------------------------------------------------------------------

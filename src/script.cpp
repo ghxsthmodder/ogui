@@ -125,6 +125,7 @@ bool selGet(Widget* w, int& out) {
     if (auto* t = dynamic_cast<Table*>(w))       { out = t->selectedIndex(); return true; }
     if (auto* v = dynamic_cast<TreeView*>(w))    { out = v->selectedIndex(); return true; }
     if (auto* tt = dynamic_cast<TreeTable*>(w))  { out = tt->selectedIndex(); return true; }
+    if (auto* cp = dynamic_cast<CommandPalette*>(w)) { out = cp->selectedIndex(); return true; }
     if (auto* o = dynamic_cast<OptionSpin*>(w))  { out = o->index(); return true; }
     return false;
 }
@@ -135,6 +136,7 @@ bool selSet(Widget* w, int v) {
     if (auto* t = dynamic_cast<Table*>(w))       { t->setSelectedIndex(v); return true; }
     if (auto* tv = dynamic_cast<TreeView*>(w))   { tv->setSelectedIndex(v); return true; }
     if (auto* tt = dynamic_cast<TreeTable*>(w))  { tt->setSelectedIndex(v); return true; }
+    if (auto* cp = dynamic_cast<CommandPalette*>(w)) { cp->setSelectedIndex(v); return true; }
     if (auto* o = dynamic_cast<OptionSpin*>(w))  { o->setIndex(v); return true; }
     return false;
 }
@@ -540,6 +542,102 @@ int l_prop(lua_State* L) {
     return 1;
 }
 
+// ---- command palette --------------------------------------------------------
+
+// ogui.cmd(id, op, ...) — commandpalette model and filtered view.
+//   count            -> total commands
+//   add(name[, hint[, key]]) -> true   (programmatic, silent)
+//   remove(name)     -> bool
+//   list()           -> table {name = hint, ...}
+//   query            -> current filter string
+//   query(s)         -> sets the filter (silent), returns true
+//   matches          -> filtered row count
+//   match(i)         -> name of the i-th match (nil when out of range)
+//   exec(name)       -> bool; runs + records history, silent (no "change")
+//   selected / select(i)  (indices into the filtered rows)
+//   history()        -> array table, newest first
+//   clearhistory     -> true
+int l_cmd(lua_State* L) {
+    const char* id = luaL_checkstring(L, 1);
+    const char* op = luaL_checkstring(L, 2);
+    Kernel* k = kernelOf(L);
+    Widget* w = k ? k->findWidget(id) : nullptr;
+    auto* cp = dynamic_cast<CommandPalette*>(w);
+    if (!cp)
+        return luaL_error(L, "ogui.cmd: widget \"%s\" is not a command palette", id);
+    if (!std::strcmp(op, "count")) {
+        lua_pushinteger(L, cp->count());
+        return 1;
+    }
+    if (!std::strcmp(op, "list")) {
+        lua_newtable(L);
+        for (int i = 0; i < cp->count(); ++i) {
+            const std::string h = cp->hint(i);
+            lua_pushlstring(L, h.c_str(), h.size());
+            lua_setfield(L, -2, cp->name(i).c_str());
+        }
+        return 1;
+    }
+    if (!std::strcmp(op, "history")) {
+        lua_newtable(L);
+        for (int i = 0; i < cp->historyCount(); ++i) {
+            const std::string h = cp->history(i);
+            lua_pushlstring(L, h.c_str(), h.size());
+            lua_rawseti(L, -2, i + 1);
+        }
+        return 1;
+    }
+    if (!std::strcmp(op, "matches")) {
+        lua_pushinteger(L, cp->matchCount());
+        return 1;
+    }
+    if (!std::strcmp(op, "query")) {
+        if (lua_isnoneornil(L, 3)) {
+            const std::string q = cp->query();
+            lua_pushlstring(L, q.c_str(), q.size());
+        } else {
+            size_t len = 0;
+            const char* s = luaL_checklstring(L, 3, &len);
+            cp->setQuery(std::string(s, len));
+            lua_pushboolean(L, 1);
+        }
+        return 1;
+    }
+    if (!std::strcmp(op, "match")) {
+        const int i = static_cast<int>(luaL_checkinteger(L, 3));
+        if (i < 0 || i >= cp->matchCount()) lua_pushnil(L);
+        else {
+            const std::string m = cp->match(i);
+            lua_pushlstring(L, m.c_str(), m.size());
+        }
+        return 1;
+    }
+    if (!std::strcmp(op, "add")) {
+        cp->addCommand(luaL_checkstring(L, 3), luaL_optstring(L, 4, ""),
+                       luaL_optstring(L, 5, ""));
+        lua_pushboolean(L, 1);
+    } else if (!std::strcmp(op, "remove")) {
+        lua_pushboolean(L, cp->removeCommand(luaL_checkstring(L, 3)));
+    } else if (!std::strcmp(op, "exec")) {
+        lua_pushboolean(L, cp->exec(luaL_checkstring(L, 3)));
+    } else if (!std::strcmp(op, "selected")) {
+        lua_pushinteger(L, cp->selectedIndex());
+        return 1;
+    } else if (!std::strcmp(op, "select")) {
+        cp->setSelectedIndex(static_cast<int>(luaL_checkinteger(L, 3)));
+        lua_pushboolean(L, 1);
+    } else if (!std::strcmp(op, "clearhistory")) {
+        cp->clearHistory();
+        lua_pushboolean(L, 1);
+    } else {
+        return luaL_error(L, "ogui.cmd: unknown op \"%s\" "
+                             "(count|add|remove|list|query|matches|match|exec|"
+                             "selected|select|history|clearhistory)", op);
+    }
+    k->invalidate();
+    return 1;
+}
+
 // ---- tweens ----------------------------------------------------------------
 
 int l_tween(lua_State* L) {
@@ -787,6 +885,7 @@ const luaL_Reg oguiLib[] = {
     {"items",      l_items},
     {"list",       l_list},
     {"prop",       l_prop},
+    {"cmd",        l_cmd},
     {"tween",      l_tween},
     {"tweenStop",  l_tweenstop},
     {"after",      l_after},

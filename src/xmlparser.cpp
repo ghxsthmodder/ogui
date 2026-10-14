@@ -1197,6 +1197,27 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         else if (const std::string* v = get("border")) kb->setBorderColor(colorOf(*v));
         if (const std::string* v = get("radius")) { float rr = 4.0f; toFloat(*v, rr); kb->setRadius(rr); }
         if (const std::string* v = get("size")) { int fs = 13; toInt(*v, fs); kb->setFontSize(fs); }
+    } else if (auto* cp = dynamic_cast<CommandPalette*>(w.get())) {
+        if (const std::string* v = get("query")) cp->setQuery(*v);
+        else if (const std::string* v = get("filter")) cp->setQuery(*v);
+        if (const std::string* v = get("placeholder")) cp->setPlaceholder(*v);
+        if (const std::string* v = get("maxhistory")) { int n = 50; toInt(*v, n); cp->setMaxHistory(n); }
+        if (const std::string* v = get("rowheight")) { float rh = 22.0f; toFloat(*v, rh); cp->setRowHeight(rh); }
+        if (const std::string* v = get("headerheight")) { float hh = 26.0f; toFloat(*v, hh); cp->setHeaderHeight(hh); }
+        if (const std::string* v = get("color")) cp->setTextColor(colorOf(*v));
+        if (const std::string* v = get("dimcolor")) cp->setDimColor(colorOf(*v));
+        if (const std::string* v = get("accent")) cp->setAccentColor(colorOf(*v));
+        if (const std::string* v = get("highlight")) cp->setHighlightColor(colorOf(*v));
+        if (const std::string* v = get("background")) cp->setBgColor(colorOf(*v));
+        if (const std::string* v = get("size")) { int fs = 13; toInt(*v, fs); cp->setFontSize(fs); }
+    } else if (auto* ca = dynamic_cast<CommandAction*>(w.get())) {
+        if (const std::string* v = get("name")) ca->setName(*v);
+        else if (const std::string* v = get("label")) ca->setName(*v);
+        else if (const std::string* v = get("text")) ca->setName(*v);
+        if (const std::string* v = get("hint")) ca->setHint(*v);
+        else if (const std::string* v = get("desc")) ca->setHint(*v);
+        if (const std::string* v = get("key")) ca->setKey(*v);
+        else if (const std::string* v = get("shortcut")) ca->setKey(*v);
     } else if (auto* tb = dynamic_cast<Table*>(w.get())) {
         if (const std::string* v = get("rowheight")) {
             float rh = 22.0f;

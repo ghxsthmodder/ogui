@@ -304,6 +304,10 @@ int main() {
     </tnode>
   </treetable>
   <keybind id="kbd" x="10" y="350" width="150" height="24"/>
+  <commandpalette id="cp" x="560" y="150" width="220" height="120">
+    <cmd name="Run Task" hint="build" key="f5"/>
+    <cmd name="Quit"/>
+  </commandpalette>
 </screen>)");
         assert(res.root);
         auto s = std::make_shared<Screen>("lists");
@@ -380,6 +384,28 @@ int main() {
             assert(ogui.get("kbd", "value") == "ctrl+k")
             assert(ogui.set("kbd", "value", ""))     -- empty clears
             assert(ogui.get("kbd", "value") == "")
+            -- commandpalette: ogui.cmd drives model, filter, history
+            assert(ogui.cmd("cp", "count") == 2)
+            assert(ogui.cmd("cp", "add", "Format", "tidy up", "shift+alt+f"))
+            assert(ogui.cmd("cp", "count") == 3)
+            assert(ogui.cmd("cp", "query") == "")
+            assert(ogui.cmd("cp", "query", "for"))
+            assert(ogui.cmd("cp", "matches") == 1)
+            assert(ogui.cmd("cp", "match", 0) == "Format")
+            assert(ogui.cmd("cp", "match", 1) == nil)
+            assert(ogui.get("cp", "selected") == 0)   -- filter auto-selects row 0
+            assert(ogui.cmd("cp", "exec", "Format"))
+            local h = ogui.cmd("cp", "history")
+            assert(#h == 1 and h[1] == "Format")
+            assert(not ogui.cmd("cp", "exec", "Ghost"))
+            local t = ogui.cmd("cp", "list")
+            assert(t.Quit == "" and t["Run Task"] == "build")
+            assert(ogui.cmd("cp", "clearhistory"))
+            assert(#ogui.cmd("cp", "history") == 0)
+            assert(ogui.cmd("cp", "remove", "Format"))
+            assert(not ogui.cmd("cp", "remove", "Format"))
+            assert(not pcall(ogui.cmd, "tip", "count"))
+            assert(not pcall(ogui.cmd, "cp", "bogus"))
         )", "lists");
         CHECK(k.script().errors().empty());
         auto* lb = dynamic_cast<ListBox*>(k.findWidget("lb"));
@@ -389,6 +415,8 @@ int main() {
               && pg->selectedIndex() == 0);
         auto* kbd = dynamic_cast<Keybind*>(k.findWidget("kbd"));
         CHECK(kbd && kbd->value().empty());
+        auto* cp = dynamic_cast<CommandPalette*>(k.findWidget("cp"));
+        CHECK(cp && cp->count() == 2 && cp->query() == "for");
         k.popScreen();   // back to "s": its inline script reloads
         CHECK(k.getText("out") == "loaded");
     }

@@ -290,6 +290,8 @@ registrations) out of the screen and into a shared document:
 | `breadcrumb` | clickable path segments separated by `separator` (default `/`): `path="a/b/c"` or nested `<crumb>` children, `current` (index styled as active, -1/omitted = last), `color`, `dimcolor`, `accent` (separator), `size`; clicking a segment sets `current`, fires its `change` event and any `onSelected` callback | `crumb` (`CrumbItem`) |
 | `crumb` | a `breadcrumb` segment (data only): `label`/`text` | — |
 | `keybind` | shortcut capture box: click (or first key press) arms capture, then a modifier+key combo records the binding, `Backspace`/`Delete` clears it, `Esc` cancels; combos are `ctrl+alt+shift+super+x` strings (`value` round-trips, invalid ones rejected). Attributes: `value`, `placeholder`, `color`, `background`, `bordercolor`/`border` (focus/capture tint), `radius`, `size` | — |
+| `commandpalette` | incremental-search launcher: type to filter (name matches rank above hint matches), `Up`/`Down`/`Home`/`End` walk the matches, `Enter` or a click runs the selection and fires `change`, `Backspace` edits the query, `Esc` fires `submit` so the host can close it; runs land in a deduplicated newest-first history. Attributes: `query`/`filter`, `placeholder`, `maxHistory`, `rowHeight`, `headerHeight`, `color`, `dimcolor`, `accent`, `highlight`, `background`, `size` | `cmd` (`CommandAction`) |
+| `cmd` | a `commandpalette` entry (data only): `name`/`label`/`text`, `hint`/`desc`, `key`/`shortcut` | — |
 
 `listbox`, `table`, `tree`, `scrollview` and `window` draw an overlay
 scrollbar (drag the thumb, or click the empty track to jump) whenever
@@ -395,6 +397,7 @@ API table `ogui` (all calls are safe on unknown ids):
 | `ogui.items(id, tbl)` | replace `listbox`/`optionspin` entries with a Lua array of strings |
 | `ogui.list(id, op, ...)` | incremental `listbox`/`virtuallist` row updates — `count`, `get(i)`, `insert(i,text)` (`i` = `-1` appends), `remove(i)`, `set(i,text)`, `scroll(i)` (scrollIntoView). Mutation is silent (no `change` event); selection travels with its row |
 | `ogui.prop(id, op, ...)` | `propertygrid` model access — `count`, `get(name)` (nil when unknown), `set(name,value)` (silent, validated per kind), `add(name,type,value[,group[,options]])` (`options` `;`-separated for `enum`), `remove(name)`, `list()` (table `{name=value}`), `selected` / `select(i)` |
+| `ogui.cmd(id, op, ...)` | `commandpalette` access — `count`, `add(name[,hint[,key]])`, `remove(name)`, `list()` (table `{name=hint}`), `query` (get) / `query(s)` (set, silent), `matches`, `match(i)` (nil out of range), `exec(name)` (runs + records history, silent), `selected` / `select(i)` (filtered rows), `history()` (array, newest first), `clearhistory` |
 | `ogui.tween(id, attr, to, dur[, ease[, delay]])` | animate `value`/`x`/`y`/`width`/`height` from the current value; `ease`: `"linear"` (default) / `"out"` / `"inout"` / `"back"`. Engine-driven — runs even without `ogui_on_update`; a new tween on the same `id+attr` replaces the old one |
 | `ogui.tweenStop([id[, attr]])` | cancel matching tweens → count stopped |
 | `ogui.after(secs, fn)` | one-shot timer → id; fires from the frame loop, outside any hook |
