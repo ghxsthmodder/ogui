@@ -3172,6 +3172,99 @@ static void testRowWrap() {
     CHECK(rw->bounds().h == 54.0f);   // 30 + gap 4 + 20 (trailing gap dropped)
 }
 
+static void testKeyboardNavigation() {
+    Kernel k;
+    k.init();
+    XmlParser p;
+    auto res = p.parse(R"XML(<screen id="s">
+  <textinput id="a" x="10" y="10" width="100" height="22"/>
+  <label id="lbl" x="10" y="40" width="80" height="20" text="Name" accessible="full name"/>
+  <button id="b" x="10" y="70" width="80" height="24"/>
+  <checkbox id="c" x="10" y="100" width="80" height="20"/>
+  <slider id="sl" x="10" y="130" width="100" height="20"/>
+  <button id="d" x="10" y="160" width="80" height="24" enabled="false"/>
+  <panel id="p" x="10" y="190" width="60" height="60" focusable="true"/>
+  <keybind id="kb" x="10" y="220" width="120" height="24"/>
+</screen>)XML");
+    CHECK(res.root != nullptr);
+    if (!res.root) return;
+    auto s = std::make_shared<Screen>("s");
+    s->widgets.push_back(res.root);
+    s->width = 800;
+    s->height = 600;
+    k.pushScreen(s);
+
+    InputState st = makeInput();
+    idle(k, st);
+    auto* a = k.findWidget("a");
+    auto* lbl = k.findWidget("lbl");
+    auto* b = k.findWidget("b");
+    auto* c = k.findWidget("c");
+    auto* sl = k.findWidget("sl");
+    auto* pn = k.findWidget("p");
+    auto* kb = dynamic_cast<Keybind*>(k.findWidget("kb"));
+    CHECK(a && lbl && b && c && sl && pn && kb);
+    if (!a || !b || !c || !sl || !pn || !kb) return;
+
+    CHECK(a->isFocusable());                       // interactive factory opt-in
+    CHECK(!lbl->isFocusable());                    // display-only stays out
+    CHECK(pn->isFocusable());                      // focusable="true" opts in
+    CHECK(lbl->accessibleName() == "full name");
+
+    // Cycle through document order, skipping labels and disabled widgets.
+    CHECK(k.focusNext());
+    CHECK(k.focusedWidget() == a);
+    CHECK(k.focusNext()); CHECK(k.focusedWidget() == b);
+    CHECK(k.focusNext()); CHECK(k.focusedWidget() == c);
+    CHECK(k.focusNext()); CHECK(k.focusedWidget() == sl);
+    CHECK(k.focusNext()); CHECK(k.focusedWidget() == pn);   // "d" skipped
+    CHECK(k.focusNext()); CHECK(k.focusedWidget() == kb);
+    CHECK(k.focusNext()); CHECK(k.focusedWidget() == a);    // wraps forward
+    CHECK(k.focusNext(true)); CHECK(k.focusedWidget() == kb);  // wraps back
+
+    // Disabled and hidden widgets drop out of the ring; a focus that stops
+    // being valid restarts from the first stop.
+    sl->setEnabled(false);
+    k.setFocusWidget(c);
+    CHECK(k.focusNext()); CHECK(k.focusedWidget() == pn);
+    sl->setEnabled(true);
+    k.setFocusWidget(pn);
+    pn->setVisible(false);
+    CHECK(k.focusNext()); CHECK(k.focusedWidget() == a);
+    k.setFocusWidget(kb);
+    CHECK(k.focusNext()); CHECK(k.focusedWidget() == a);    // pn no longer a stop
+    pn->setVisible(true);
+
+    // The Tab key itself is consumed by the kernel for traversal.
+    k.setFocusWidget(a);
+    tapKey(k, st, Key_Tab);
+    CHECK(k.focusedWidget() == b);
+    tapKey(k, st, Key_Tab, Key_LSHIFT);             // Shift+Tab backwards
+    CHECK(k.focusedWidget() == a);
+
+    // Enter/Space activate a focused button through the mouse click path.
+    int clicks = 0;
+    k.bind("go", [&clicks] { ++clicks; });
+    b->setBinding("go");
+    k.setFocusWidget(b);
+    tapKey(k, st, Key_Space);
+    CHECK(clicks == 1);
+    tapKey(k, st, Key_Enter);
+    CHECK(clicks == 2);
+    tapKey(k, st, Key_Tab);                      // Tab still traverses
+    CHECK(clicks == 2);
+    CHECK(k.focusedWidget() == c);
+
+    // A capturing Keybind claims Tab so it can be bound as a key.
+    pressAt(k, st, 30.0f, 232.0f);
+    releaseAt(k, st);
+    CHECK(kb->capturing());
+    tapKey(k, st, Key_Tab);
+    CHECK(!kb->capturing());
+    CHECK(kb->value() == "tab");
+    CHECK(k.focusedWidget() == kb);                 // focus did not move
+}
+
 static void testCommandPalette() {
     Kernel k;
     k.init();
@@ -3440,6 +3533,7 @@ int main() {
     testTreeTable();
     testOnDemandWidgets();
     testCommandPalette();
+    testKeyboardNavigation();
     testHost();
 
     if (g_failures) {

@@ -199,6 +199,8 @@ int l_get(lua_State* L) {
         lua_pushboolean(L, w->isVisible());
     } else if (!std::strcmp(attr, "enabled")) {
         lua_pushboolean(L, w->isEnabled());
+    } else if (!std::strcmp(attr, "focusable")) {
+        lua_pushboolean(L, w->isFocusable());
     } else if (!std::strcmp(attr, "checked")) {
         if (checkedGet(w, num)) lua_pushboolean(L, num != 0.0);
         else lua_pushnil(L);
@@ -239,6 +241,9 @@ int l_set(lua_State* L) {
         ok = true;
     } else if (!std::strcmp(attr, "enabled")) {
         w->setEnabled(lua_toboolean(L, 3) != 0);
+        ok = true;
+    } else if (!std::strcmp(attr, "focusable")) {
+        w->setFocusable(lua_toboolean(L, 3) != 0);
         ok = true;
     } else if (!std::strcmp(attr, "checked")) {
         ok = checkedSet(w, lua_toboolean(L, 3) != 0);
@@ -364,7 +369,26 @@ void pushWidgetId(lua_State* L, Widget* w) {
 
 int l_focus(lua_State* L) {
     Kernel* k = kernelOf(L);
-    pushWidgetId(L, k ? k->focusedWidget() : nullptr);
+    if (lua_gettop(L) == 0 || lua_isnoneornil(L, 1)) {
+        pushWidgetId(L, k ? k->focusedWidget() : nullptr);   // query form
+        return 1;
+    }
+    if (!k) { lua_pushboolean(L, 0); return 1; }
+    const char* arg = luaL_checkstring(L, 1);
+    if (!std::strcmp(arg, "next") || !std::strcmp(arg, "prev")) {
+        k->focusNext(arg[0] == 'p');
+        pushWidgetId(L, k->focusedWidget());
+        return 1;
+    }
+    if (arg[0] == '\0') {              // "" clears the keyboard focus
+        k->setFocusWidget(nullptr);
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+    Widget* w = k->findWidget(arg);
+    if (!w || !w->isFocusable()) { lua_pushboolean(L, 0); return 1; }
+    k->setFocusWidget(w);
+    lua_pushboolean(L, 1);
     return 1;
 }
 

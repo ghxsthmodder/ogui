@@ -81,7 +81,73 @@ void setFocus(Kernel& k, Widget*& focus, Widget* target) {
     }
 }
 
+// Depth-first, document-order walk collecting focusable widgets. A hidden or
+// disabled subtree is skipped whole, matching hitTestTree's input rules.
+void collectFocusable(const std::vector<Widget::Ptr>& ws,
+                      std::vector<Widget*>& out) {
+    for (const auto& w : ws) {
+        if (!w) continue;
+        if (!w->isVisible()) continue;
+        if (!w->isEnabled()) continue;   // disabled subtree is inert
+        if (w->isFocusable()) out.push_back(w.get());
+        collectFocusable(w->children(), out);
+    }
+}
+
 } // namespace
+
+// ---- keyboard focus traversal (P4 #24) ------------------------------------
+bool Kernel::focusNext(bool backwards) {
+    auto screen = currentScreen();
+    if (!screen) return false;
+    std::vector<Widget*> order;
+    collectFocusable(screen->widgets, order);
+    if (order.empty()) { setFocus(*this, m_focus, nullptr); return false; }
+
+    int idx = -1;
+    if (m_focus) {
+        for (size_t i = 0; i < order.size(); ++i)
+            if (order[i] == m_focus) { idx = static_cast<int>(i); break; }
+    }
+    const int n = static_cast<int>(order.size());
+    int next = idx < 0
+                   ? (backwards ? n - 1 : 0)
+                   : ((idx + (backwards ? -1 : 1)) % n + n) % n;
+    setFocus(*this, m_focus, order[static_cast<size_t>(next)]);
+    invalidate();
+    return true;
+}
+
+void Kernel::setFocusWidget(Widget* w) {
+    if (w == m_focus) return;
+    setFocus(*this, m_focus, w);
+    invalidate();
+}
+
+// The click path shared by mouse release and keyboard activation: a named
+// binding (onclick=) wins over the id binding, then a C++ handler, then the
+// screen's Lua ogui_on_click hook.
+void Kernel::clickWidget(Widget* w, const Offset2D& point) {
+    if (!w) return;
+    m_clickTarget = w;
+    auto lookup = [&](const std::string& key) -> std::function<void()> {
+        auto it = m_bindings.find(key);
+        return (it != m_bindings.end()) ? it->second : nullptr;
+    };
+    bool handled = false;
+    std::string pressedId = w->id();
+    if (auto fn = lookup(w->binding())) { fn(); handled = true; }
+    else if (auto fn2 = lookup(w->id())) { fn2(); handled = true; }
+    else if (const auto& h = w->clickHandler()) { h(); handled = true; }
+    // Nothing C++-bound: route the click to the screen's Lua
+    // ogui_on_click hook with the widget id (onclick name if set).
+    if (!handled && !pressedId.empty())
+        m_script.notifyClick(w->binding().empty() ? w->id() : w->binding());
+    // A handler may have removed the widget from the tree (ogui.remove);
+    // forgetWidget nulls m_clickTarget in that case.
+    if (m_clickTarget) m_clickTarget->dispatchEvent(EventType::MouseButton, point);
+    m_clickTarget = nullptr;
+}
 
 // ---- Kernel ---------------------------------------------------------------
 Kernel::Kernel() = default;
@@ -96,6 +162,7 @@ void Kernel::init() {
     m_hovered = nullptr;
     m_captured = nullptr;
     m_pressed = nullptr;
+    m_clickTarget = nullptr;
     m_pressButton = -1;
     m_prevDown = false;
     m_prevChar = 0;
@@ -469,29 +536,8 @@ void Kernel::update() {
         }
         // Click = press and release happened on the same widget, with the
         // left button (a right-click belongs to the context menu).
-        if (m_pressed && m_pressed == m_hovered && m_pressButton != Mouse_Right) {
-            // Resolve by binding name first (onclick=), then by id.
-            auto lookup = [&](const std::string& key) -> std::function<void()> {
-                auto it = m_bindings.find(key);
-                return (it != m_bindings.end()) ? it->second : nullptr;
-            };
-            bool handled = false;
-            std::string pressedId = m_pressed->id();
-            if (auto fn = lookup(m_pressed->binding())) { fn(); handled = true; }
-            else if (auto fn2 = lookup(m_pressed->id())) { fn2(); handled = true; }
-            else if (const auto& h = m_pressed->clickHandler()) { h(); handled = true; }
-            // Nothing C++-bound: route the click to the screen's Lua
-            // ogui_on_click hook with the widget id (onclick name if set).
-            if (!handled && !pressedId.empty())
-                m_script.notifyClick(m_pressed ?
-                                         (m_pressed->binding().empty()
-                                              ? m_pressed->id()
-                                              : m_pressed->binding())
-                                         : pressedId);
-            // A handler may have removed the pressed widget from the tree
-            // (ogui.remove); forgetWidget nulls m_pressed in that case.
-            if (m_pressed) m_pressed->dispatchEvent(EventType::MouseButton, p);
-        }
+        if (m_pressed && m_pressed == m_hovered && m_pressButton != Mouse_Right)
+            clickWidget(m_pressed, p);
         m_captured = nullptr;
         m_pressed = nullptr;
         m_pressButton = -1;
@@ -509,6 +555,14 @@ void Kernel::update() {
     const uint32_t mods = currentMods();
     for (int k = 0; k < 256; ++k) {
         bool now = m_input.keyDown[k];
+        // Tab drives focus traversal (P4 #24) unless the focused widget
+        // claims the key for itself (consumesTab). Shift+Tab goes backwards.
+        if (k == Key_Tab && now && !m_prevKeys[k] &&
+            !(m_focus && m_focus->consumesTab())) {
+            focusNext((mods & Mod_Shift) != 0);
+            m_prevKeys[k] = now;
+            continue;
+        }
         if (now && !m_prevKeys[k]) {
             if (m_focus) m_focus->onKeyDown(static_cast<KeyCode>(k), mods);
         } else if (now && m_prevKeys[k] && m_input.keyRepeat[k]) {

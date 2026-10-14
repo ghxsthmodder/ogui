@@ -189,6 +189,10 @@ public:
     virtual void onPointerScroll(float dx, float dy);
     virtual void onKeyDown(KeyCode key, uint32_t mods);
     virtual void onKeyUp(KeyCode key);
+    // True if this widget wants the raw Tab key for itself (e.g. a text
+    // editor using it for indentation) instead of letting the Kernel move
+    // focus. Default false: Tab cycles focus among focusable widgets.
+    virtual bool consumesTab() const { return false; }
     virtual void onChar(uint32_t ch);
     virtual void onFocus(bool focused);
     // Called by the Kernel when an open popup is dismissed without going
@@ -281,6 +285,18 @@ public:
     void setTooltip(const std::string& text) { m_tooltip = text; }
     const std::string& tooltip() const { return m_tooltip; }
 
+    // ---- keyboard focus / accessibility ----
+    // Interactive widgets mark themselves focusable at construction (the
+    // built-in factories do this), so Tab/Shift+Tab cycle only real controls.
+    // The Kernel still honours isEnabled()/isVisible() when traversing.
+    void setFocusable(bool f) { m_focusable = f; }
+    bool isFocusable() const { return m_focusable; }
+
+    // Short human name for tooling/automation (aria-label style); the tooltip
+    // acts as the longer description.
+    void setAccessibleName(const std::string& n) { m_accessibleName = n; }
+    const std::string& accessibleName() const { return m_accessibleName; }
+
     // ---- drawing ----
     virtual void onDraw(Rasterizer& r) const;
 
@@ -332,6 +348,8 @@ protected:
     float visualFloatTarget(const std::string& prop) const;
     void tickVisualTransition(float dt);
     bool m_enabled = true;
+    bool m_focusable = false;
+    std::string m_accessibleName;
     uint8_t m_visualBits = 0;
     std::map<std::string, VisualColorProp> m_visualColors;
     std::map<std::string, VisualFloatProp> m_visualFloats;

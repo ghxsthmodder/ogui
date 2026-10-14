@@ -670,6 +670,13 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
     if (const std::string* v = get("bind")) w->setBinding(*v);
     if (const std::string* v = get("contextmenu")) w->setContextMenuName(*v);
     if (const std::string* v = get("tooltip")) w->setTooltip(*v);
+    // Focus/opt-in override (interactive factories already mark themselves
+    // focusable; this lets a screen author add a stop or remove one) and an
+    // accessible short name for tooling.
+    if (const std::string* v = get("focusable"))
+        w->setFocusable(*v == "true" || *v == "1");
+    if (const std::string* v = get("accessible")) w->setAccessibleName(*v);
+    else if (const std::string* v = get("aria-label")) w->setAccessibleName(*v);
 
     // ---- geometry (layout happens later; bounds seed the widget) ----
     // x/y/w/h accept pixels, "NN%" (relative to the parent's content size)

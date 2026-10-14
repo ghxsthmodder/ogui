@@ -128,6 +128,8 @@ are clamped at parse time too.
 | `onClick` / `bind` | action name fired on click |
 | `contextMenu` | id of a `<contextmenu>` to pop on right-click |
 | `tooltip` | hover text |
+| `focusable` | `true`/`1` forces a tab stop, `false` removes one; interactive widgets are focusable by default, decorative ones are not |
+| `accessible` / `aria-label` | accessible name for tooling and screen readers (no visual effect) |
 | `visible` | show/hide |
 | `background` | fill colour |
 | `color` | foreground/text colour |
@@ -142,9 +144,28 @@ are clamped at parse time too.
 | `gradient` | fill gradient; `gradientDirection="horizontal"` runs the ramp left→right (radius ignored) |
 | `minWidth` / `minHeight` / `maxWidth` / `maxHeight` | pixel clamp on the resolved size, re-applied on every layout pass (see Geometry) |
 | `weight` | flex share inside `column`/`row`: weighted children split the leftover height/width proportionally; `0` keeps the authored size |
-| `enabled` / `disabled` | `false`/`true` makes the widget inert: no hover/press/focus, skipped by hit-testing (its whole subtree for input) |
+| `enabled` / `disabled` | `false`/`true` makes the widget inert: no hover/press/focus, skipped by hit-testing (its whole subtree for input) and by Tab focus traversal |
 | `hover:background`, `pressed:color`, … | per-state visual overlays (see Visual states & transitions) |
 | `transition` | seconds to blend visual-state changes |
+
+## Keyboard focus
+
+`Tab` moves focus to the next focusable widget in document order and
+`Shift+Tab` to the previous one, wrapping around; the kernel intercepts the
+Tab press-edge unless the focused widget declares `consumesTab()` (a `keybind`
+still captures a bare Tab while recording). Invisible and disabled widgets —
+and the whole subtree of a disabled one — are never tab stops, mirroring the
+hit-test rules. Clicking a widget still focuses it as before. `focusable`
+overrides which widgets join the ring; `accessible`/`aria-label` give a widget
+a name for tooling without affecting rendering.
+
+`Enter` and `Space` activate a focused `button` through the same click path
+the mouse uses (`onclick` binding → id binding → C++ handler →
+`ogui_on_click`); checkbox, radio and switch toggle on them, `combobox` and
+list popups open on `Enter`/`Space`/arrows and close on `Escape`, lists and
+trees accept `Enter` as their commit key, `textinput` and `commandpalette`
+submit on `Enter`. Authors draw the focus ring with the `focus:` visual
+states, e.g. `focus:border="@focus" focus:borderwidth="2"`.
 
 ## Visual states & transitions
 
@@ -380,8 +401,8 @@ API table `ogui` (all calls are safe on unknown ids):
 
 | Call | Effect |
 |---|---|
-| `ogui.set(id, attr, v)` | `attr`: `text`, `visible`, `checked`, `value`, `selected`, `tooltip`, `x`, `y`, `width`, `height` (geometry pins the spec to absolute so layout keeps the new values); on a `keybind`, `value` takes a combo string and errors when it does not parse |
-| `ogui.get(id, attr)` | same attrs; `text`/`tooltip` → string, `value`/`selected`/geometry → number (`value` → combo string on a `keybind`), `visible`/`checked` → boolean; unknown → `nil` |
+| `ogui.set(id, attr, v)` | `attr`: `text`, `visible`, `enabled`, `focusable`, `checked`, `value`, `selected`, `tooltip`, `x`, `y`, `width`, `height` (geometry pins the spec to absolute so layout keeps the new values); on a `keybind`, `value` takes a combo string and errors when it does not parse |
+| `ogui.get(id, attr)` | same attrs; `text`/`tooltip` → string, `value`/`selected`/geometry → number (`value` → combo string on a `keybind`), `visible`/`enabled`/`focusable`/`checked` → boolean; unknown → `nil` |
 | `ogui.exists(id)` | widget lookup |
 | `ogui.click(id)` | fire the widget's C++ binding/handler |
 | `ogui.time()` | seconds since kernel start |
@@ -392,6 +413,8 @@ API table `ogui` (all calls are safe on unknown ids):
 | `ogui.key(name\|code)` | key down; `"a".."z"`, `"0".."9"`, `"space"`, `"enter"`, `"escape"`, `"tab"`, `"backspace"`, `"delete"`, `"insert"`, `"home"`, `"end"`, `"pageup"`, `"pagedown"`, `"left/right/up/down"`, `"f1".."f12"`, `"lshift/rshift/lctrl/rctrl/lalt/ralt/lgui/rgui"` — or the raw `KeyCode` number |
 | `ogui.mods()` | modifier bitmask: Shift=1, Ctrl=2, Alt=4, Super=8 |
 | `ogui.focus()` | focused widget id, or `nil` |
+| `ogui.focus("next")` / `ogui.focus("prev")` | move Tab focus forward/backward; returns the new focused id |
+| `ogui.focus(id)` | focus a focusable widget (`true`), or clear focus with `""` |
 | `ogui.hovered()` | hovered widget id, or `nil` |
 | `ogui.clickCount()` | presses at this spot inside the double-click window |
 | `ogui.items(id, tbl)` | replace `listbox`/`optionspin` entries with a Lua array of strings |

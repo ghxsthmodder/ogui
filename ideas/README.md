@@ -719,7 +719,11 @@ configuração, ferramentas e aplicações com dados extensos.
 ### Fase 5 --- Ferramentas e refinamento
 
 -   [ ] Inspeção visual da árvore e das propriedades.
--   [ ] Melhorias de acessibilidade e navegação por teclado.
+-   [x] Tab/Shift+Tab com ordem de foco previsível (document order, com
+    wrap), `focusable`, `accessible`/`aria-label`, anel de foco via estados
+    visuais `focus:`, Enter/Espaço ativando botão pelo mesmo caminho do
+    clique, `ogui.focus("next"/"prev"/id)`. Limitação de plataforma
+    (sem UIA/ATK) documentada no README.
 -   [ ] DPI e unidades lógicas.
 -   [ ] Unicode, shaping e fallback de fontes.
 -   [ ] Markdown/RichText/Canvas e GraphEditor conforme a necessidade.

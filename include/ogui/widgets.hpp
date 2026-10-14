@@ -121,6 +121,9 @@ public:
     virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
     virtual void onPointerUp(MouseButton btn) override;
     virtual void onPointerMove(const Offset2D& p) override;
+    // Enter/Space fire the same click path as the mouse, so a keyboard user
+    // can activate a focused button.
+    virtual void onKeyDown(KeyCode key, uint32_t mods) override;
 
     virtual void onDraw(Rasterizer& r) const override;
 
@@ -2271,6 +2274,9 @@ public:
     virtual void onKeyDown(KeyCode key, uint32_t mods) override;
     virtual void onFocus(bool focused) override;
     virtual void onDraw(Rasterizer& r) const override;
+    // While capturing a combo the user may press Tab as the target key, so
+    // the Kernel must not steal it for focus traversal.
+    virtual bool consumesTab() const override { return m_capturing; }
 
     // Combo text <-> KeyCode/mods (public for tests and hosts).
     static std::string format(KeyCode key, uint32_t mods);

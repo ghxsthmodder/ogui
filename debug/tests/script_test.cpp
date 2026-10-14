@@ -377,6 +377,17 @@ int main() {
             assert(ogui.get("tt", "selected") == 1)
             assert(ogui.set("combo", "selected", 1))
             assert(ogui.get("combo", "selected") == 1)
+            -- ogui.focus: query, by id, next/prev, unfocusable rejection
+            assert(not ogui.focus("tip"))                 -- label: not focusable
+            assert(ogui.focus("lb"))
+            assert(ogui.focus() == "lb")
+            assert(ogui.focus("next") == "os")
+            assert(ogui.focus("prev") == "lb")
+            assert(ogui.focus("") == true)                -- clears focus
+            assert(ogui.focus() == nil)
+            ogui.set("combo", "focusable", true)
+            assert(ogui.get("combo", "focusable") == true)
+            assert(ogui.focus("nope") == false)           -- unknown id
             -- keybind: value is a validated string combo, not a number
             assert(ogui.set("kbd", "value", "ctrl+k"))
             assert(ogui.get("kbd", "value") == "ctrl+k")

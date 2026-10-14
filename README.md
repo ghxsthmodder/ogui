@@ -470,6 +470,14 @@ out by `ImageManager::load()` — or a texture id the host created with
 widget and key edges with `Mod_Shift/Ctrl/Alt/Super`. Pointer events arrive
 in screen coordinates; `Widget::absoluteOrigin()` converts bounds.
 
+`Tab`/`Shift+Tab` walk the focusable widgets of the current screen in
+document order and wrap; `Kernel::focusNext(backwards)` exposes the same
+movement and `Kernel::setFocusWidget()` / `Widget::isFocusable()` /
+`accessibleName()` carry the exact target and the per-widget flags authors
+set with `focusable` and `accessible`. `Enter`/`Space` activate a focused
+`button` through `Kernel::clickWidget()` — the same path a mouse release
+takes — while a `keybind` mid-capture keeps the keys for itself.
+
 ## Clipboard
 
 `Ctrl+C/X/V` in a `textinput` go through the process-wide
@@ -529,4 +537,8 @@ thirdparty/lua    vendored Lua 5.4 interpreter sources (scripting)
   advance only; combining marks are not positioned.
 * One screen size per `Screen`; window resizing is the host's job
   (`screen->width/height`).
+* Accessibility is in-process only: tab order and `accessible`/`aria-label`
+  names are readable through the API, but there is no platform bridge
+  (no UIA/ATK/NSAccessibility), so screen readers cannot see the tree. The
+  GL backend also draws text as glyphs, so nothing is exposed per widget.
 * `examples/screenshot.cpp` is a debugging aid, not a shipping renderer.

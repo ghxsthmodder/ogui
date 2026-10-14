@@ -187,6 +187,17 @@ public:
     Widget* findWidget(const std::string& id);
     Widget* focusedWidget() const { return m_focus; }
     Widget* hoveredWidget() const { return m_hovered; }
+    // Keyboard focus traversal (P4 #24): Tab/Shift+Tab cycle through the
+    // visible+enabled focusable widgets of the current screen in document
+    // order. focusNext returns false when there is nothing focusable.
+    bool focusNext(bool backwards = false);
+    // Move the keyboard focus to an exact widget (nullptr clears it); fires
+    // the same focus/blur script events as a click would.
+    void setFocusWidget(Widget* w);
+    // Run a widget's click path: named binding (onclick=), then the id
+    // binding, then a C++ handler, else the Lua ogui_on_click hook.
+    // Mouse release and Enter/Space on a focused button both go through here.
+    void clickWidget(Widget* w, const Offset2D& point = {});
     // Widget that currently holds the mouse press (null when nothing is
     // pressed); drives the "pressed" visual state.
     Widget* pressedWidget() const { return m_pressed; }
@@ -197,6 +208,7 @@ public:
         if (m_hovered == w) m_hovered = nullptr;
         if (m_captured == w) m_captured = nullptr;
         if (m_pressed == w) m_pressed = nullptr;
+        if (m_clickTarget == w) m_clickTarget = nullptr;
     }
     // Last pointer position in screen coordinates (for per-region hover
     // effects inside one widget, e.g. SpinBox buttons).
@@ -242,6 +254,8 @@ private:
     Widget* m_hovered = nullptr;
     Widget* m_captured = nullptr;      // pointer owner between press/release
     Widget* m_pressed = nullptr;       // widget that received onPointerDown
+    Widget* m_clickTarget = nullptr;   // widget inside clickWidget(), nulled
+                                       // by forgetWidget() if it is removed
     int m_pressButton = -1;
     bool m_prevDown = false;
     uint32_t m_prevChar = 0;
