@@ -11,6 +11,7 @@
 #include <memory>
 #include <functional>
 #include <map>
+#include <unordered_map>
 #include <thread>
 
 namespace ogui {
@@ -173,7 +174,10 @@ public:
     // input, no running animation and no popup/tooltip/toast activity reuse
     // the previous list; call invalidate() after mutating the tree from
     // outside the event flow (setText, host timers, screen edits).
-    void invalidate() { m_dirty = true; }
+    // invalidate() also marks the id index stale: every tree mutation in the
+    // library goes through here, so the next lookup rebuilds the index once
+    // instead of scanning the tree per call.
+    void invalidate() { m_dirty = true; ++m_treeGen; }
     const DrawList& buildDrawList();
     const DrawList& drawList() const { return m_drawList; }
 
@@ -198,6 +202,10 @@ public:
     const InputState& input() const { return m_input; }
 
     // ---- lookup ----
+    // Id lookup over the current screen. Backed by an id -> widget index that
+    // is rebuilt lazily, once, after the tree or the screen changed -- the
+    // script layer resolves dozens of ids per frame, and a linear scan per
+    // lookup used to make that quadratic in the size of the tree.
     Widget* findWidget(const std::string& id);
     Widget* focusedWidget() const { return m_focus; }
     Widget* hoveredWidget() const { return m_hovered; }
@@ -355,6 +363,15 @@ private:
 
     // redraw bookkeeping (see invalidate/buildDrawList)
     bool m_dirty = true;
+    size_t m_treeGen = 1;      // bumped by invalidate(): what the index lags
+
+    // id -> widget over the current screen, rebuilt lazily the first lookup
+    // after m_treeGen moves. Weak values mean a widget freed by a screen swap
+    // can never be handed back as a live pointer.
+    mutable std::unordered_map<std::string, std::weak_ptr<Widget>> m_idIndex;
+    mutable size_t m_indexGen = 0;
+    void rebuildIdIndex() const;
+    Widget* lookupWidget(const std::string& id) const;
     InputState m_prevInput{};
     float m_builtW = -1.0f, m_builtH = -1.0f;   // screen size at last build
     float m_builtScale = -1.0f;                 // dpi scale at last build

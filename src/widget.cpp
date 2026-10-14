@@ -10,6 +10,12 @@ namespace ogui {
 Widget::Widget() = default;
 Widget::~Widget() = default;
 
+// The kernel caches id -> widget, so a rename has to mark that cache stale.
+void Widget::setId(const std::string& id) {
+    m_id = id;
+    if (m_kernel) m_kernel->invalidate();
+}
+
 bool Widget::isHovered() const {
     return m_kernel != nullptr && m_kernel->hoveredWidget() == this;
 }

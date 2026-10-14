@@ -48,6 +48,12 @@ creates for you (`ogui::Host`, a built-in Win32/WGL window and event loop).
   happen to up through its ancestors, so one container listener watches what is
   inside it; `stopPropagation` (C++) or `return false` (Lua) ends the route
   (see [`docs/events.md`](docs/events.md)).
+* **Widgets addressed by id** — `Kernel::findWidget` and the Lua id lookups hit
+  an `id → widget` index the kernel rebuilds once after each change to the tree
+  (add, remove, rename, screen switch), so a script that resolves dozens of ids
+  every frame pays one walk of the tree per change instead of one per lookup;
+  values are weak, so an id whose widget is gone comes back as `nullptr` rather
+  than a dangling pointer.
 * **Unicode text** — UTF-8 everywhere, glyphs rasterized on demand into
   reserved atlas cells, a fallback chain across faces for scripts the
   requested family does not carry, a visible `.notdef` box for the ones
@@ -117,10 +123,12 @@ cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-b
   report the unknown element with its line:col.
 * `custom-widget` — registers a `<led>` element through `widgetRegistry()` and
   drives it through a real `Kernel` frame (tick, draw, dump, tab order, click).
-* `kernel` — input dispatch, focus/capture, text editing, tabs, tooltip, and
-  event propagation: the walk reaches each ancestor in order, `stopPropagation`
-  cuts it, raw wheel input never bubbles, and a handler may remove the widget
-  the event is about mid-walk.
+* `kernel` — input dispatch, focus/capture, text editing, tabs, tooltip, the
+  id index (add, re-parent, remove, rename and screen switch all re-index,
+  duplicate ids resolve to the first in document order), and event propagation:
+  the walk reaches each ancestor in order, `stopPropagation` cuts it, raw wheel
+  input never bubbles, and a handler may remove the widget the event is about
+  mid-walk.
 * `unicode` — on-demand glyph baking (a late glyph never moves an early one),
   the fallback chain between faces, the `.notdef` placeholder, zero-advance
   combining marks, CJK line breaking with no stranded closing punctuation, and

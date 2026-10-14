@@ -396,6 +396,9 @@ void Kernel::init() {
     m_tipFade = 0.0f;
     m_prevTime = 0.0f;
     m_dirty = true;
+    m_treeGen = 1;
+    m_indexGen = 0;
+    m_idIndex.clear();
     m_prevInput = InputState{};
     m_builtW = m_builtH = -1.0f;
     m_builtScale = -1.0f;
@@ -455,6 +458,13 @@ void Kernel::reloadScreenScripts() {
         else m_script.loadString(payload, screen->id);
     }
     m_script.notifyShow();
+    // Widgets learn their kernel here as well as in advanceAnimations(), so a
+    // tree mutated before the first frame still reaches the kernel: addChild()
+    // and setId() have to invalidate the id index, and they can only do that
+    // once they know which kernel to tell.
+    forEachWidget(screen->widgets, [&](const Widget::Ptr& w) {
+        if (w) w->setKernel(this);
+    });
     invalidate();
 }
 
@@ -578,15 +588,32 @@ void Kernel::bind(const std::string& name, std::function<void()> fn) {
     m_bindings[name] = std::move(fn);
 }
 
-Widget* Kernel::findWidget(const std::string& id) {
+// Rebuild the id -> widget index over the current screen: one depth-first
+// pass in document order, first writer of a duplicated id wins (matching the
+// scan this replaced). Cheap enough to redo on every tree change, rare
+// enough that doing it lazily from the lookup is the right trade.
+void Kernel::rebuildIdIndex() const {
+    m_idIndex.clear();
     auto screen = currentScreen();
-    if (!screen || id.empty()) return nullptr;
-    Widget* found = nullptr;
+    if (!screen) { m_indexGen = m_treeGen; return; }
     forEachWidget(screen->widgets, [&](const Widget::Ptr& w) {
-        if (!found && w->id() == id) found = w.get();
+        if (!w->id().empty()) m_idIndex.emplace(w->id(), w);
     });
-    return found;
+    m_indexGen = m_treeGen;
 }
+
+Widget* Kernel::lookupWidget(const std::string& id) const {
+    if (id.empty() || !currentScreen()) return nullptr;
+    if (m_indexGen != m_treeGen) rebuildIdIndex();
+    auto it = m_idIndex.find(id);
+    if (it == m_idIndex.end()) return nullptr;
+    // Weak value: a widget a handler dropped from the tree expires here
+    // instead of handing back a dangling pointer.
+    if (auto sp = it->second.lock()) return sp.get();
+    return nullptr;
+}
+
+Widget* Kernel::findWidget(const std::string& id) { return lookupWidget(id); }
 
 bool Kernel::setText(const std::string& id, const std::string& text) {
     Widget* w = findWidget(id);
@@ -600,12 +627,7 @@ bool Kernel::setText(const std::string& id, const std::string& text) {
 }
 
 std::string Kernel::getText(const std::string& id) const {
-    auto screen = m_screenStack.empty() ? nullptr : m_screenStack.back();
-    if (!screen || id.empty()) return {};
-    Widget* found = nullptr;
-    forEachWidget(screen->widgets, [&](const Widget::Ptr& w) {
-        if (!found && w->id() == id) found = w.get();
-    });
+    Widget* found = lookupWidget(id);
     if (!found) return {};
     if (auto* l = dynamic_cast<Label*>(found)) return l->text();
     if (auto* b = dynamic_cast<Button*>(found)) return b->text();

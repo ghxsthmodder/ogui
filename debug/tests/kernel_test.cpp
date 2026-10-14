@@ -3462,6 +3462,71 @@ static void testEventPropagation() {
     CHECK(other->seen == std::vector<std::string>{"click other->other"});
 }
 
+static void testIdIndex() {
+    Kernel k;
+    k.init();
+    k.pushScreen(makeScreen());
+
+    // Reachable at any depth, and misses stay misses.
+    CHECK(k.findWidget("bg") != nullptr);
+    auto* win = k.findWidget("win");
+    auto* btn = k.findWidget("btn");
+    CHECK(win && btn && btn->parent() == win);
+    CHECK(k.findWidget("nope") == nullptr);
+    CHECK(k.findWidget("") == nullptr);
+    CHECK(k.getText("btn") == "Ok");        // the const lookup shares the index
+
+    // A widget added to the tree is indexed by the next lookup.
+    auto extra = std::make_shared<Label>();
+    extra->setId("extra");
+    win->addChild(extra);
+    CHECK(k.findWidget("extra") == extra.get());
+
+    // Re-parenting keeps one entry, pointing at the live widget.
+    k.findWidget("bg")->addChild(extra);
+    CHECK(k.findWidget("extra") == extra.get());
+    CHECK(extra->parent() == k.findWidget("bg"));
+
+    // Dropping it from the tree drops the id: no stale hit, no dangling pointer.
+    k.findWidget("bg")->removeChild(extra.get());
+    CHECK(k.findWidget("extra") == nullptr);
+    extra.reset();
+    CHECK(k.findWidget("extra") == nullptr);
+
+    // A rename is indexed on both ends.
+    auto* inp = k.findWidget("inp");
+    CHECK(inp != nullptr);
+    inp->setId("renamed");
+    CHECK(k.findWidget("inp") == nullptr);
+    CHECK(k.findWidget("renamed") == inp);
+    inp->setId("inp");
+
+    // The index follows the current screen, not every screen ever pushed.
+    XmlParser p;
+    auto res = p.parse(R"(<screen id="dup">
+  <panel id="p"><button id="d" text="first"/></panel>
+  <button id="d" text="second"/>
+</screen>)");
+    CHECK(res.root != nullptr);
+    if (!res.root) return;
+    auto s2 = std::make_shared<Screen>("dup");
+    s2->widgets.push_back(res.root);
+    s2->width = 400;
+    s2->height = 200;
+    k.pushScreen(s2);
+    CHECK(k.findWidget("btn") == nullptr);
+    CHECK(k.findWidget("dup") == res.root.get());
+
+    // Duplicated ids: the first in document order wins.
+    auto* dup = dynamic_cast<Button*>(k.findWidget("d"));
+    CHECK(dup && dup->text() == "first");
+
+    k.popScreen();
+    CHECK(k.findWidget("d") == nullptr);
+    CHECK(k.findWidget("btn") == btn);
+    CHECK(k.getText("btn") == "Ok");
+}
+
 static void testKeyboardNavigation() {
     Kernel k;
     k.init();
@@ -3935,6 +4000,7 @@ int main() {
     testCommandPalette();
     testKeyboardNavigation();
     testEventPropagation();
+    testIdIndex();
     testDpiScale();
     testInspection();
     testHost();

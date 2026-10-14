@@ -686,9 +686,19 @@ especificadas antes da implementação.
     `selectionChanged`, `open`/`close`, `pointerEnter`/`pointerLeave` e
     `scroll` — cada um hoje é um callback no widget que recebeu (um único
     receptor) ou um estado visual (`hover:`/`pressed:`).
--   [ ] Referências seguras e índice de IDs. *(parcial: `shared_ptr` nas
-    árvores, `Kernel::forgetWidget` e handlers que removem o próprio widget
-    são seguros; `findWidget` ainda varre a tela linearmente)*
+-   [x] Referências seguras e índice de IDs: `shared_ptr` nas árvores,
+    `Kernel::forgetWidget` e handlers que removem o próprio widget são seguros;
+    `Kernel::findWidget` (e o `getText`/`ogui.get` por trás dele) agora resolve
+    por um índice `id -> widget weak_ptr` da tela atual, reconstruído
+    preguiçosamente uma vez a cada mudança de árvore — `addChild`,
+    `removeChild`, `takeChildren`, `Widget::setId`, push/pop/switch de tela ou
+    `invalidate()` explícito, que é por onde toda mutação da biblioteca passa.
+    Ids repetidos ficam com o primeiro em ordem de documento (o que a varredura
+    sequencial dava); um widget removido expira do índice e devolve `nullptr`
+    em vez de um ponteiro pendurado. Os widgets passam a conhecer o kernel já
+    na troca de tela, então uma árvore mutada antes do primeiro frame também
+    consegue invalidar o índice. Testes em `kernel::testIdIndex`, regras em
+    `docs/xml-reference.md` ("Ids and lookup").
 -   [x] Validação de XML e estilos: `ogui_validate` mais os testes `validate` e
     `validate-bad` sobre todos os layouts enviados.
 -   [x] Testes de criação, remoção, foco, eventos e Lua: entradas `kernel`,

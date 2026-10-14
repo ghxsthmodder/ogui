@@ -188,7 +188,7 @@ deliberately left out.
 
 | Attribute | Effect |
 |---|---|
-| `id` | lookup name (`Kernel::findWidget`) |
+| `id` | lookup name (`Kernel::findWidget`; see Ids and lookup) |
 | `onClick` / `bind` | action name fired on click |
 | `contextMenu` | id of a `<contextmenu>` to pop on right-click |
 | `tooltip` | hover text |
@@ -211,6 +211,28 @@ deliberately left out.
 | `enabled` / `disabled` | `false`/`true` makes the widget inert: no hover/press/focus, skipped by hit-testing (its whole subtree for input) and by Tab focus traversal |
 | `hover:background`, `pressed:color`, … | per-state visual overlays (see Visual states & transitions) |
 | `transition` | seconds to blend visual-state changes |
+
+## Ids and lookup
+
+`id` names a widget inside its screen: `Kernel::findWidget`,
+`Kernel::setText`/`getText` and the Lua `ogui.get`/`ogui.set` resolve it, and
+`ogui.on` keys a listener by it. Ids only have to be unique per screen — a
+lookup never walks into another screen on the stack.
+
+The kernel keeps an `id -> widget` index over the current screen and rebuilds
+it lazily, once, after anything that changes the tree: `addChild`,
+`removeChild`, `takeChildren`, `Widget::setId`, a screen push/pop/switch or an
+explicit `Kernel::invalidate()`. Lookups between two such changes are O(1)
+instead of a walk of the tree.
+
+Duplicate ids are tolerated, not useful: the index keeps the first widget in
+document order (depth-first, parents before children), which is what a
+sequential scan returned before. Widgets handed back by a lookup are borrowed —
+the tree owns them: removing a widget from the tree — `ogui.remove`, any
+`removeChild` that drops the last `shared_ptr`, a screen switch — expires its
+entry, so the id reports `nullptr` rather than a dangling pointer. If you keep
+a raw `Widget*` of your own, clear it through `Kernel::forgetWidget` before the
+widget leaves the tree.
 
 ## Event routing
 

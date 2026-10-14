@@ -77,7 +77,8 @@ public:
 
     // ---- identity ----
     const std::string& id() const { return m_id; }
-    void setId(const std::string& id) { m_id = id; }
+    // Setting an id re-indexes it in the kernel (id lookups are cached).
+    void setId(const std::string& id);
 
     // Event binding name (from XML onclick="..."), resolved via Kernel::bind.
     const std::string& binding() const { return m_binding; }
