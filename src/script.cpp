@@ -634,6 +634,66 @@ void ScriptHost::recordError(const std::string& msg) {
     if (m_kernel) m_kernel->addLog("script: " + msg);
 }
 
+// The data-binding layer, layered on top of the C `ogui` table so the
+// reactive model lives where the widgets do and needs no C++ bookkeeping.
+//   ogui.bind(targetId, targetAttr, sourceId, sourceAttr[, bidirectional])
+//   ogui.unbind(targetId[, targetAttr])
+// A bind mirrors source -> target immediately and, from then on, whenever
+// the source reports a change (or submits). Because programmatic writes
+// (ogui.set) are silent and only user interaction fires the "change" event,
+// mirrors cannot loop; a two-way bind adds the reverse mirror.
+static const char* kBootstrap = R"BOOTSRC(
+local bindings = {}    -- { {targetId,targetAttr,sourceId,sourceAttr}, ... }
+local watched  = {}    -- sourceId -> true once its listeners are attached
+local guard    = nil   -- target id currently being written (blocks echo)
+
+local function fire(sourceId)
+  for _, b in ipairs(bindings) do
+    if b.sourceId == sourceId and guard ~= b.targetId then
+      guard = b.targetId
+      ogui.set(b.targetId, b.targetAttr, ogui.get(sourceId, b.sourceAttr))
+      guard = nil
+    end
+  end
+end
+
+local function watch(sourceId)
+  if watched[sourceId] then return end
+  watched[sourceId] = true
+  ogui.on(sourceId, "change", function() fire(sourceId) end)
+  ogui.on(sourceId, "submit", function() fire(sourceId) end)
+end
+
+function ogui.bind(targetId, targetAttr, sourceId, sourceAttr, bidirectional)
+  targetAttr = targetAttr or "value"
+  sourceAttr = sourceAttr or "value"
+  table.insert(bindings, { targetId = targetId, targetAttr = targetAttr,
+                           sourceId = sourceId, sourceAttr = sourceAttr })
+  guard = targetId
+  ogui.set(targetId, targetAttr, ogui.get(sourceId, sourceAttr))
+  guard = nil
+  watch(sourceId)
+  if bidirectional then
+    table.insert(bindings, { targetId = sourceId, targetAttr = sourceAttr,
+                             sourceId = targetId, sourceAttr = targetAttr })
+    watch(targetId)
+  end
+  return true
+end
+
+function ogui.unbind(targetId, targetAttr)
+  local removed = 0
+  for i = #bindings, 1, -1 do
+    local b = bindings[i]
+    if b.targetId == targetId and (not targetAttr or b.targetAttr == targetAttr) then
+      table.remove(bindings, i)
+      removed = removed + 1
+    end
+  end
+  return removed
+end
+)BOOTSRC";
+
 void ScriptHost::ensureState() {
 #ifdef OGUI_HAS_LUA
     if (m_L) return;
@@ -644,6 +704,17 @@ void ScriptHost::ensureState() {
     lua_rawsetp(m_L, LUA_REGISTRYINDEX, &kHostKey);
     luaL_newlib(m_L, oguiLib);
     lua_setglobal(m_L, "ogui");
+    // Layer the pure-Lua binding helpers onto the ogui table.
+    if (luaL_loadstring(m_L, kBootstrap) == LUA_OK) {
+        if (lua_pcall(m_L, 0, 0, 0) != LUA_OK) {
+            std::string msg = lua_tostring(m_L, -1) ? lua_tostring(m_L, -1) : "error";
+            lua_pop(m_L, 1);
+            recordError("bootstrap: " + msg);
+        }
+    } else {
+        lua_pop(m_L, 1);
+        recordError("bootstrap: cannot compile");
+    }
 #endif
 }
 

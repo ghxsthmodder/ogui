@@ -633,7 +633,6 @@ void ToggleSwitch::setState(bool state) {
     else { m_knob = state ? 1.0f : 0.0f; m_knobTween.stop(); }
     if (Kernel* kn = kernel()) kn->invalidate();
     if (m_onChanged) m_onChanged(m_checked);
-    announceChange();
 }
 
 void ToggleSwitch::onTick(float dt) {
@@ -643,7 +642,10 @@ void ToggleSwitch::onTick(float dt) {
     m_knob = m_knobTween.value();
 }
 
-void ToggleSwitch::toggle() { setState(!m_checked); }
+void ToggleSwitch::toggle() {
+    setState(!m_checked);
+    announceChange();   // user flip only; setState is also the programmatic path
+}
 
 Rect ToggleSwitch::trackRect() const {
     const Rect b = bounds();

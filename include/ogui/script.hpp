@@ -88,6 +88,12 @@ class Widget;
 //                            that writes back cannot loop.
 //   ogui.off(handle|id)      by handle -> bool; by widget id -> count of
 //                            listeners dropped
+//   ogui.bind(targetId, targetAttr, sourceId, sourceAttr[, twoWay])
+//                            mirror source -> target now and on every source
+//                            "change"/"submit"; twoWay adds the reverse
+//                            mirror. Loop-safe: ogui.set is silent, so only
+//                            user edits propagate. -> true
+//   ogui.unbind(targetId[, targetAttr])  drop mirrors -> count removed
 //   ogui.quit()              Kernel::requestQuit
 //
 // Runtime errors are captured (never thrown): recorded in errors() and

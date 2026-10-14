@@ -635,6 +635,53 @@ ogui.on("ck",  "change", function(id) ckc = ckc + 1 end)
         CHECK(k.getText("out") == "loaded");
     }
 
+    // ---- data bindings: ogui.bind / ogui.unbind -------------------------------
+    {
+        XmlParser p;
+        auto res = p.parse(R"(<screen id="bind">
+  <textinput id="tsrc" x="10" y="10" width="200" height="24"/>
+  <label id="tdst" text="init" x="10" y="50" width="200" height="24"/>
+  <slider id="sl" value="0.3" x="10" y="90" width="200" height="24"/>
+  <progress id="pg" value="0" x="10" y="130" width="200" height="20"/>
+</screen>)");
+        assert(res.root);
+        auto s = std::make_shared<Screen>("bind");
+        s->widgets.push_back(res.root);
+        s->width = 800; s->height = 600;
+        k.pushScreen(s);
+        CHECK(k.script().errors().empty());
+
+        // one-way mirrors; initial pull runs at bind time
+        k.script().loadString(R"(
+            assert(ogui.bind("tdst", "text", "tsrc", "text"))
+            assert(ogui.bind("pg", "value", "sl", "value"))
+            assert(ogui.get("tdst", "text") == ogui.get("tsrc", "text"))
+            assert(math.abs(ogui.get("pg", "value") - 0.3) < 1e-4)
+            -- programmatic writes are silent, so they do NOT re-mirror (no loop)
+            ogui.set("sl", "value", 0.9)
+            assert(math.abs(ogui.get("pg", "value") - 0.3) < 1e-4)
+        )", "bind-init");
+        CHECK(k.script().errors().empty());
+
+        // a user edit fires "change" and the mirror updates
+        InputState sb = makeInput();
+        sb.time = 30.0f;
+        k.frame(sb);
+        pressAt(k, sb, 60.0f, 20.0f);   // focus tsrc
+        release(k, sb);
+        sb.lastChar = 'a';
+        k.frame(sb);
+        sb.lastChar = 0;
+        k.frame(sb);
+        k.script().loadString("assert(ogui.get('tdst','text') == 'a')", "bind-mirror");
+        CHECK(k.script().errors().empty());
+
+        k.script().loadString("assert(ogui.unbind('tdst') == 1)", "bind-off");
+        CHECK(k.script().errors().empty());
+        k.popScreen();
+        CHECK(k.getText("out") == "loaded");
+    }
+
     // ---- ogui.quit ------------------------------------------------------------
     {
         CHECK(!k.quitRequested());

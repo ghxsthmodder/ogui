@@ -351,6 +351,8 @@ API table `ogui` (all calls are safe on unknown ids):
 | `ogui.on(id, event, fn)` | attach a per-widget listener → integer handle. Events fired: `"click"`, `"focus"`, `"blur"`, `"change"` (user edits a value/selection/text) and `"submit"` (Enter in a `TextInput`); the callback receives the widget id |
 | `ogui.off(handle)` | remove one listener → boolean |
 | `ogui.off(id)` | remove every listener on that widget → count dropped; listeners also die automatically when the widget is removed or the screen swaps |
+| `ogui.bind(targetId, targetAttr, sourceId, sourceAttr[, twoWay])` | mirror `source` → `target`: copy once now, then on every source `"change"`/`"submit"`. `twoWay` adds the reverse mirror. Loop-safe — `ogui.set` is silent, so only user edits propagate (attrs default to `"value"`) |
+| `ogui.unbind(targetId[, targetAttr])` | drop mirrors → count removed |
 | `ogui.quit()` | `Kernel::requestQuit` |
 
 Example:
@@ -381,6 +383,17 @@ function ogui_on_load()
   local id = ogui.add("inbox", '<button id="row1" text="new row"/>')
   ogui.on(id, "click", function(w) ogui.remove(w) end)  -- click removes itself
   ogui.on(id, "focus", function(w) ogui.log("focused " .. w) end)
+end
+```
+
+Data bindings mirror one widget's attribute onto another without a hand-written
+callback; a slider drives a progress bar, or two-way keeps a text field and a
+label in step:
+
+```lua
+function ogui_on_load()
+  ogui.bind("volume_bar", "value", "volume_slider", "value")          -- one-way
+  ogui.bind("name_label", "text",  "name_input",    "text", true)      -- two-way
 end
 ```
 
