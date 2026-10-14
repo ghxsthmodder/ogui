@@ -670,9 +670,22 @@ especificadas antes da implementação.
 -   [ ] Sistema de propriedades tipadas. *(parcial: cada widget tipa os
     próprios atributos no parser e mantém os brutos acessíveis; não há um
     registro único de propriedades com get/set por nome)*
--   [ ] Eventos tipados e regras de propagação. *(parcial: click/focus/blur e
-    `announceChange`/`announceSubmit` são roteados pelo `Kernel`; não há
-    bolha/captura nem `stopPropagation`)*
+-   [x] Eventos tipados e regras de propagação: `EventKind`
+    (`click`/`change`/`submit`/`focus`/`blur`) com um `Event` carregando `target`,
+    `currentTarget`, `point`, `source`, `handled`; `Kernel::dispatchEvent` visita
+    o alvo e depois cada ancestral até a raiz, chamando `Widget::onEvent` e os
+    listeners Lua de cada um; `stopPropagation()` (C++) e `return false` (Lua)
+    encerram a caminhada, que continua segura mesmo se um handler remover o
+    widget em trânsito. Raw mouse/wheel/teclado não propaga (um único receptor,
+    escolhido por hit-test/foco) e `onclick` resolve ação só no widget pressionado.
+    Sem fase de captura, de propósito: o alvo já vem do hit-test, e máscaras de
+    absorção usam o caminho existente de popups/`claimPoint`. Regras em
+    `docs/events.md`, testes em `kernel` e `script`. Do catálogo listado para
+    este item ainda não são eventos nomedados: `doubleClick`/`rightClick`
+    (chegam como `Kernel::clickCount()` e o botão no `InputState`),
+    `selectionChanged`, `open`/`close`, `pointerEnter`/`pointerLeave` e
+    `scroll` — cada um hoje é um callback no widget que recebeu (um único
+    receptor) ou um estado visual (`hover:`/`pressed:`).
 -   [ ] Referências seguras e índice de IDs. *(parcial: `shared_ptr` nas
     árvores, `Kernel::forgetWidget` e handlers que removem o próprio widget
     são seguros; `findWidget` ainda varre a tela linearmente)*

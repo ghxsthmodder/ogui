@@ -75,7 +75,7 @@ void Button::onPointerMove(const Offset2D&) {
 
 void Button::onKeyDown(KeyCode key, uint32_t) {
     if (key != Key_Space && key != Key_Enter && key != Key_KP_Enter) return;
-    if (m_kernel) m_kernel->clickWidget(this);
+    if (m_kernel) m_kernel->clickWidget(this, {}, EventSource::Keyboard);
 }
 
 void Button::onDraw(Rasterizer& r) const {

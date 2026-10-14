@@ -745,6 +745,104 @@ ogui.on("eb", "blur",  function(id) bl = bl + 1 end)
         CHECK(k.getText("out") == "loaded");
     }
 
+    // ---- propagation: ancestors hear the event, and can stop it ---------------
+    {
+        XmlParser p;
+        auto res = p.parse(R"(<screen id="pr">
+  <panel id="form" x="10" y="10" width="300" height="200">
+    <button id="p1" text="a" x="10" y="20" width="80" height="30"/>
+    <button id="p2" text="b" x="100" y="20" width="80" height="30"/>
+    <button id="p3" text="c" x="10" y="60" width="80" height="30" onclick="namedGo"/>
+    <button id="p4" text="d" x="100" y="60" width="80" height="30"/>
+    <textinput id="tf" x="10" y="100" width="170" height="24"/>
+  </panel>
+</screen>)");
+        assert(res.root);
+        auto s = std::make_shared<Screen>("pr");
+        s->widgets.push_back(res.root);
+        s->scripts.push_back({R"(
+via = {}
+hook = nil
+function ogui_on_click(key) hook = key end
+ogui.on("form", "click", function(id, info)
+  via[#via + 1] = info.event .. "/" .. info.target .. "/" .. info.phase
+end)
+ogui.on("form", "change", function(id, info)
+  via[#via + 1] = info.event .. "/" .. info.target
+end)
+ogui.on("p1", "click", function(id, info)
+  via[#via + 1] = "self/" .. info.phase .. "/" .. string.format("%.0f", info.x)
+end)
+-- returning false stops the walk: the form is never visited
+ogui.on("p2", "click", function(id, info)
+  via[#via + 1] = "stopper"; return false
+end)
+)", false});
+        s->width = 800; s->height = 600;
+        int namedHits = 0;
+        k.bind("namedGo", [&namedHits] { ++namedHits; });
+        k.pushScreen(s);
+        CHECK(k.script().errors().empty());
+
+        InputState sp = makeInput();
+        sp.time = 30.0f;
+        k.frame(sp);
+        auto reset = [&] { k.script().loadString("via = {} hook = nil", "pr-reset"); };
+        auto expect = [&](const char* lua, const char* what) {
+            k.script().loadString(lua, what);
+            CHECK(k.script().errors().empty());
+        };
+
+        // The pressed widget's own listener runs first, then the container's,
+        // and the info table says which stop this is and where the pointer was.
+        pressAt(k, sp, 60.0f, 45.0f);   // p1 centre
+        release(k, sp);
+        expect("assert(table.concat(via, \",\") == "
+               "\"self/target/60,click/p1/bubble\", table.concat(via, \",\"))",
+               "pr-bubble");
+
+        // return false ends propagation at the level that said so.
+        reset();
+        pressAt(k, sp, 150.0f, 45.0f);  // p2 centre
+        release(k, sp);
+        expect("assert(table.concat(via, \",\") == \"stopper\", "
+               "table.concat(via, \",\"))",
+               "pr-stop");
+
+        // A click consumed by a C++ action still propagates, and its listeners
+        // are addressed by widget id -- not by the onclick name.
+        reset();
+        pressAt(k, sp, 60.0f, 85.0f);   // p3 centre
+        release(k, sp);
+        CHECK(namedHits == 1);
+        expect("assert(table.concat(via, \",\") == \"click/p3/bubble\", "
+               "table.concat(via, \",\")) assert(hook == nil)",
+               "pr-bound");
+
+        // With nothing bound, the click still falls through to ogui_on_click,
+        // and the listeners see it as well.
+        reset();
+        pressAt(k, sp, 150.0f, 85.0f);  // p4 centre
+        release(k, sp);
+        expect("assert(hook == \"p4\") assert(table.concat(via, \",\") == "
+               "\"click/p4/bubble\", table.concat(via, \",\"))",
+               "pr-hook");
+
+        // Changes bubble too: one listener on the form watches every field
+        // inside it, keyed by the field the user actually edited.
+        pressAt(k, sp, 60.0f, 122.0f);  // focus tf
+        release(k, sp);
+        reset();
+        sp.lastChar = 'h';
+        k.frame(sp);
+        sp.lastChar = 0;
+        k.frame(sp);
+        expect("assert(table.concat(via, \",\") == \"change/tf\", "
+               "table.concat(via, \",\"))",
+               "pr-change");
+        k.popScreen();
+    }
+
     // ---- change / submit events on user interaction ---------------------------
     {
         XmlParser p;

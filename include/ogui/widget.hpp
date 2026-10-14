@@ -14,7 +14,49 @@ namespace ogui {
 // Forward declarations
 class Rasterizer;
 class Kernel;
+class Widget;
 struct InputState;
+
+// ------------------------------------------------------------------
+// Events: what the kernel routes, and how far it routes it
+// ------------------------------------------------------------------
+// The semantic events the library owns. Raw input (mouse edges, wheel, keys)
+// stays with the hit-tested or focused widget and never bubbles: it is
+// positional and streaming, so handing it to the ancestors too would just
+// double every scroll and every caret move.
+enum class EventKind { Click, Change, Submit, Focus, Blur };
+
+// Where a click came from: the pointer, or Enter/Space on the focused widget.
+enum class EventSource { Pointer, Keyboard };
+
+const char* eventName(EventKind kind);
+const char* eventSourceName(EventSource src);
+
+struct Event {
+    EventKind kind = EventKind::Click;
+    EventSource source = EventSource::Pointer;
+
+    // The widget the event happened to, and the one being visited right now.
+    // Equal at the first stop, then currentTarget walks up the parents.
+    Widget* target = nullptr;
+    Widget* currentTarget = nullptr;
+
+    // Logical screen coordinates of a pointer click; zero for keyboard
+    // activation and for change/submit/focus.
+    Offset2D point{};
+
+    // Set once a handler at this level consumed the event; the kernel uses it
+    // for logging, widgets may use it to decide whether to react.
+    bool handled = false;
+
+    // True once someone stopped the walk.
+    bool stopped = false;
+
+    // Stop here: no ancestor is visited after the current one returns.
+    void stopPropagation() { stopped = true; }
+
+    bool isTargetLevel() const { return currentTarget == target; }
+};
 
 // ------------------------------------------------------------------
 // Widget: base of the retained-mode widget tree
@@ -64,12 +106,22 @@ public:
     const Callback& clickHandler() const { return m_onClick; }
     void click() { if (m_onClick) m_onClick(); }
 
-    // Fire a Lua per-widget event ("change" / "submit") on the kernel's
-    // script host. No-ops when the widget has no id or no kernel attached.
-    // Call these only from user-interaction paths, never from programmatic
-    // setters, so a listener that writes the value back cannot loop.
+    // Route a semantic event on the kernel: listeners on this widget fire,
+    // then the walk continues to its ancestors (see Kernel::dispatchEvent).
+    // No-ops when the widget has no kernel attached. Call these only from
+    // user-interaction paths, never from programmatic setters, so a listener
+    // that writes the value back cannot loop.
     void announceChange();
     void announceSubmit();
+    // Same routing for any semantic kind: this widget's listeners fire, then
+    // the walk moves to its ancestors.
+    void announce(EventKind kind);
+
+    // Observe events as they pass through this widget: called at its own stop
+    // of the walk, before its Lua listeners. Containers override this to
+    // react to children (a form watching every field, a panel absorbing the
+    // clicks inside it) without registering one listener per child.
+    virtual void onEvent(Event& e) { (void)e; }
 
     // ---- hierarchy ----
     virtual Widget* parent() const { return m_parent; }
@@ -299,9 +351,6 @@ public:
 
     // ---- drawing ----
     virtual void onDraw(Rasterizer& r) const;
-
-    // ---- events ----
-    void dispatchEvent(EventType type, const Offset2D& pos);
 
 protected:
     std::string m_id;

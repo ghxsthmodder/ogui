@@ -211,7 +211,17 @@ public:
     // Run a widget's click path: named binding (onclick=), then the id
     // binding, then a C++ handler, else the Lua ogui_on_click hook.
     // Mouse release and Enter/Space on a focused button both go through here.
-    void clickWidget(Widget* w, const Offset2D& point = {});
+    // The action lookup stays on the pressed widget; the click event itself is
+    // then dispatched (see dispatchEvent), so ancestors hear about it too.
+    void clickWidget(Widget* w, const Offset2D& point = {},
+                     EventSource source = EventSource::Pointer);
+    // Route a semantic event: visit the target, then every ancestor up to the
+    // screen root, calling Widget::onEvent and firing that widget's Lua
+    // listeners at each stop. A listener that returns false in Lua, or calls
+    // Event::stopPropagation in C++, ends the walk there. Raw mouse, wheel and
+    // key input never travels this path — it goes to the hit-tested or focused
+    // widget only.
+    void dispatchEvent(Event& e);
     // Widget that currently holds the mouse press (null when nothing is
     // pressed); drives the "pressed" visual state.
     Widget* pressedWidget() const { return m_pressed; }

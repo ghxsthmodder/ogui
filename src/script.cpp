@@ -1367,26 +1367,62 @@ int ScriptHost::removeAllListeners(const std::string& widgetId) {
     return n;
 }
 
-void ScriptHost::fireEvent(const std::string& widgetId, const std::string& event) {
+// The second argument every listener gets: what happened, to whom, and where
+// the walk currently stands. A table rather than positional args so adding a
+// field cannot break an existing script.
 #ifdef OGUI_HAS_LUA
-    if (!m_L || m_listeners.empty()) return;
+static void pushEventInfo(lua_State* L, const Event& e) {
+    lua_createtable(L, 0, 7);
+    auto str = [L](const char* key, const char* v) {
+        lua_pushstring(L, v ? v : "");
+        lua_setfield(L, -2, key);
+    };
+    auto num = [L](const char* key, double v) {
+        lua_pushnumber(L, v);
+        lua_setfield(L, -2, key);
+    };
+    str("target", e.target ? e.target->id().c_str() : "");
+    str("currentTarget", e.currentTarget ? e.currentTarget->id().c_str() : "");
+    str("event", eventName(e.kind));
+    str("phase", e.isTargetLevel() ? "target" : "bubble");
+    str("source", eventSourceName(e.source));
+    num("x", e.point.x);
+    num("y", e.point.y);
+    num("handled", e.handled ? 1.0 : 0.0);
+}
+#endif
+
+bool ScriptHost::fireListener(const std::string& widgetId, const std::string& event,
+                              const Event& e) {
+#ifdef OGUI_HAS_LUA
+    if (!m_L || m_listeners.empty()) return false;
     // Copy the matching callbacks out before calling: a handler may legally
     // ogui.off() (or even ogui.remove the widget), which must not invalidate
     // this iteration.
     std::vector<int> refs;
     for (const Listener& l : m_listeners)
         if (l.widgetId == widgetId && l.event == event) refs.push_back(l.ref);
+    bool stop = false;
     for (int ref : refs) {
         lua_rawgeti(m_L, LUA_REGISTRYINDEX, ref);
         lua_pushstring(m_L, widgetId.c_str());
-        if (lua_pcall(m_L, 1, 0, 0) != LUA_OK) {
+        pushEventInfo(m_L, e);
+        if (lua_pcall(m_L, 2, 1, 0) != LUA_OK) {
             std::string msg = lua_tostring(m_L, -1) ? lua_tostring(m_L, -1) : "error";
             lua_pop(m_L, 1);
             recordError("event " + event + ": " + msg);
+            continue;
         }
+        // An explicit `false` is how a script stops the walk. nil -- what a
+        // listener with no return statement gives -- keeps it going, so every
+        // listener written before propagation existed behaves the same.
+        if (lua_isboolean(m_L, -1) && !lua_toboolean(m_L, -1)) stop = true;
+        lua_pop(m_L, 1);
     }
+    return stop;
 #else
-    (void)widgetId; (void)event;
+    (void)widgetId; (void)event; (void)e;
+    return false;
 #endif
 }
 
@@ -1436,8 +1472,9 @@ void ScriptHost::notifyUpdate(float t, float dt) {
 }
 
 void ScriptHost::notifyClick(const std::string& key) {
+    // The fall-through hook only: per-widget "click" listeners are fired by
+    // Kernel::dispatchEvent, which addresses them by widget id.
     callHook("ogui_on_click", [&key](lua_State* L) { lua_pushstring(L, key.c_str()); });
-    fireEvent(key, "click");
 }
 
 void ScriptHost::notifyEvent(const std::string& name, const std::string& key) {

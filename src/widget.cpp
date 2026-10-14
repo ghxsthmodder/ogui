@@ -42,12 +42,31 @@ void Widget::addChild(Ptr child) {
     if (m_kernel) m_kernel->invalidate();
 }
 
-void Widget::announceChange() {
-    if (m_kernel && !m_id.empty()) m_kernel->script().fireEvent(m_id, "change");
+void Widget::announceChange() { announce(EventKind::Change); }
+
+void Widget::announceSubmit() { announce(EventKind::Submit); }
+
+void Widget::announce(EventKind kind) {
+    if (!m_kernel) return;
+    Event e;
+    e.kind = kind;
+    e.target = this;
+    m_kernel->dispatchEvent(e);
 }
 
-void Widget::announceSubmit() {
-    if (m_kernel && !m_id.empty()) m_kernel->script().fireEvent(m_id, "submit");
+const char* eventName(EventKind kind) {
+    switch (kind) {
+        case EventKind::Click:  return "click";
+        case EventKind::Change: return "change";
+        case EventKind::Submit: return "submit";
+        case EventKind::Focus:  return "focus";
+        case EventKind::Blur:   return "blur";
+    }
+    return "unknown";
+}
+
+const char* eventSourceName(EventSource src) {
+    return src == EventSource::Keyboard ? "keyboard" : "pointer";
 }
 
 void Widget::removeChild(Ptr child) {
@@ -379,10 +398,6 @@ void Widget::applyStyle(const Style& style) {
 }
 
 void Widget::onDraw(Rasterizer&) const {
-    // subclasses override
-}
-
-void Widget::dispatchEvent(EventType, const Offset2D&) {
     // subclasses override
 }
 

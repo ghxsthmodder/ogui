@@ -212,6 +212,20 @@ deliberately left out.
 | `hover:background`, `pressed:color`, … | per-state visual overlays (see Visual states & transitions) |
 | `transition` | seconds to blend visual-state changes |
 
+## Event routing
+
+Five semantic events travel the tree: `click`, `change`, `submit`, `focus` and
+`blur`. Each starts at the widget it happened to and visits that widget, then
+its parent, then its parent's parent, up to the root of the screen. At every
+stop a widget may watch it (`Widget::onEvent`) and its Lua listeners fire;
+`Event::stopPropagation()` in C++ or `return false` from a listener ends the
+walk there. Raw input does not travel: a mouse move, a wheel step and a key
+press go to one widget — the hit-tested or focused one — and `onclick` actions
+are resolved on the pressed widget alone, so a click on a Save button never
+runs the panel's action. [`docs/events.md`](events.md) has the field tables, the
+scroll-to-nearest-ancestor rule and what happens when a handler removes the
+widget mid-walk.
+
 ## Keyboard focus
 
 `Tab` moves focus to the next focusable widget in document order and
@@ -500,7 +514,7 @@ API table `ogui` (all calls are safe on unknown ids):
 | `ogui.inspect(id)` | table for one widget: `type`, `id`, `binding`, `accessible`, `tooltip`, `x`, `y`, `width`, `height`, `visible`, `enabled`, `focusable`, `focused`, `hovered`, `tabindex` (`-1` when not in the Tab order), `children`; `nil` for an unknown id |
 | `ogui.debug()` / `ogui.debug(bits\|string)` | draw-list overlay: `1` bounds, `2` labels, `4` focus order, `8` hover. A string takes words `"bounds labels focus hover"` (`all`/`none` too). No argument reports the current bits; returns them |
 | `ogui.stats()` | last frame: `updateMs`, `drawMs`, `widgets`, `tabStops`, `vertices`, `indices`, `cmds` |
-| `ogui.on(id, event, fn)` | attach a per-widget listener → integer handle. Events fired: `"click"`, `"focus"`, `"blur"`, `"change"` (user edits a value/selection/text) and `"submit"` (Enter in a `TextInput`); the callback receives the widget id |
+| `ogui.on(id, event, fn)` | attach a per-widget listener → integer handle. Events fired: `"click"`, `"focus"`, `"blur"`, `"change"` (user edits a value/selection/text) and `"submit"` (Enter in a `TextInput`). The callback receives `(id, info)` with `info.event`, `info.target`, `info.currentTarget`, `info.phase` (`"target"`/`"bubble"`), `info.source`, `info.x/y`, `info.handled`; a listener on a container id also hears its children's events as they bubble, and `return false` stops the walk ([`docs/events.md`](events.md)) |
 | `ogui.off(handle)` | remove one listener → boolean |
 | `ogui.off(id)` | remove every listener on that widget → count dropped; listeners also die automatically when the widget is removed or the screen swaps |
 | `ogui.bind(targetId, targetAttr, sourceId, sourceAttr[, twoWay])` | mirror `source` → `target`: copy once now, then on every source `"change"`/`"submit"`. `twoWay` adds the reverse mirror. Loop-safe — `ogui.set` is silent, so only user edits propagate (attrs default to `"value"`) |

@@ -170,6 +170,14 @@ function ogui_on_load()
   local h = ogui.on("inc", "click", function(id) ogui.log("clicked " .. id) end)
   ogui.off(h)                                   -- or ogui.off("inc") for all
 
+  -- a container hears its children's events as they bubble, and can cut the
+  -- walk short by returning false from the listener
+  local g = ogui.on("form", "click", function(id, info)
+    ogui.log(info.event .. " on " .. info.target .. " (" .. info.phase .. ")")
+    if info.target == "cancel" then return false end
+  end)
+  ogui.off(g)
+
   -- timers, both driven by the frame clock (never by a thread)
   local once   = ogui.after(2.0, function() ogui.set("count", "text", "two") end)
   local ticker = ogui.every(1.0, function() ogui.log("tick") end)
@@ -184,6 +192,13 @@ end
 `ogui.bind` copies once at call time and then on every `"change"`/`"submit"`
 the *user* produces; `ogui.set` is deliberately silent, which is what keeps a
 binding from echoing back into an infinite loop.
+
+Listeners are keyed by widget **id** and travel upwards: `click`, `change`,
+`submit`, `focus` and `blur` visit the widget they happened to and then every
+ancestor, so one listener on a form panel watches all its fields. Actions do not
+travel — `onclick="save"` runs on the Save button alone. `docs/events.md` states
+the rules, including how a listener stops propagation and what raw mouse, wheel
+and key input deliberately never does.
 
 ## Registering a widget in C++
 

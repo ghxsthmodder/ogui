@@ -51,15 +51,6 @@ enum ModBits : uint32_t {
     Mod_Super = 1u << 3,
 };
 
-enum class EventType {
-    None,
-    MouseMove, MouseButton, MouseWheel,
-    KeyDown, KeyUp, KeyChar,
-    FocusGained, FocusLost,
-    Resize,
-    Update
-};
-
 struct Offset2D { float x = 0.0f, y = 0.0f; };
 struct Size2D { float w = 0.0f, h = 0.0f; };
 struct Rect { float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f; };

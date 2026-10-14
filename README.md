@@ -30,7 +30,9 @@ creates for you (`ogui::Host`, a built-in Win32/WGL window and event loop).
   engine-driven `tween` animations, `after`/`every` timers, dynamic
   widget creation (`add`/`remove`/`clear`), tree navigation
   (`children`/`parent`/`index`), per-widget event
-  listeners (`ogui.on`/`ogui.off`), declarative data bindings
+  listeners (`ogui.on`/`ogui.off`) on typed events that bubble to the
+  ancestors (`click`/`change`/`submit`/`focus`/`blur`,
+  see [`docs/events.md`](docs/events.md)), declarative data bindings
   (`ogui.bind`/`ogui.unbind`) and inspection
   (`ogui.dump`/`inspect`/`debug`/`stats`).
 * **Debug tools** — a text dump of the widget tree, per-widget inspection and
@@ -41,6 +43,11 @@ creates for you (`ogui::Host`, a built-in Win32/WGL window and event loop).
   receives the authored attributes, so a custom `Widget` subclass becomes a
   first-class element; unknown elements are reported with line:col instead of
   throwing.
+* **Typed events that travel** — `click`, `change`, `submit`, `focus` and `blur`
+  carry a target, a source and a point, and are routed from the widget they
+  happen to up through its ancestors, so one container listener watches what is
+  inside it; `stopPropagation` (C++) or `return false` (Lua) ends the route
+  (see [`docs/events.md`](docs/events.md)).
 * **Unicode text** — UTF-8 everywhere, glyphs rasterized on demand into
   reserved atlas cells, a fallback chain across faces for scripts the
   requested family does not carry, a visible `.notdef` box for the ones
@@ -110,7 +117,10 @@ cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-b
   report the unknown element with its line:col.
 * `custom-widget` — registers a `<led>` element through `widgetRegistry()` and
   drives it through a real `Kernel` frame (tick, draw, dump, tab order, click).
-* `kernel` — input dispatch, focus/capture, text editing, tabs, tooltip.
+* `kernel` — input dispatch, focus/capture, text editing, tabs, tooltip, and
+  event propagation: the walk reaches each ancestor in order, `stopPropagation`
+  cuts it, raw wheel input never bubbles, and a handler may remove the widget
+  the event is about mid-walk.
 * `unicode` — on-demand glyph baking (a late glyph never moves an early one),
   the fallback chain between faces, the `.notdef` placeholder, zero-advance
   combining marks, CJK line breaking with no stranded closing punctuation, and
@@ -118,7 +128,9 @@ cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-b
 * `screens` — every manifest screen parses in both themes and keeps the ids the gallery binds to.
 * `scrollbar` — presses on the listbox/treeview/table/scrollview/window/textarea bars scroll instead of selecting or hitting children; dropdown popups fit the screen and scroll.
 * `script` — `<script>` collection, screen-bound Lua loading on screen
-  switches, all four hooks and the `ogui.*` widget API; error capture.
+  switches, all four hooks and the `ogui.*` widget API; error capture. Covers
+  the bubbled `info` table, a container listener hearing its children, and
+  `return false` stopping the walk.
 * `examples` — runs `examples/hello.xml` and `examples/counter.xml` through a
   real `Kernel` (load/show hooks, a clicked button, a live binding) and then
   parses every fenced `xml`/`lua` block in `docs/examples.md`, so the docs
@@ -544,6 +556,25 @@ set with `focusable` and `accessible`. `Enter`/`Space` activate a focused
 `button` through `Kernel::clickWidget()` — the same path a mouse release
 takes — while a `keybind` mid-capture keeps the keys for itself.
 
+## Events and propagation
+
+Five semantic events — `click`, `change`, `submit`, `focus`, `blur` — are typed
+(`ogui::EventKind`) and carried by one `ogui::Event` that names its `target`,
+the `currentTarget` being visited, the click `point` and its `source` (pointer
+or keyboard). `Kernel::dispatchEvent` visits the widget the event happened to,
+then each ancestor up to the screen root; at every stop the widget's C++
+`Widget::onEvent` runs and its Lua listeners fire with `(id, info)`. A container
+therefore watches its children with one listener, and `Event::stopPropagation()`
+(C++) or `return false` (Lua) ends the walk.
+
+Deliberately *not* propagated: raw mouse moves, wheel steps and key presses go
+to the hit-tested or focused widget only, and `onclick` actions resolve against
+the pressed widget alone. A scroll is offered to the nearest ancestor that can
+actually scroll, which picks one receiver rather than broadcasting. Handlers may
+remove the widget under the event — the kernel holds the chain, so the walk
+finishes safely. [`docs/events.md`](docs/events.md) documents the tables and the
+edge cases.
+
 ## DPI, scale and logical units
 
 Every number a widget sees is in **logical units**: XML attributes,
@@ -698,6 +729,12 @@ thirdparty/lua    vendored Lua 5.4 interpreter sources (scripting)
 
 * `row` tiles its children horizontally using their authored widths; it does
   not shrink or wrap overflowing rows.
+* The routed event set is `click`/`change`/`submit`/`focus`/`blur`. Pointer
+  hover, wheel scrolling and key presses stay single-receiver widget callbacks,
+  and there is no `doubleClick`/`rightClick`/`selectionChanged`/`open`/`close`
+  event yet — the information is available (`Kernel::clickCount()`, the pressed
+  button in `InputState`, `hover:`/`pressed:` visual states) but it is not
+  announced as an event. See [`docs/events.md`](docs/events.md).
 * No complex text shaping (no HarfBuzz): no GSUB/GPOS, so Arabic and Indic
   scripts render in isolated forms and `fi`-style ligatures never appear.
   Marks are centred over their base rather than attached from anchor tables,

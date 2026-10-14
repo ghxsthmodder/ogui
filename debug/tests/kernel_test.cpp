@@ -3268,6 +3268,200 @@ static void testDpiScale() {
     CHECK(k.logicalWidth() == 1600.0f);
 }
 
+// Container that records every event passing through it, and can absorb the
+// walk at its own level. Propagation is about what the ancestors see, so the
+// test needs widgets that watch children they hold no handler for.
+class SpyPanel : public Panel {
+public:
+    bool absorb = false;
+    std::vector<std::string> seen;
+    std::string source;
+
+    void onEvent(Event& e) override {
+        Panel::onEvent(e);
+        seen.emplace_back(std::string(eventName(e.kind)) + " " +
+                          e.target->id() + "->" + e.currentTarget->id() +
+                          (e.isTargetLevel() ? "T" : "B"));
+        source = eventSourceName(e.source);
+        if (absorb && !e.isTargetLevel()) e.stopPropagation();
+    }
+};
+
+// Target that removes itself from the tree while the event is still travelling,
+// the way an ogui.remove("self") listener does.
+class SpyButton : public Button {
+public:
+    bool drop = false;
+    std::vector<std::string> seen;
+
+    void onEvent(Event& e) override {
+        Button::onEvent(e);
+        seen.emplace_back(std::string(eventName(e.kind)) + " " +
+                          e.target->id() + "->" + e.currentTarget->id());
+        if (!drop) return;
+        drop = false;
+        if (Widget* par = parent()) {
+            kernel()->forgetWidget(this);
+            par->removeChild(this);
+        }
+    }
+};
+
+// A handler is allowed to click another widget; that nested click must not
+// swallow the outer event.
+class RelayButton : public Button {
+public:
+    std::string relayId;
+    int fires = 0;
+
+    RelayButton() {
+        setClickHandler([this] {
+            if (Kernel* k = kernel())
+                if (Widget* w = k->findWidget(relayId)) k->clickWidget(w);
+        });
+    }
+
+    void onEvent(Event& e) override {
+        Button::onEvent(e);
+        if (e.kind == EventKind::Click && e.isTargetLevel()) ++fires;
+    }
+};
+
+static void testEventPropagation() {
+    Kernel k;
+    k.init();
+
+    auto outer = std::make_shared<SpyPanel>();
+    auto inner = std::make_shared<SpyPanel>();
+    auto btn = std::make_shared<Button>();
+    outer->setId("outer");
+    inner->setId("inner");
+    btn->setId("btn");
+    inner->addChild(btn);
+    outer->addChild(inner);
+
+    auto s = std::make_shared<Screen>("s");
+    s->widgets.push_back(outer);
+    s->width = 400;
+    s->height = 200;
+    k.pushScreen(s);
+
+    InputState st = makeInput();
+    idle(k, st);   // refreshes every widget's kernel pointer
+
+    // A click reaches the pressed widget first, then each ancestor in turn.
+    // Each spy only records the stop where it is itself the current target.
+    k.clickWidget(btn.get(), Offset2D{7.0f, 9.0f});
+    CHECK(inner->seen == std::vector<std::string>{"click btn->innerB"});
+    CHECK(outer->seen == std::vector<std::string>{"click btn->outerB"});
+    inner->seen.clear();
+    outer->seen.clear();
+
+    // stopPropagation at one level is the end of the walk: the outer panel is
+    // never visited, but the levels already reached keep what they saw.
+    inner->absorb = true;
+    k.clickWidget(btn.get());
+    CHECK(inner->seen.size() == 1);
+    CHECK(outer->seen.empty());
+    inner->absorb = false;
+    inner->seen.clear();
+
+    // Value edits bubble the same way, so one listener on a form panel can
+    // watch every field inside it.
+    btn->announce(EventKind::Change);
+    btn->announce(EventKind::Submit);
+    CHECK(inner->seen ==
+          (std::vector<std::string>{"change btn->innerB", "submit btn->innerB"}));
+    CHECK(outer->seen == (std::vector<std::string>{"change btn->outerB",
+                                                  "submit btn->outerB"}));
+    inner->seen.clear();
+    outer->seen.clear();
+
+    // Focus and blur travel too: the panel learns where focus went without
+    // knowing which widget it landed on.
+    k.setFocusWidget(btn.get());
+    CHECK(inner->seen == std::vector<std::string>{"focus btn->innerB"});
+    inner->seen.clear();
+    outer->seen.clear();
+    k.setFocusWidget(nullptr);
+    CHECK(outer->seen == std::vector<std::string>{"blur btn->outerB"});
+    inner->seen.clear();
+    outer->seen.clear();
+
+    // Enter on the focused button is a click whose source is the keyboard.
+    btn->setFocusable(true);
+    k.setFocusWidget(btn.get());
+    inner->seen.clear();
+    outer->seen.clear();
+    tapKey(k, st, Key_Enter);
+    CHECK(inner->seen == std::vector<std::string>{"click btn->innerB"});
+    CHECK(inner->source == "keyboard");
+
+    // Raw input does not bubble: the wheel goes to the one widget the kernel
+    // picked, so a scroll never doubles into the ancestors.
+    const size_t before = outer->seen.size();
+    st.mouseX = 0.0f;
+    st.mouseY = 0.0f;
+    st.scrollY = 3.0f;
+    k.frame(st);
+    st.scrollY = 0.0f;
+    k.frame(st);
+    CHECK(outer->seen.size() == before);
+
+    // Removal mid-walk: a handler is allowed to drop the widget the event is
+    // about (ogui.remove does exactly this). The kernel holds the chain, so
+    // the ancestors still get their turn and nothing is used after free.
+    Kernel k2;
+    k2.init();
+    auto holder = std::make_shared<SpyPanel>();
+    holder->setId("holder");
+    auto gone = std::make_shared<SpyButton>();
+    gone->setId("gone");
+    gone->drop = true;
+    holder->addChild(gone);
+    gone = nullptr;   // the tree is the only owner from here on
+
+    auto s2 = std::make_shared<Screen>("s2");
+    s2->widgets.push_back(holder);
+    s2->width = 400;
+    s2->height = 200;
+    k2.pushScreen(s2);
+    InputState st2 = makeInput();
+    idle(k2, st2);
+
+    k2.clickWidget(holder->children()[0].get());
+    CHECK(holder->seen == std::vector<std::string>{"click gone->holderB"});
+    CHECK(holder->children().empty());
+    idle(k2, st2);   // the tree is consistent again, no dangling anything
+
+    // A click handler that clicks another widget must not eat its own event:
+    // the nested route finishes, then the outer one keeps travelling.
+    Kernel k3;
+    k3.init();
+    auto root3 = std::make_shared<Panel>();
+    root3->setId("root3");
+    auto relay = std::make_shared<RelayButton>();
+    relay->setId("relay");
+    auto other = std::make_shared<SpyButton>();
+    other->setId("other");
+    other->drop = true;   // the removal happens after its own stop is recorded
+    root3->addChild(relay);
+    root3->addChild(other);
+
+    auto s3 = std::make_shared<Screen>("s3");
+    s3->widgets.push_back(root3);
+    s3->width = 400;
+    s3->height = 200;
+    k3.pushScreen(s3);
+    InputState st3 = makeInput();
+    idle(k3, st3);
+
+    relay->relayId = "other";
+    k3.clickWidget(relay.get());
+    CHECK(relay->fires == 1);
+    CHECK(other->seen == std::vector<std::string>{"click other->other"});
+}
+
 static void testKeyboardNavigation() {
     Kernel k;
     k.init();
@@ -3740,6 +3934,7 @@ int main() {
     testOnDemandWidgets();
     testCommandPalette();
     testKeyboardNavigation();
+    testEventPropagation();
     testDpiScale();
     testInspection();
     testHost();

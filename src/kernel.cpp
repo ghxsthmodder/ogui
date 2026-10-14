@@ -80,15 +80,21 @@ void setFocus(Kernel& k, Widget*& focus, Widget* target) {
     if (focus == target) return;
     if (k.debugEvents()) k.addLog("focus " + Kernel::describe(target));
     if (focus) {
-        std::string id = focus->id();
-        focus->onFocus(false);
-        if (!id.empty()) k.script().fireEvent(id, "blur");
+        Widget* losing = focus;
+        losing->onFocus(false);
+        Event e;
+        e.kind = EventKind::Blur;
+        e.target = losing;
+        k.dispatchEvent(e);
     }
     focus = target;
     if (focus) {
-        std::string id = focus->id();
-        focus->onFocus(true);
-        if (!id.empty()) k.script().fireEvent(id, "focus");
+        Widget* gaining = focus;
+        gaining->onFocus(true);
+        Event e;
+        e.kind = EventKind::Focus;
+        e.target = gaining;
+        k.dispatchEvent(e);
     }
 }
 
@@ -286,9 +292,12 @@ void Kernel::drawDebugOverlay(Rasterizer& r) const {
 
 // The click path shared by mouse release and keyboard activation: a named
 // binding (onclick=) wins over the id binding, then a C++ handler, then the
-// screen's Lua ogui_on_click hook.
-void Kernel::clickWidget(Widget* w, const Offset2D& point) {
+// screen's Lua ogui_on_click hook. The event itself is dispatched afterwards
+// either way, so listeners on the pressed widget and its ancestors always see
+// it -- a C++ action consumes nothing, it just acts.
+void Kernel::clickWidget(Widget* w, const Offset2D& point, EventSource source) {
     if (!w) return;
+    Widget* prevTarget = m_clickTarget;
     m_clickTarget = w;
     if (m_debugEvents)
         addLog("click " + describe(w) +
@@ -298,18 +307,52 @@ void Kernel::clickWidget(Widget* w, const Offset2D& point) {
         return (it != m_bindings.end()) ? it->second : nullptr;
     };
     bool handled = false;
-    std::string pressedId = w->id();
+    std::string pressedKey = w->binding().empty() ? w->id() : w->binding();
     if (auto fn = lookup(w->binding())) { fn(); handled = true; }
     else if (auto fn2 = lookup(w->id())) { fn2(); handled = true; }
     else if (const auto& h = w->clickHandler()) { h(); handled = true; }
-    // Nothing C++-bound: route the click to the screen's Lua
-    // ogui_on_click hook with the widget id (onclick name if set).
-    if (!handled && !pressedId.empty())
-        m_script.notifyClick(w->binding().empty() ? w->id() : w->binding());
-    // A handler may have removed the widget from the tree (ogui.remove);
-    // forgetWidget nulls m_clickTarget in that case.
-    if (m_clickTarget) m_clickTarget->dispatchEvent(EventType::MouseButton, point);
-    m_clickTarget = nullptr;
+    // Nothing C++-bound: the click falls through to the screen's Lua
+    // ogui_on_click hook, addressed by the binding name when there is one.
+    if (!handled && !pressedKey.empty()) m_script.notifyClick(pressedKey);
+    // A handler may have removed the widget from the tree (ogui.remove), which
+    // routes through forgetWidget and clears m_clickTarget; a nested click on
+    // another widget restores it, so this test still means "our target
+    // survived".
+    if (m_clickTarget == w) {
+        Event e;
+        e.kind = EventKind::Click;
+        e.source = source;
+        e.target = w;
+        e.point = point;
+        e.handled = handled;
+        dispatchEvent(e);
+    }
+    m_clickTarget = prevTarget;
+}
+
+// Target first, then every ancestor. The chain is collected as shared_ptrs up
+// front: a handler is allowed to ogui.remove() the very widget the walk is
+// visiting, and a raw pointer would dangle before its parent got a turn.
+void Kernel::dispatchEvent(Event& e) {
+    if (!e.target) return;
+    std::vector<Widget::Ptr> keep;
+    std::vector<Widget*> chain;
+    for (Widget* w = e.target; w; w = w->parent()) {
+        chain.push_back(w);
+        if (auto sp = w->weak_from_this().lock()) keep.push_back(std::move(sp));
+    }
+    const char* name = eventName(e.kind);
+    for (Widget* w : chain) {
+        e.currentTarget = w;
+        w->onEvent(e);
+        if (!w->id().empty() && m_script.fireListener(w->id(), name, e))
+            e.stopped = true;
+        if (!e.stopped) continue;
+        if (m_debugEvents)
+            addLog("event stop " + std::string(name) + " at " + describe(w));
+        break;
+    }
+    e.currentTarget = nullptr;
 }
 
 // ---- Kernel ---------------------------------------------------------------

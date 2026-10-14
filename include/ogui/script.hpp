@@ -11,6 +11,7 @@ namespace ogui {
 
 class Kernel;
 class Widget;
+struct Event;
 
 // ------------------------------------------------------------------
 // ScriptHost: embedded Lua 5.4 behaviour for parsed screens.
@@ -88,7 +89,12 @@ class Widget;
 //                            "change" (user edits of a value/selection/text)
 //                            and "submit" (Enter in a TextInput). Programmatic
 //                            writes via ogui.set never fire them, so a listener
-//                            that writes back cannot loop.
+//                            that writes back cannot loop. The callback gets
+//                            (id, info) with info.target, info.currentTarget,
+//                            info.event, info.phase ("target" | "bubble"),
+//                            info.source and info.x/y; a listener on a
+//                            container id also hears its children's events as
+//                            they bubble. Returning false stops the walk.
 //   ogui.off(handle|id)      by handle -> bool; by widget id -> count of
 //                            listeners dropped
 //   ogui.bind(targetId, targetAttr, sourceId, sourceAttr[, twoWay])
@@ -166,7 +172,11 @@ public:
     int addListener(const std::string& widgetId, const std::string& event, int ref);
     bool removeListener(int handle);
     int removeAllListeners(const std::string& widgetId);
-    void fireEvent(const std::string& widgetId, const std::string& event);
+    // Fire the listeners registered for one widget during an event walk. The
+    // callback gets (id, info) and returns `false` to stop propagation, which
+    // this reports back as true; anything else lets the walk continue.
+    bool fireListener(const std::string& widgetId, const std::string& event,
+                      const Event& e);
     size_t listenerCount() const { return m_listeners.size(); }
 
     // Raw state for hosts extending the bindings (nullptr before any
