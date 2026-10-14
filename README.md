@@ -23,7 +23,8 @@ creates for you (`ogui::Host`, a built-in Win32/WGL window and event loop).
 * **Scripting** — screens embed Lua 5.4 chunks (`<script>`); the engine
   owns the loop and calls the script's `ogui_on_load`/`ogui_on_show`/`ogui_on_update`/`ogui_on_click`/
   `ogui_on_event` hooks through the `ogui` API table: widget attributes,
-  input queries (`mouse`/`key`/`mods`), focus/hover, list content,
+  input queries (`mouse`/`key`/`mods`), focus/hover, list content
+  (full `items` or incremental `ogui.list` insert/remove/set),
   engine-driven `tween` animations, `after`/`every` timers, dynamic
   widget creation (`add`/`remove`/`clear`), tree navigation
   (`children`/`parent`/`index`), per-widget event
@@ -369,7 +370,7 @@ theme default.
 | `button` | clickable button, press/release feedback | `text`, `align="left\|center\|right"`, `textPadding` (inset for left/right) |
 | `textinput` | single-line UTF-8 editor: caret, click-drag / Shift+arrows / Shift+click selection, double-click selects the word, triple-click selects all, Ctrl+Left/Right jump words, Ctrl+A/C/X/V | `text`, `placeholder` |
 | `textarea` | multiline UTF-8 editor: Enter inserts a newline, Up/Down navigate lines, selection spans lines (word/line drag, double/triple-click and Shift+click like `textinput`), long lines soft-wrap to the widget width, wheel scrolls, vertical scrollbar (drag the thumb or click the track) when content overflows | `text`, `placeholder` (style attrs as `textinput`) |
-| `listbox` | scrollable list with single selection (click, wheel, Up/Down/Home/End) | `selected`, `rowHeight`, `highlight` + `<item>` children |
+| `listbox` / `virtuallist` | scrollable list with single selection (click, wheel, Up/Down/Home/End); rows are drawn from a string model so large lists stay cheap — `virtuallist` is the same widget, and `ogui.list` inserts/removes/changes rows incrementally | `selected`, `rowHeight`, `highlight` + `<item>` children |
 | `console` | read-only log view mirroring `Kernel::logs()` — newest line on top, wheel scrolls history, error/script lines tinted red | `rowHeight`, `maxLines` (default 200) |
 | `item` | a `listbox` entry | `label` / `text`, `value` |
 | `table` | data grid: header click sorts (re-click flips direction), row click selects, wheel + Up/Down/Home/End; drag a header edge to resize a `resizable` column, click a cell in an `editable` column (or press F2) to edit it inline (Enter saves, Esc cancels), overflowing cell text marquees per `scrollingText` | `selected`, `rowHeight`, `headerHeight`, `sortable`, `headerBackground`, `highlight` + `<th>`/`<tr>` children |

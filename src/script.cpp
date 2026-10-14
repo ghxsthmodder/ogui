@@ -395,6 +395,56 @@ int l_items(lua_State* L) {
     return 1;
 }
 
+// ogui.list(id, op, ...) — incremental (virtualised) row mutation for a
+// ListBox/<virtuallist>. ops: count | get(i) | insert(i,text|-1=append) |
+// remove(i) | set(i,text) | scroll(i). count/get return a value; the others
+// return true on success, false when the index/widget is out of range.
+int l_list(lua_State* L) {
+    const char* id = luaL_checkstring(L, 1);
+    const char* op = luaL_checkstring(L, 2);
+    Kernel* k = kernelOf(L);
+    Widget* w = k ? k->findWidget(id) : nullptr;
+    auto* lb = dynamic_cast<ListBox*>(w);
+    if (!lb) return luaL_error(L, "ogui.list: widget \"%s\" is not a list", id);
+    if (!std::strcmp(op, "count")) {
+        lua_pushinteger(L, lb->count());
+        return 1;
+    }
+    if (!std::strcmp(op, "get")) {
+        const int i = static_cast<int>(luaL_checkinteger(L, 3));
+        std::string out;
+        if (lb->itemAt(i, out)) lua_pushlstring(L, out.c_str(), out.size());
+        else lua_pushnil(L);
+        return 1;
+    }
+    if (!std::strcmp(op, "insert")) {
+        const int i = static_cast<int>(luaL_checkinteger(L, 3));
+        size_t len = 0;
+        const char* s = luaL_checklstring(L, 4, &len);
+        lb->insertItem(i, std::string(s, len));
+        lua_pushboolean(L, 1);
+    } else if (!std::strcmp(op, "remove")) {
+        const int i = static_cast<int>(luaL_checkinteger(L, 3));
+        const int before = lb->count();
+        lb->removeItem(i);
+        lua_pushboolean(L, lb->count() < before);
+    } else if (!std::strcmp(op, "set")) {
+        const int i = static_cast<int>(luaL_checkinteger(L, 3));
+        size_t len = 0;
+        const char* s = luaL_checklstring(L, 4, &len);
+        lua_pushboolean(L, lb->setItem(i, std::string(s, len)));
+    } else if (!std::strcmp(op, "scroll")) {
+        const int i = static_cast<int>(luaL_checkinteger(L, 3));
+        lb->scrollIntoView(i);
+        lua_pushboolean(L, 1);
+    } else {
+        return luaL_error(L, "ogui.list: unknown op \"%s\" "
+                             "(count|get|insert|remove|set|scroll)", op);
+    }
+    k->invalidate();
+    return 1;
+}
+
 // ---- tweens ----------------------------------------------------------------
 
 int l_tween(lua_State* L) {
@@ -640,6 +690,7 @@ const luaL_Reg oguiLib[] = {
     {"hovered",    l_hovered},
     {"clickCount", l_clickcount},
     {"items",      l_items},
+    {"list",       l_list},
     {"tween",      l_tween},
     {"tweenStop",  l_tweenstop},
     {"after",      l_after},

@@ -668,6 +668,58 @@ void ListBox::setItems(const std::vector<std::string>& items) {
     clampScroll();
 }
 
+void ListBox::insertItem(int index, const std::string& text) {
+    rebuildItems();                       // materialise any parsed <item>s
+    if (index < 0 || index > static_cast<int>(m_items.size()))
+        index = static_cast<int>(m_items.size());
+    m_items.insert(m_items.begin() + index, text);
+    if (index <= m_selected) ++m_selected; // keep the selection on its row
+    if (m_selected < 0 && !m_items.empty()) m_selected = 0;
+    clampScroll();
+    if (m_kernel) m_kernel->invalidate();
+}
+
+void ListBox::removeItem(int index) {
+    rebuildItems();
+    if (index < 0 || index >= static_cast<int>(m_items.size())) return;
+    m_items.erase(m_items.begin() + index);
+    if (index < m_selected) --m_selected;
+    else if (index == m_selected) {
+        if (m_selected >= static_cast<int>(m_items.size()))
+            m_selected = static_cast<int>(m_items.size()) - 1;
+    }
+    clampScroll();
+    if (m_kernel) m_kernel->invalidate();
+}
+
+bool ListBox::setItem(int index, const std::string& text) {
+    rebuildItems();
+    if (index < 0 || index >= static_cast<int>(m_items.size())) return false;
+    m_items[index] = text;
+    if (m_kernel) m_kernel->invalidate();
+    return true;
+}
+
+void ListBox::clearItems() {
+    m_items.clear();
+    m_resolved = true;
+    m_selected = -1;
+    m_wantedSelected = -1;
+    m_scroll = 0.0f;
+    if (m_kernel) m_kernel->invalidate();
+}
+
+bool ListBox::itemAt(int index, std::string& out) const {
+    if (index < 0 || index >= static_cast<int>(m_items.size())) return false;
+    out = m_items[index];
+    return true;
+}
+
+void ListBox::scrollIntoView(int index) {
+    ensureVisible(index);
+    if (m_kernel) m_kernel->invalidate();
+}
+
 const std::string& ListBox::selectedLabel() const {
     static const std::string kEmpty;
     if (m_selected < 0 || m_selected >= static_cast<int>(m_items.size()))

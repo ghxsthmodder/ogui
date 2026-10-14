@@ -2103,6 +2103,72 @@ static void testListBox() {
     CHECK(!k.buildDrawList().empty());
 }
 
+static void testVirtualList() {
+    Kernel k;
+    k.init();
+    XmlParser p;
+    auto res = p.parse(R"XML(<screen id="s">
+  <virtuallist id="vl" x="20" y="20" width="200" height="60" rowHeight="20">
+    <item label="a"/>
+    <item label="b"/>
+    <item label="c"/>
+  </virtuallist>
+</screen>)XML");
+    CHECK(res.root != nullptr);
+    if (!res.root) return;
+    auto s = std::make_shared<Screen>("s");
+    s->widgets.push_back(res.root);
+    s->width = 800;
+    s->height = 600;
+    k.pushScreen(s);
+    auto* vl = dynamic_cast<ListBox*>(k.findWidget("vl"));
+    CHECK(vl != nullptr);
+    if (!vl) return;
+    InputState st = makeInput();
+    idle(k, st);   // first layout materialises the <item> children
+    CHECK(vl->count() == 3);
+
+    int got = -1;
+    vl->setSelectedIndex(2);        // "c" selected
+    vl->setOnChanged([&](int i) { got = i; });
+
+    // Append and mid-insert: the selection travels with its row.
+    vl->insertItem(-1, "z");            // a b c z
+    vl->insertItem(1, "b0");            // a b0 b c z
+    std::string out;
+    CHECK(vl->itemAt(1, out) && out == "b0");
+    CHECK(vl->itemAt(4, out) && out == "z");
+    CHECK(vl->selectedIndex() == 3 && got == -1);   // silent; row "c" moved 2->3
+
+    // Change text in place.
+    CHECK(vl->setItem(0, "a!"));
+    CHECK(!vl->setItem(99, "x"));
+    CHECK(vl->itemAt(0, out) && out == "a!");
+
+    // Removing a row before the selection shifts it; removing the selected
+    // row keeps the index, landing on the next entry ("z").
+    vl->removeItem(2);                  // drops "b": a b0 c z
+    CHECK(vl->count() == 4);
+    CHECK(vl->selectedIndex() == 2 && got == -1);   // "c" slid to 2
+    vl->removeItem(2);                  // drops the selected "c": a b0 z
+    CHECK(vl->selectedIndex() == 2);    // now "z"
+    CHECK(vl->itemAt(2, out) && out == "z");
+
+    // Delta ops survive later layouts: parsed children are not re-collected.
+    idle(k, st);
+    CHECK(vl->count() == 3);
+
+    // scrollIntoView on the last row must not crash or mis-clamp.
+    vl->scrollIntoView(vl->count() - 1);
+    vl->scrollIntoView(0);
+    CHECK(!k.buildDrawList().empty());
+
+    vl->clearItems();
+    CHECK(vl->count() == 0 && vl->selectedIndex() == -1);
+    idle(k, st);
+    CHECK(vl->count() == 0);
+}
+
 static void testTreeView() {
     Kernel k;
     k.init();

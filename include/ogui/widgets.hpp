@@ -1287,6 +1287,16 @@ public:
     int count() const { return static_cast<int>(m_items.size()); }
     int selectedIndex() const { return m_selected; }
     const std::string& selectedLabel() const;
+    // Incremental (virtualised) updates: rows are plain strings, so a
+    // million-item list still only ever draws the viewport. Index -1
+    // appends. Programmatic, like setItems — no change event fired.
+    void insertItem(int index, const std::string& text);
+    void removeItem(int index);
+    bool setItem(int index, const std::string& text);
+    void clearItems();
+    bool itemAt(int index, std::string& out) const;
+    // Scroll minimally so `index` is inside the viewport.
+    void scrollIntoView(int index);
     // Programmatic select: clamps, does NOT fire setOnChanged.
     void setSelectedIndex(int index);
     void setOnChanged(ChangedCallback cb) { m_onChanged = std::move(cb); }

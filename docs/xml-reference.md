@@ -273,7 +273,7 @@ registrations) out of the screen and into a shared document:
 
 | Element | Typed attributes | Children |
 |---|---|---|
-| `listbox` | `rowHeight`, `selected`, `highlight` | `item` (`ListItem`) |
+| `listbox` | `rowHeight`, `selected`, `highlight` | `item` (`ListItem`); `virtuallist` is the same widget under another tag — rows are drawn from a string model, so huge lists only ever lay out the viewport, and `ogui.list` mutates it incrementally |
 | `console` | read-only log view mirroring `Kernel::logs()` (newest first, wheel scrolls history, error/script lines tinted): `rowHeight`, `maxLines` (default 200), `color`/`background`/`borderColor` | — |
 | `item` | `label`/`text`, `value` | — |
 | `table` | `rowHeight`, `headerHeight`, `selected`, `sortable`, `headerBackground` | `th`, `tr` |
@@ -385,6 +385,7 @@ API table `ogui` (all calls are safe on unknown ids):
 | `ogui.hovered()` | hovered widget id, or `nil` |
 | `ogui.clickCount()` | presses at this spot inside the double-click window |
 | `ogui.items(id, tbl)` | replace `listbox`/`optionspin` entries with a Lua array of strings |
+| `ogui.list(id, op, ...)` | incremental `listbox`/`virtuallist` row updates — `count`, `get(i)`, `insert(i,text)` (`i` = `-1` appends), `remove(i)`, `set(i,text)`, `scroll(i)` (scrollIntoView). Mutation is silent (no `change` event); selection travels with its row |
 | `ogui.tween(id, attr, to, dur[, ease[, delay]])` | animate `value`/`x`/`y`/`width`/`height` from the current value; `ease`: `"linear"` (default) / `"out"` / `"inout"` / `"back"`. Engine-driven — runs even without `ogui_on_update`; a new tween on the same `id+attr` replaces the old one |
 | `ogui.tweenStop([id[, attr]])` | cancel matching tweens → count stopped |
 | `ogui.after(secs, fn)` | one-shot timer → id; fires from the frame loop, outside any hook |

@@ -310,6 +310,26 @@ int main() {
             assert(ogui.get("os", "selected") == 2)
             assert(ogui.items("os", {}) == true)
             assert(not pcall(ogui.items, "tip", {"no"}))   -- label: no items
+            -- ogui.list: incremental virtual-list mutation
+            assert(ogui.list("lb", "count") == 3)
+            ogui.list("lb", "insert", -1, "omega")          -- appends
+            ogui.list("lb", "insert", 0, "first")
+            assert(ogui.list("lb", "get", 0) == "first")
+            assert(ogui.list("lb", "get", 4) == "omega")
+            assert(ogui.list("lb", "count") == 5)
+            assert(ogui.list("lb", "set", 2, "beta!"))      -- "beta" slid to 2
+            assert(ogui.list("lb", "get", 2) == "beta!")
+            assert(not ogui.list("lb", "set", 9, "x"))
+            assert(ogui.list("lb", "remove", 1))            -- drops "alpha"
+            assert(ogui.list("lb", "get", 1) == "beta!")
+            assert(not ogui.list("lb", "remove", 42))
+            assert(ogui.list("lb", "get", 42) == nil)
+            ogui.list("lb", "scroll", 3)
+            assert(ogui.get("lb", "selected") == 1)         -- selection rode along
+            assert(not pcall(ogui.list, "tip", "count"))
+            assert(ogui.list("lb", "get", 42) == nil)
+            ogui.list("lb", "scroll", 3)
+            assert(not pcall(ogui.list, "tip", "count"))
             ogui.set("tip", "tooltip", "say hi")
             assert(ogui.get("tip", "tooltip") == "say hi")
             assert(ogui.set("combo", "selected", 1))
@@ -317,7 +337,7 @@ int main() {
         )", "lists");
         CHECK(k.script().errors().empty());
         auto* lb = dynamic_cast<ListBox*>(k.findWidget("lb"));
-        CHECK(lb && lb->count() == 3 && lb->selectedIndex() == 1);
+        CHECK(lb && lb->count() == 4 && lb->selectedIndex() == 1);
         k.popScreen();   // back to "s": its inline script reloads
         CHECK(k.getText("out") == "loaded");
     }
