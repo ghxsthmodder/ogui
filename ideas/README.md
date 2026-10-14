@@ -707,8 +707,9 @@ menos lógica repetida.
 -   [x] PropertyGrid.
 -   [x] Console/LogView.
 -   [x] TreeTable.
--   [ ] Painéis divisíveis e, se necessário, docking.
--   [ ] NumberInput, Keybind, Breadcrumb e StatusBar conforme a demanda.
+-   [x] Painéis divisíveis (`splitter`, aninhável); docking completo fica para
+    depois, sem demanda concreta ainda.
+-   [x] NumberInput (`spinbox` já cobre), Keybind, Breadcrumb e StatusBar.
 
 **Resultado esperado:** a biblioteca atende melhor interfaces de
 configuração, ferramentas e aplicações com dados extensos.

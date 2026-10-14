@@ -2135,6 +2135,162 @@ private:
 };
 
 // ------------------------------------------------------------------
+// StatusBar: thin info band with left / centre / right text slots.
+// ------------------------------------------------------------------
+class StatusBar : public Widget {
+public:
+    StatusBar();
+    virtual ~StatusBar() override;
+
+    void setText(const std::string& t) { m_left = t; }   // alias: text=
+    void setLeft(const std::string& t) { m_left = t; }
+    void setCenter(const std::string& t) { m_center = t; }
+    void setRight(const std::string& t) { m_right = t; }
+    const std::string& left() const { return m_left; }
+    const std::string& center() const { return m_center; }
+    const std::string& right() const { return m_right; }
+    void setTextColor(const Color& c) { m_textColor = c; }
+    void setDimColor(const Color& c) { m_dimColor = c; }
+    void setBgColor(const Color& c) { m_bgColor = c; }
+    void setFontSize(int s) { m_fontSize = s; }
+    void applyVisualColor(const std::string& prop, const Color& v) override {
+        if (prop == "background") m_bgColor = v;
+        else if (prop == "color") m_textColor = v;
+    }
+
+    virtual void onDraw(Rasterizer& r) const override;
+
+private:
+    std::string m_left, m_center, m_right;
+    Color m_textColor{ogui::palette().text};
+    Color m_dimColor{ogui::palette().dim};
+    Color m_bgColor{ogui::palette().surface};
+    int m_fontSize = 12;
+};
+
+// ------------------------------------------------------------------
+// CrumbItem: one <crumb label=".."> child of a Breadcrumb (data only).
+// ------------------------------------------------------------------
+class CrumbItem : public Widget {
+public:
+    void setLabel(const std::string& l) { m_label = l; }
+    const std::string& label() const { return m_label; }
+
+private:
+    std::string m_label;
+};
+
+// ------------------------------------------------------------------
+// Breadcrumb: "a / b / c" path of clickable segments. Clicking a segment
+// makes it current and fires setOnSelected(index) + the widget change
+// event; the current segment draws bright, the rest dim.
+// ------------------------------------------------------------------
+class Breadcrumb : public Widget {
+public:
+    using SegmentCallback = std::function<void(int)>;
+
+    Breadcrumb();
+    virtual ~Breadcrumb() override;
+
+    // "a/b/c" -> segments (the separator string is kept for display).
+    void setPath(const std::string& path);
+    void setSegments(const std::vector<std::string>& segs);
+    const std::vector<std::string>& segments() const { return m_segs; }
+    void setSeparator(const std::string& s) { m_sep = s.empty() ? "/" : s; }
+    const std::string& separator() const { return m_sep; }
+    void setCurrent(int i);                 // silent
+    int current() const { return m_current; }
+    void setOnSelected(SegmentCallback cb) { m_onSelected = std::move(cb); }
+    void setTextColor(const Color& c) { m_textColor = c; }
+    void setDimColor(const Color& c) { m_dimColor = c; }
+    void setAccentColor(const Color& c) { m_accentColor = c; }
+    void setFontSize(int s) { m_fontSize = s; }
+    bool isSelectedVisual() const override { return m_current >= 0; }
+    void applyVisualColor(const std::string& prop, const Color& v) override {
+        if (prop == "color") m_textColor = v;
+        else if (prop == "border" || prop == "bordercolor") m_accentColor = v;
+    }
+
+    virtual void layout(float parentWidth, float parentHeight) override;
+    virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
+    virtual void onDraw(Rasterizer& r) const override;
+
+private:
+    void collect();                          // adopt <crumb> children once
+    // Segment rects in widget-local coords, refreshed before use.
+    void measureSegs() const;
+
+    std::vector<std::string> m_segs;
+    std::string m_sep = "/";
+    int m_current = -1;                      // -1: last segment
+    Color m_textColor{ogui::palette().textBright};
+    Color m_dimColor{ogui::palette().dim};
+    Color m_accentColor{ogui::palette().accent};
+    int m_fontSize = 13;
+    bool m_collected = false;
+    SegmentCallback m_onSelected;
+    mutable std::vector<Rect> m_segRects;    // refreshed by measureSegs()
+};
+
+// ------------------------------------------------------------------
+// Keybind: shortcut capture editor. Shows the current combo
+// ("Ctrl+Alt+K") or a placeholder. Click starts capturing: the next key
+// press stores mods+key and fires setOnChanged; Escape cancels and
+// Backspace/Delete clears the combo. Empty value draws the placeholder.
+// ------------------------------------------------------------------
+class Keybind : public Widget {
+public:
+    using ValueCallback = std::function<void(const std::string&)>;
+
+    Keybind();
+    virtual ~Keybind() override;
+
+    // "ctrl+shift+k" (case-insensitive, order-free); "" clears.
+    bool setValue(const std::string& combo);
+    std::string value() const;               // formatted canonical combo
+    void setPlaceholder(const std::string& p) { m_placeholder = p; }
+    void setOnChanged(ValueCallback cb) { m_onChanged = std::move(cb); }
+    bool capturing() const { return m_capturing; }
+
+    void setTextColor(const Color& c) { m_textColor = c; }
+    void setBgColor(const Color& c) { m_bgColor = c; }
+    void setBorderColor(const Color& c) { m_borderColor = c; }
+    void setRadius(float r) { m_radius = r; }
+    void setFontFamily(const std::string& f) { m_fontFam = f; }
+    void setFontSize(int s) { m_fontSize = s; }
+    void applyVisualColor(const std::string& prop, const Color& v) override {
+        if (prop == "background") m_bgColor = v;
+        else if (prop == "color") m_textColor = v;
+        else if (prop == "border" || prop == "bordercolor") m_borderColor = v;
+    }
+    void applyVisualFloat(const std::string& prop, float v) override {
+        if (prop == "radius") m_radius = v;
+    }
+
+    virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
+    virtual void onKeyDown(KeyCode key, uint32_t mods) override;
+    virtual void onFocus(bool focused) override;
+    virtual void onDraw(Rasterizer& r) const override;
+
+    // Combo text <-> KeyCode/mods (public for tests and hosts).
+    static std::string format(KeyCode key, uint32_t mods);
+    static bool parse(const std::string& combo, KeyCode& key, uint32_t& mods);
+
+private:
+    KeyCode m_key = Key_None;
+    uint32_t m_mods = Mod_None;
+    bool m_capturing = false;
+    std::string m_placeholder = "Press a key...";
+    std::string m_fontFam = "sans";
+    int m_fontSize = 13;
+    Color m_textColor{ogui::palette().textBright};
+    Color m_bgColor{ogui::palette().window};
+    Color m_borderColor{ogui::palette().accent};
+    float m_radius = 4.0f;
+    ValueCallback m_onChanged;
+};
+
+// ------------------------------------------------------------------
 // Spinner: animated loading indicator. variant="glyph" cycles |/-\,
 // variant="blocks" slides a filled window through [####......].
 // ------------------------------------------------------------------

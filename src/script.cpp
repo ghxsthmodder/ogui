@@ -201,7 +201,9 @@ int l_get(lua_State* L) {
         if (checkedGet(w, num)) lua_pushboolean(L, num != 0.0);
         else lua_pushnil(L);
     } else if (!std::strcmp(attr, "value")) {
-        if (numValueGet(w, num)) lua_pushnumber(L, num);
+        if (auto* kb = dynamic_cast<Keybind*>(w)) {
+            lua_pushstring(L, kb->value().c_str());
+        } else if (numValueGet(w, num)) lua_pushnumber(L, num);
         else lua_pushnil(L);
     } else if (!std::strcmp(attr, "selected")) {
         int idx = 0;
@@ -240,7 +242,13 @@ int l_set(lua_State* L) {
         ok = checkedSet(w, lua_toboolean(L, 3) != 0);
         if (ok) k->invalidate();
     } else if (!std::strcmp(attr, "value")) {
-        ok = numValueSet(w, luaL_checknumber(L, 3));
+        if (auto* kb = dynamic_cast<Keybind*>(w)) {
+            size_t len = 0;
+            const char* s = luaL_checklstring(L, 3, &len);
+            ok = kb->setValue(std::string(s, len));
+        } else {
+            ok = numValueSet(w, luaL_checknumber(L, 3));
+        }
         if (ok) k->invalidate();
     } else if (!std::strcmp(attr, "selected")) {
         ok = selSet(w, static_cast<int>(luaL_checkinteger(L, 3)));

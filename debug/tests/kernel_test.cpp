@@ -3172,6 +3172,129 @@ static void testRowWrap() {
     CHECK(rw->bounds().h == 54.0f);   // 30 + gap 4 + 20 (trailing gap dropped)
 }
 
+static void testOnDemandWidgets() {
+    Kernel k;
+    k.init();
+    XmlParser p;
+    auto res = p.parse(R"XML(<screen id="s">
+  <statusbar id="sb" x="0" y="580" width="800" height="20"
+              left="Ready" center="doc.txt" right="3 items"/>
+  <breadcrumb id="bc" x="20" y="20" width="400" height="20">
+    <crumb label="src"/>
+    <crumb label="gui"/>
+    <crumb label="main.cpp"/>
+  </breadcrumb>
+  <keybind id="kb" x="20" y="60" width="160" height="28" value="ctrl+k"/>
+</screen>)XML");
+    CHECK(res.root != nullptr);
+    if (!res.root) return;
+    auto s = std::make_shared<Screen>("s");
+    s->widgets.push_back(res.root);
+    s->width = 800;
+    s->height = 600;
+    k.pushScreen(s);
+
+    InputState st = makeInput();
+    idle(k, st);
+    CHECK(!k.buildDrawList().empty());
+
+    // ---- StatusBar ----
+    auto* sb = dynamic_cast<StatusBar*>(k.findWidget("sb"));
+    CHECK(sb != nullptr);
+    if (sb) {
+        CHECK(sb->left() == "Ready");
+        CHECK(sb->center() == "doc.txt");
+        CHECK(sb->right() == "3 items");
+        sb->setText("Busy");            // text= alias writes the left cell
+        CHECK(sb->left() == "Busy");
+    }
+
+    // ---- Breadcrumb ----
+    auto* bc = dynamic_cast<Breadcrumb*>(k.findWidget("bc"));
+    CHECK(bc != nullptr);
+    if (!bc) return;
+    CHECK(bc->segments().size() == 3);
+    CHECK(bc->segments()[2] == "main.cpp");
+    CHECK(bc->current() == -1);          // -1: last segment shown as current
+    std::vector<int> sel;
+    bc->setOnSelected([&](int i) { sel.push_back(i); });
+
+    // Click inside the first segment (rects start at the widget origin, and
+    // every segment is at least ~15px wide, so +2 is a guaranteed hit).
+    pressAt(k, st, 22.0f, 30.0f);
+    releaseAt(k, st);
+    CHECK(bc->current() == 0);
+    CHECK(sel.size() == 1 && sel[0] == 0);
+
+    // Miss right of the last segment: state and callbacks untouched.
+    pressAt(k, st, 390.0f, 30.0f);
+    releaseAt(k, st);
+    CHECK(bc->current() == 0);
+    CHECK(sel.size() == 1);
+
+    bc->setCurrent(2);                   // silent
+    CHECK(bc->current() == 2);
+    CHECK(sel.size() == 1);
+    bc->setCurrent(99);                  // out of range clamps to -1
+    CHECK(bc->current() == -1);
+
+    // ---- Keybind ----
+    auto* kb = dynamic_cast<Keybind*>(k.findWidget("kb"));
+    CHECK(kb != nullptr);
+    if (!kb) return;
+    CHECK(kb->value() == "ctrl+k");
+
+    // Static round-trips.
+    CHECK(Keybind::format(Key_K, Mod_Ctrl) == "ctrl+k");
+    CHECK(Keybind::format(Key_F5, Mod_Ctrl | Mod_Alt | Mod_Shift | Mod_Super)
+          == "ctrl+alt+shift+super+f5");
+    {
+        KeyCode key = Key_None; uint32_t mods = Mod_None;
+        CHECK(Keybind::parse("CTRL+ALT+F5", key, mods));
+        CHECK(key == Key_F5 && mods == (Mod_Ctrl | Mod_Alt));
+        CHECK(Keybind::parse("", key, mods));      // empty == cleared
+        CHECK(key == Key_None && mods == Mod_None);
+        CHECK(!Keybind::parse("ctrl+", key, mods)); // no real key
+        CHECK(!Keybind::parse("bogus", key, mods));
+    }
+    CHECK(!kb->setValue("ctrl+"));       // rejected, keeps old value
+    CHECK(kb->value() == "ctrl+k");
+
+    std::vector<std::string> kbdChanges;
+    kb->setOnChanged([&](const std::string& v) { kbdChanges.push_back(v); });
+    CHECK(kb->setValue("f12"));          // programmatic sets stay silent
+    CHECK(kbdChanges.empty());
+
+    // Click arms capture, then ctrl+s is recorded and announced.
+    pressAt(k, st, 30.0f, 74.0f);
+    releaseAt(k, st);
+    tapKey(k, st, Key_S, Key_LCTRL);
+    CHECK(kb->value() == "ctrl+s");
+    CHECK(kbdChanges.size() == 1 && kbdChanges[0] == "ctrl+s");
+
+    // Escape cancels capture without touching the value.
+    pressAt(k, st, 30.0f, 74.0f);
+    releaseAt(k, st);
+    tapKey(k, st, Key_Escape);
+    CHECK(kb->value() == "ctrl+s");
+    CHECK(kbdChanges.size() == 1);
+
+    // Backspace clears the binding and announces the empty combo.
+    pressAt(k, st, 30.0f, 74.0f);
+    releaseAt(k, st);
+    tapKey(k, st, Key_Backspace);
+    CHECK(kb->value().empty());
+    CHECK(kbdChanges.size() == 2 && kbdChanges[1].empty());
+
+    // A stray key while not capturing only arms capture (swallowed).
+    tapKey(k, st, Key_D, Key_LALT);
+    CHECK(kb->value().empty());
+    CHECK(kbdChanges.size() == 2);
+    tapKey(k, st, Key_D, Key_LALT);      // now the second key is recorded
+    CHECK(kb->value() == "alt+d");
+    CHECK(kbdChanges.size() == 3);
+}
+
 int main() {
     testDrawList();
     testHitTestAndFocus();
@@ -3216,6 +3339,7 @@ int main() {
     testVirtualList();
     testPropertyGrid();
     testTreeTable();
+    testOnDemandWidgets();
     testHost();
 
     if (g_failures) {

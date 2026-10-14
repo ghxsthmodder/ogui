@@ -384,6 +384,10 @@ theme default.
 | `treeitem` | a `tree` node (may nest further `<treeitem>`s) | `label` / `text`, `value`, `expanded`, `folder`/`file`, `checked` |
 | `treetable` | tree hierarchy inside tabular columns: column 0 shows a triangle + the indented node label, the remaining columns show each node's `cells`. Click a header to sort siblings at every level (re-click flips direction), click a row to select it, wheel + Up/Down/Home/End scroll, Left/Right/Enter/Space collapse/expand. Only the viewport rows are drawn, so large trees stay cheap | `selected`, `rowHeight`, `headerHeight`, `indent`, `sortable`, `expanded` (true = expand all), `headerBackground`, `highlight`, `accent` + `<th>`/`<tnode>` children |
 | `tnode` | a `treetable` row (data only; nests further `<tnode>`s) | `label` / `text` (column 0), `cells="a;b;c"` (columns 1..n), `expanded` |
+| `statusbar` | flat text band with a hairline separator on top, sized for the foot of a window or panel | `left` (or `text`), `center`, `right`, `color`, `dimcolor` (right text), `background`, `size` |
+| `breadcrumb` | clickable path segments joined by a separator: clicking sets the active segment, fires the widget `bind()` and any `onSelected` callback; segments come from a `path` string or nested `<crumb>` children | `path="a/b/c"`, `separator` (default `/`), `current` (index, omitted = last), `color`, `dimcolor`, `accent` (separator), `size` + `<crumb>` children |
+| `crumb` | a `breadcrumb` segment (data only) | `label` / `text` |
+| `keybind` | shortcut capture box: click or keypress arms capture, a modifier+key combo records the binding (`change` fires), Backspace/Delete clears, Esc cancels; combos are validated `ctrl+alt+shift+super+x` strings | `value`, `placeholder`, `color`, `background`, `bordercolor`/`border` (focus/capture tint), `radius`, `size` |
 | `toggleswitch` / `toggle` | compact pill switch for a binary mode: click slides the knob over an accent-tinted track, firing `onChanged(bool)` and the widget `bind()` | `checked`/`on`, `text` (trailing label) |
 | `checkbox` | toggle + label | `text`, `checked` |
 | `radiobutton` | radio toggle in group | `text`, `checked`, `group` |

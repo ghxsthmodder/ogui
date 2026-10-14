@@ -303,6 +303,7 @@ int main() {
       <tnode label="util.cpp" cells="file"/>
     </tnode>
   </treetable>
+  <keybind id="kbd" x="10" y="350" width="150" height="24"/>
 </screen>)");
         assert(res.root);
         auto s = std::make_shared<Screen>("lists");
@@ -372,6 +373,13 @@ int main() {
             assert(ogui.get("tt", "selected") == 1)
             assert(ogui.set("combo", "selected", 1))
             assert(ogui.get("combo", "selected") == 1)
+            -- keybind: value is a validated string combo, not a number
+            assert(ogui.set("kbd", "value", "ctrl+k"))
+            assert(ogui.get("kbd", "value") == "ctrl+k")
+            assert(not pcall(ogui.set, "kbd", "value", "bogus"))
+            assert(ogui.get("kbd", "value") == "ctrl+k")
+            assert(ogui.set("kbd", "value", ""))     -- empty clears
+            assert(ogui.get("kbd", "value") == "")
         )", "lists");
         CHECK(k.script().errors().empty());
         auto* lb = dynamic_cast<ListBox*>(k.findWidget("lb"));
@@ -379,6 +387,8 @@ int main() {
         auto* pg = dynamic_cast<PropertyGrid*>(k.findWidget("pg"));
         CHECK(pg && pg->count() == 2 && pg->valueOf("size") == "42"
               && pg->selectedIndex() == 0);
+        auto* kbd = dynamic_cast<Keybind*>(k.findWidget("kbd"));
+        CHECK(kbd && kbd->value().empty());
         k.popScreen();   // back to "s": its inline script reloads
         CHECK(k.getText("out") == "loaded");
     }

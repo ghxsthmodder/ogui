@@ -286,6 +286,10 @@ registrations) out of the screen and into a shared document:
 | `tnode` | a `treetable` row (data only): `label`/`text` (column 0), `cells="a;b;c"` (columns 1..n), `expanded`; nest `<tnode>`s for children | nested `tnode` |
 | `propertygrid` | two-column typed-property editor: label on the left, a kind-appropriate editor on the right (bool → checkbox, number/text/color → inline text, enum → click-cycling select). Click/`Up`/`Down` select, `Enter`/`F2` edit text kinds, `Space` toggles bools, `Left`/`Right` cycle enums, `Esc` cancels a commit. Group headers appear wherever a `category` changes. Attributes: `rowHeight`, `color` (value text), `labelColor`, `groupColor`, `highlight`, `background`, `borderColor` | `property` (`PropertyItem`) |
 | `property` | data-only row feeding a `propertygrid`: `name`/`label`, `type` (`bool`/`number`/`text`/`enum`/`color`), `value`, `category`/`group`, `options="a;b;c"` (enum), `readonly` | — |
+| `statusbar` | flat text band with a hairline separator on top: `left` (also via `text`), `center`, `right`, `color` (left/center text), `dimcolor` (right text), `background`, `size` | — |
+| `breadcrumb` | clickable path segments separated by `separator` (default `/`): `path="a/b/c"` or nested `<crumb>` children, `current` (index styled as active, -1/omitted = last), `color`, `dimcolor`, `accent` (separator), `size`; clicking a segment sets `current`, fires its `change` event and any `onSelected` callback | `crumb` (`CrumbItem`) |
+| `crumb` | a `breadcrumb` segment (data only): `label`/`text` | — |
+| `keybind` | shortcut capture box: click (or first key press) arms capture, then a modifier+key combo records the binding, `Backspace`/`Delete` clears it, `Esc` cancels; combos are `ctrl+alt+shift+super+x` strings (`value` round-trips, invalid ones rejected). Attributes: `value`, `placeholder`, `color`, `background`, `bordercolor`/`border` (focus/capture tint), `radius`, `size` | — |
 
 `listbox`, `table`, `tree`, `scrollview` and `window` draw an overlay
 scrollbar (drag the thumb, or click the empty track to jump) whenever
@@ -374,8 +378,8 @@ API table `ogui` (all calls are safe on unknown ids):
 
 | Call | Effect |
 |---|---|
-| `ogui.set(id, attr, v)` | `attr`: `text`, `visible`, `checked`, `value`, `selected`, `tooltip`, `x`, `y`, `width`, `height` (geometry pins the spec to absolute so layout keeps the new values) |
-| `ogui.get(id, attr)` | same attrs; `text`/`tooltip` → string, `value`/`selected`/geometry → number, `visible`/`checked` → boolean; unknown → `nil` |
+| `ogui.set(id, attr, v)` | `attr`: `text`, `visible`, `checked`, `value`, `selected`, `tooltip`, `x`, `y`, `width`, `height` (geometry pins the spec to absolute so layout keeps the new values); on a `keybind`, `value` takes a combo string and errors when it does not parse |
+| `ogui.get(id, attr)` | same attrs; `text`/`tooltip` → string, `value`/`selected`/geometry → number (`value` → combo string on a `keybind`), `visible`/`checked` → boolean; unknown → `nil` |
 | `ogui.exists(id)` | widget lookup |
 | `ogui.click(id)` | fire the widget's C++ binding/handler |
 | `ogui.time()` | seconds since kernel start |

@@ -392,6 +392,10 @@ std::map<std::string, WidgetFactory>& widgetRegistry() {
         reg["tree"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<TreeView>(); };
         reg["treetable"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<TreeTable>(); };
         reg["tnode"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<TreeTableNode>(); };
+        reg["statusbar"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<StatusBar>(); };
+        reg["breadcrumb"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Breadcrumb>(); };
+        reg["crumb"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<CrumbItem>(); };
+        reg["keybind"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Keybind>(); };
         reg["table"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Table>(); };
         reg["th"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<TableColumn>(); };
         reg["tr"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<TableRow>(); };
@@ -595,6 +599,295 @@ void Sparkline::onDraw(Rasterizer& r) const {
     Color ink = m_lineColor;
     r.drawText(info.c_str(), b.x + 6.0f, b.y + 6.0f, m_fontSize, "sans", ink,
                Align::Left, VertAlign::Top);
+}
+
+// ------------------------------------------------------------------
+// StatusBar
+// ------------------------------------------------------------------
+StatusBar::StatusBar() = default;
+StatusBar::~StatusBar() = default;
+
+void StatusBar::onDraw(Rasterizer& r) const {
+    if (!m_style.isVisible) return;
+    const Rect b = bounds();
+    r.drawRect(b, m_bgColor);
+    // Hairline separator along the top edge.
+    r.drawLine({b.x, b.y + 0.5f}, {b.x + b.w, b.y + 0.5f},
+               ogui::palette().border, 1.0f);
+    const float midY = b.y + b.h * 0.5f;
+    r.drawText(m_left.c_str(),   b.x + 10.0f, midY, m_fontSize, "sans",
+               m_textColor, Align::Left,   VertAlign::Middle);
+    if (!m_center.empty())
+        r.drawText(m_center.c_str(), b.x + b.w * 0.5f, midY, m_fontSize, "sans",
+                   m_textColor, Align::Center, VertAlign::Middle);
+    if (!m_right.empty())
+        r.drawText(m_right.c_str(), b.x + b.w - 10.0f, midY, m_fontSize, "sans",
+                   m_dimColor, Align::Right, VertAlign::Middle);
+}
+
+// ------------------------------------------------------------------
+// Breadcrumb
+// ------------------------------------------------------------------
+Breadcrumb::Breadcrumb() = default;
+Breadcrumb::~Breadcrumb() = default;
+
+void Breadcrumb::collect() {
+    if (m_collected) return;
+    m_collected = true;
+    if (!m_segs.empty()) return;         // authored via path=/setSegments
+    std::vector<std::string> segs;
+    for (const auto& c : children())
+        if (auto* cr = dynamic_cast<CrumbItem*>(c.get()))
+            segs.push_back(cr->label());
+    if (!segs.empty()) m_segs = std::move(segs);
+}
+
+void Breadcrumb::setPath(const std::string& path) {
+    m_segs.clear();
+    size_t start = 0;
+    while (start <= path.size()) {
+        const size_t slash = path.find('/', start);
+        if (slash == std::string::npos) {
+            if (start < path.size()) m_segs.push_back(path.substr(start));
+            break;
+        }
+        m_segs.push_back(path.substr(start, slash - start));
+        start = slash + 1;
+    }
+    m_collected = true;
+    measureSegs();
+    if (m_kernel) m_kernel->invalidate();
+}
+
+void Breadcrumb::setSegments(const std::vector<std::string>& segs) {
+    m_segs = segs;
+    m_collected = true;
+    measureSegs();
+    if (m_kernel) m_kernel->invalidate();
+}
+
+void Breadcrumb::setCurrent(int i) {
+    if (i < -1 || i >= static_cast<int>(m_segs.size())) i = -1;
+    m_current = i;
+    if (m_kernel) m_kernel->invalidate();
+}
+
+void Breadcrumb::layout(float parentWidth, float parentHeight) {
+    collect();
+    Widget::layout(parentWidth, parentHeight);
+    measureSegs();
+}
+
+// Segment rects must exist before the first draw (clicks can arrive in any
+// frame), so measure here instead of recording them in onDraw. Falls back to
+// an average-glyph estimate when no font resource is available (headless).
+void Breadcrumb::measureSegs() const {
+    m_segRects.clear();
+    const Rect b = bounds();
+    const Font* f = FontManager::instance().get("sans", m_fontSize);
+    const bool haveFont = f && f->loaded();
+    const auto segW = [&](const std::string& s) {
+        return haveFont ? f->measure(s.c_str())
+                        : static_cast<float>(s.size()) * m_fontSize * 0.55f;
+    };
+    float x = b.x;
+    for (size_t i = 0; i < m_segs.size(); ++i) {
+        const float w = segW(m_segs[i]);
+        m_segRects.push_back({x, b.y, w, b.h});
+        x += w;
+        if (i + 1 < m_segs.size()) x += segW(" " + m_sep + " ");
+    }
+}
+
+void Breadcrumb::onPointerDown(MouseButton btn, const Offset2D& p) {
+    if (btn != Mouse_Left) return;
+    collect();
+    measureSegs();
+    const Offset2D o = absoluteOrigin();
+    const Rect b = bounds();
+    const Offset2D l{static_cast<float>(p.x) - o.x + b.x,
+                     static_cast<float>(p.y) - o.y + b.y};
+    for (size_t i = 0; i < m_segRects.size(); ++i) {
+        const Rect& s = m_segRects[i];
+        if (l.x >= s.x && l.x <= s.x + s.w && l.y >= s.y && l.y <= s.y + s.h) {
+            m_current = static_cast<int>(i);
+            if (m_onSelected) m_onSelected(m_current);
+            announceChange();
+            if (m_kernel) m_kernel->invalidate();
+            return;
+        }
+    }
+}
+
+void Breadcrumb::onDraw(Rasterizer& r) const {
+    if (!m_style.isVisible) return;
+    const Rect b = bounds();
+    if (m_segs.empty()) return;
+    measureSegs();
+    const int cur = m_current < 0 ? static_cast<int>(m_segs.size()) - 1
+                                  : m_current;
+    const float midY = b.y + b.h * 0.5f;
+    for (size_t i = 0; i < m_segs.size(); ++i) {
+        const Color col = static_cast<int>(i) == cur ? m_textColor : m_dimColor;
+        r.drawText(m_segs[i].c_str(), m_segRects[i].x, midY, m_fontSize, "sans",
+                   col, Align::Left, VertAlign::Middle);
+        if (i + 1 < m_segs.size()) {
+            const std::string sep = " " + m_sep + " ";
+            r.drawText(sep.c_str(), m_segRects[i].x + m_segRects[i].w, midY,
+                       m_fontSize, "sans", m_accentColor, Align::Left,
+                       VertAlign::Middle);
+        }
+    }
+}
+
+// ------------------------------------------------------------------
+// Keybind
+// ------------------------------------------------------------------
+Keybind::Keybind() = default;
+Keybind::~Keybind() = default;
+
+namespace {
+
+struct KeyName { KeyCode key; const char* name; };
+const KeyName kKeyNames[] = {
+    {Key_Space, "space"}, {Key_Backspace, "backspace"}, {Key_Enter, "enter"},
+    {Key_Tab, "tab"}, {Key_Escape, "escape"}, {Key_Insert, "insert"},
+    {Key_Delete, "delete"}, {Key_Home, "home"}, {Key_End, "end"},
+    {Key_PageUp, "pageup"}, {Key_PageDown, "pagedown"},
+    {Key_Left, "left"}, {Key_Up, "up"}, {Key_Right, "right"}, {Key_Down, "down"},
+    {Key_Minus, "minus"}, {Key_Equal, "equal"}, {Key_Semicolon, "semicolon"},
+    {Key_Slash, "slash"}, {Key_Comma, "comma"}, {Key_Period, "period"},
+    {Key_Apostrophe, "quote"}, {Key_BracketLeft, "leftbracket"},
+    {Key_BracketRight, "rightbracket"}, {Key_Backslash, "backslash"},
+    {Key_CapsLock, "capslock"}, {Key_NumLock, "numlock"}, {Key_ScrollLock, "scrolllock"},
+    {Key_F1, "f1"}, {Key_F2, "f2"}, {Key_F3, "f3"}, {Key_F4, "f4"},
+    {Key_F5, "f5"}, {Key_F6, "f6"}, {Key_F7, "f7"}, {Key_F8, "f8"},
+    {Key_F9, "f9"}, {Key_F10, "f10"}, {Key_F11, "f11"}, {Key_F12, "f12"},
+};
+
+std::string lower(std::string s) {
+    for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return s;
+}
+
+} // namespace
+
+std::string Keybind::format(KeyCode key, uint32_t mods) {
+    std::string out;
+    if (mods & Mod_Ctrl)  out += "ctrl+";
+    if (mods & Mod_Alt)   out += "alt+";
+    if (mods & Mod_Shift) out += "shift+";
+    if (mods & Mod_Super) out += "super+";
+    std::string k;
+    if (key >= Key_A && key <= Key_Z)
+        k = std::string(1, static_cast<char>('a' + (key - Key_A)));
+    else if (key >= Key_0 && key <= Key_9)
+        k = std::string(1, static_cast<char>('0' + (key - Key_0)));
+    else {
+        for (const auto& e : kKeyNames)
+            if (e.key == key) { k = e.name; break; }
+    }
+    if (k.empty()) { out.clear(); return out; }
+    return out + k;
+}
+
+bool Keybind::parse(const std::string& combo, KeyCode& key, uint32_t& mods) {
+    key = Key_None;
+    mods = Mod_None;
+    if (combo.empty()) return true;              // empty == cleared
+    bool gotKey = false;
+    size_t start = 0;
+    while (start <= combo.size()) {
+        size_t plus = combo.find('+', start);
+        std::string tok = lower(combo.substr(
+            start, plus == std::string::npos ? std::string::npos
+                                             : plus - start));
+        if (plus == std::string::npos) {
+            if (start == combo.size()) break;    // trailing '+'
+        }
+        if (tok == "ctrl" || tok == "control")        mods |= Mod_Ctrl;
+        else if (tok == "alt" || tok == "option")     mods |= Mod_Alt;
+        else if (tok == "shift")                      mods |= Mod_Shift;
+        else if (tok == "super" || tok == "meta" || tok == "cmd") mods |= Mod_Super;
+        else if (tok.size() == 1 && tok[0] >= 'a' && tok[0] <= 'z') {
+            key = static_cast<KeyCode>(Key_A + (tok[0] - 'a')); gotKey = true;
+        } else if (tok.size() == 1 && tok[0] >= '0' && tok[0] <= '9') {
+            key = static_cast<KeyCode>(Key_0 + (tok[0] - '0')); gotKey = true;
+        } else {
+            for (const auto& e : kKeyNames)
+                if (tok == e.name) { key = e.key; gotKey = true; break; }
+        }
+        if (plus == std::string::npos) break;
+        start = plus + 1;
+    }
+    return gotKey;
+}
+
+bool Keybind::setValue(const std::string& combo) {
+    KeyCode k; uint32_t m;
+    if (!parse(combo, k, m)) return false;
+    m_key = k; m_mods = m;
+    if (m_kernel) m_kernel->invalidate();
+    return true;
+}
+
+std::string Keybind::value() const {
+    if (m_key == Key_None && m_mods == Mod_None) return {};
+    return format(m_key, m_mods);
+}
+
+void Keybind::onPointerDown(MouseButton, const Offset2D&) {
+    m_capturing = true;
+    if (m_kernel) m_kernel->invalidate();
+}
+
+void Keybind::onFocus(bool focused) {
+    if (!focused) m_capturing = false;
+}
+
+void Keybind::onKeyDown(KeyCode key, uint32_t mods) {
+    if (!m_capturing) { m_capturing = true; return; }
+    const bool isModKey = key == Key_LCTRL || key == Key_RCTRL ||
+                          key == Key_LALT || key == Key_RALT ||
+                          key == Key_LSHIFT || key == Key_RSHIFT ||
+                          key == Key_LGUI || key == Key_RGUI;
+    if (isModKey) return;                       // wait for the real key
+    if (key == Key_Escape) {
+        m_capturing = false;
+        if (m_kernel) m_kernel->invalidate();
+        return;
+    }
+    if (key == Key_Backspace || key == Key_Delete) {
+        m_key = Key_None; m_mods = Mod_None; m_capturing = false;
+        if (m_onChanged) m_onChanged({});
+        announceChange();
+        if (m_kernel) m_kernel->invalidate();
+        return;
+    }
+    m_key = key;
+    m_mods = mods & (Mod_Ctrl | Mod_Alt | Mod_Shift | Mod_Super);
+    // Strip the key itself when it is also a modifier (never is, but safe).
+    m_capturing = false;
+    if (m_onChanged) m_onChanged(value());
+    announceChange();
+    if (m_kernel) m_kernel->invalidate();
+}
+
+void Keybind::onDraw(Rasterizer& r) const {
+    if (!m_style.isVisible) return;
+    const Rect b = bounds();
+    const bool focused = isFocused() || m_capturing;
+    r.drawRoundedRect(b, m_bgColor, m_radius);
+    r.drawRectBorder(b, focused ? m_borderColor : ogui::palette().border,
+                     1.0f, m_radius);
+    const Font* f = r.resolveFont(m_fontFam, m_fontSize);
+    if (!f) return;
+    const std::string txt = m_capturing ? "…" : value();
+    const Color col = m_capturing ? m_borderColor
+                      : (txt.empty() ? ogui::palette().dim : m_textColor);
+    r.drawText(txt.empty() ? m_placeholder.c_str() : txt.c_str(),
+               b.x + b.w * 0.5f, b.y + b.h * 0.5f, m_fontSize, m_fontFam.c_str(),
+               col, Align::Center, VertAlign::Middle);
 }
 
 } // namespace ogui

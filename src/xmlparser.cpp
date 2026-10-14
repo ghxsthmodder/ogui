@@ -1168,6 +1168,35 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
             }
             pi->setOptions(opts);
         }
+    } else if (auto* sb = dynamic_cast<StatusBar*>(w.get())) {
+        if (const std::string* v = get("text")) sb->setLeft(*v);
+        if (const std::string* v = get("left")) sb->setLeft(*v);
+        if (const std::string* v = get("center")) sb->setCenter(*v);
+        if (const std::string* v = get("right")) sb->setRight(*v);
+        if (const std::string* v = get("color")) sb->setTextColor(colorOf(*v));
+        if (const std::string* v = get("dimcolor")) sb->setDimColor(colorOf(*v));
+        if (const std::string* v = get("background")) sb->setBgColor(colorOf(*v));
+        if (const std::string* v = get("size")) { int fs = 12; toInt(*v, fs); sb->setFontSize(fs); }
+    } else if (auto* bc = dynamic_cast<Breadcrumb*>(w.get())) {
+        if (const std::string* v = get("path")) bc->setPath(*v);
+        if (const std::string* v = get("separator")) bc->setSeparator(*v);
+        if (const std::string* v = get("current")) { int i = 0; toInt(*v, i); bc->setCurrent(i); }
+        if (const std::string* v = get("color")) bc->setTextColor(colorOf(*v));
+        if (const std::string* v = get("dimcolor")) bc->setDimColor(colorOf(*v));
+        if (const std::string* v = get("accent")) bc->setAccentColor(colorOf(*v));
+        if (const std::string* v = get("size")) { int fs = 13; toInt(*v, fs); bc->setFontSize(fs); }
+    } else if (auto* cr = dynamic_cast<CrumbItem*>(w.get())) {
+        if (const std::string* v = get("label")) cr->setLabel(*v);
+        else if (const std::string* v = get("text")) cr->setLabel(*v);
+    } else if (auto* kb = dynamic_cast<Keybind*>(w.get())) {
+        if (const std::string* v = get("value")) kb->setValue(*v);
+        if (const std::string* v = get("placeholder")) kb->setPlaceholder(*v);
+        if (const std::string* v = get("color")) kb->setTextColor(colorOf(*v));
+        if (const std::string* v = get("background")) kb->setBgColor(colorOf(*v));
+        if (const std::string* v = get("bordercolor")) kb->setBorderColor(colorOf(*v));
+        else if (const std::string* v = get("border")) kb->setBorderColor(colorOf(*v));
+        if (const std::string* v = get("radius")) { float rr = 4.0f; toFloat(*v, rr); kb->setRadius(rr); }
+        if (const std::string* v = get("size")) { int fs = 13; toInt(*v, fs); kb->setFontSize(fs); }
     } else if (auto* tb = dynamic_cast<Table*>(w.get())) {
         if (const std::string* v = get("rowheight")) {
             float rh = 22.0f;
