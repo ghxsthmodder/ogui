@@ -213,6 +213,7 @@ public:
 
     // ---- debug ----
     void addLog(const std::string& msg);
+    void clearLogs() { m_logs.clear(); }
     const std::vector<std::string>& logs() const { return m_logs; }
 
 private:

@@ -1173,6 +1173,54 @@ private:
 };
 
 // ------------------------------------------------------------------
+// Console: read-only log view mirroring the Kernel::logs() stream.
+// Newest lines sit at the top; the wheel scrolls back through history
+// (capped by `maxLines`). Each line is drawn in a level colour when it
+// starts with a recognised tag ([info]/[warn]/[error]/[script:]).
+// ------------------------------------------------------------------
+class Console : public Widget {
+public:
+    Console();
+    virtual ~Console() override;
+
+    void setMaxLines(int n) { m_maxLines = n < 1 ? 1 : n; trim(); }
+    void setRowHeight(float h) { if (h > 0.0f) m_rowH = h; }
+    void setFontFamily(const std::string& f) { m_fontFam = f; }
+    void setFontSize(int s) { m_fontSize = s; }
+    void setBgColor(const Color& c) { m_bg = c; }
+    void setTextColor(const Color& c) { m_text = c; }
+    void setBorderColor(const Color& c) { m_border = c; }
+    void setBorderWidth(float w) { m_borderWidth = w; }
+
+    int lineCount() const { const_cast<Console*>(this)->pull(); return static_cast<int>(m_lines.size()); }
+    std::string line(int i) const;   // 0 = newest
+    void clear();
+
+    virtual void onPointerScroll(float dx, float dy) override;
+    virtual void onDraw(Rasterizer& r) const override;
+    virtual bool wantsScroll() const override { return true; }
+
+private:
+    struct Line { std::string text; Color col; };
+    void pull() const;               // mirror new kernel log entries
+    void trim() const;
+    void clampScroll() const;
+    float viewH() const;
+
+    mutable std::vector<Line> m_lines;   // newest first
+    mutable size_t m_seen = 0;           // kernel log entries already pulled
+    int m_maxLines = 200;
+    float m_rowH = 18.0f;
+    mutable float m_scroll = 0.0f;       // px of history scrolled past the top
+    std::string m_fontFam = "sans";
+    int m_fontSize = 12;
+    Color m_bg{ogui::palette().surfaceLo};
+    Color m_text{ogui::palette().text};
+    Color m_border{ogui::palette().border};
+    float m_borderWidth = 1.0f;
+};
+
+// ------------------------------------------------------------------
 // ListBox: scrollable list of rows with single selection. Items are
 // <item> children (label=/text= attrs); click, wheel and Up/Down/Home/End
 // move the selection and fire setOnChanged.

@@ -239,6 +239,7 @@ registrations) out of the screen and into a shared document:
 | Element | Typed attributes | Children |
 |---|---|---|
 | `listbox` | `rowHeight`, `selected`, `highlight` | `item` (`ListItem`) |
+| `console` | read-only log view mirroring `Kernel::logs()` (newest first, wheel scrolls history, error/script lines tinted): `rowHeight`, `maxLines` (default 200), `color`/`background`/`borderColor` | — |
 | `item` | `label`/`text`, `value` | — |
 | `table` | `rowHeight`, `headerHeight`, `selected`, `sortable`, `headerBackground` | `th`, `tr` |
 | `th` | `label`, `width`, `resizable`, `editable`, `scrollingText` (`automatic`/`onmouseenter`) | — |
@@ -340,7 +341,7 @@ API table `ogui` (all calls are safe on unknown ids):
 | `ogui.click(id)` | fire the widget's C++ binding/handler |
 | `ogui.time()` | seconds since kernel start |
 | `ogui.toast(msg[, kind])` | `kind`: `"info"` (default) / `"warn"` / `"error"` |
-| `ogui.log(msg)` | push to `Kernel::addLog` |
+| `ogui.log(msg)` | push to `Kernel::addLog` (shown by `<console>` widgets) |
 | `ogui.mouse()` | last pointer position → `x, y` |
 | `ogui.mouseDown([btn])` | `btn`: `0/1/2` or `"left"/"right"/"middle"`; no arg = any button |
 | `ogui.key(name\|code)` | key down; `"a".."z"`, `"0".."9"`, `"space"`, `"enter"`, `"escape"`, `"tab"`, `"backspace"`, `"delete"`, `"insert"`, `"home"`, `"end"`, `"pageup"`, `"pagedown"`, `"left/right/up/down"`, `"f1".."f12"`, `"lshift/rshift/lctrl/rctrl/lalt/ralt/lgui/rgui"` — or the raw `KeyCode` number |

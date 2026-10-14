@@ -261,6 +261,7 @@ uint32_t Kernel::currentMods() const {
 
 void Kernel::addLog(const std::string& msg) {
     m_logs.insert(m_logs.begin(), msg);
+    invalidate();
 }
 
 void Kernel::bind(const std::string& name, std::function<void()> fn) {

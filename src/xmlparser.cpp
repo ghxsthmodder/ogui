@@ -1096,6 +1096,21 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         if (const std::string* v = get("label")) opt->setLabel(*v);
         else if (const std::string* v = get("text")) opt->setLabel(*v);
         if (const std::string* v = get("value")) opt->setValue(*v);
+    } else if (auto* cs = dynamic_cast<Console*>(w.get())) {
+        if (const std::string* v = get("rowheight")) {
+            float rh = 18.0f;
+            toFloat(*v, rh);
+            cs->setRowHeight(rh);
+        }
+        if (const std::string* v = get("maxlines")) {
+            int n = 200;
+            toInt(*v, n);
+            cs->setMaxLines(n);
+        }
+        if (const std::string* v = get("color")) cs->setTextColor(colorOf(*v));
+        if (const std::string* v = get("background")) cs->setBgColor(colorOf(*v));
+        if (const std::string* v = get("bordercolor")) cs->setBorderColor(colorOf(*v));
+        if (hasStyle) { cs->setFontFamily(st.fontFamily); cs->setFontSize(st.fontSize); }
     } else if (auto* lb = dynamic_cast<ListBox*>(w.get())) {
         if (const std::string* v = get("rowheight")) {
             float rh = 24.0f;

@@ -384,6 +384,7 @@ std::map<std::string, WidgetFactory>& widgetRegistry() {
         reg["toggle"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<ToggleSwitch>(); };
         reg["textarea"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<TextArea>(); };
         reg["listbox"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<ListBox>(); };
+        reg["console"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Console>(); };
         reg["item"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<ListItem>(); };
         reg["tree"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<TreeView>(); };
         reg["table"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Table>(); };

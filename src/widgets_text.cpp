@@ -804,4 +804,100 @@ void SearchInput::onDraw(Rasterizer& r) const {
     }
 }
 
+
+// ------------------------------------------------------------------
+// Console
+// ------------------------------------------------------------------
+Console::Console() = default;
+Console::~Console() = default;
+
+namespace {
+// Level tint from a leading tag: "[warn] ...", "script: ...", "... error".
+Color logLineColor(const std::string& s, const Color& base) {
+    auto has = [&](const char* t) { return s.rfind(t, 0) == 0; };
+    if (has("script:") || s.rfind("[warn]", 0) == 0 || s.rfind("[error]", 0) == 0 ||
+        s.find("error") != std::string::npos)
+        return palette().danger;
+    if (s.rfind("[info]", 0) == 0) return palette().info;
+    return base;
+}
+} // namespace
+
+void Console::pull() const {
+    Kernel* k = kernel();
+    if (!k) return;
+    const std::vector<std::string>& logs = k->logs();
+    if (logs.size() == m_seen) return;
+    if (logs.size() < m_seen) { m_seen = 0; m_lines.clear(); }  // history reset
+    // Kernel logs prepend (newest first); mirror the new head entries and
+    // keep the whole view newest-first.
+    const size_t fresh = logs.size() - m_seen;
+    std::vector<Line> out;
+    out.reserve(fresh + m_lines.size());
+    for (size_t i = 0; i < fresh; ++i)
+        out.push_back(Line{logs[i], logLineColor(logs[i], m_text)});
+    out.insert(out.end(), m_lines.begin(), m_lines.end());
+    m_lines = std::move(out);
+    m_seen = logs.size();
+    trim();
+}
+
+void Console::trim() const {
+    if (static_cast<int>(m_lines.size()) > m_maxLines)
+        m_lines.resize(static_cast<size_t>(m_maxLines));
+}
+
+std::string Console::line(int i) const {
+    pull();
+    if (i < 0 || i >= static_cast<int>(m_lines.size())) return std::string();
+    return m_lines[static_cast<size_t>(i)].text;
+}
+
+void Console::clear() {
+    m_lines.clear();
+    m_seen = 0;
+    m_scroll = 0.0f;
+    if (Kernel* k = kernel()) { k->clearLogs(); k->invalidate(); }
+}
+
+float Console::viewH() const {
+    const Rect b = bounds();
+    return std::max(b.h - 4.0f, 0.0f);
+}
+
+void Console::clampScroll() const {
+    const float content = static_cast<float>(m_lines.size()) * m_rowH;
+    const float max = content - viewH();
+    if (m_scroll > max) m_scroll = max > 0.0f ? max : 0.0f;
+    if (m_scroll < 0.0f) m_scroll = 0.0f;
+}
+
+void Console::onPointerScroll(float, float dy) {
+    pull();
+    m_scroll -= dy * m_rowH * 3.0f;   // one notch = three lines
+    clampScroll();
+}
+
+void Console::onDraw(Rasterizer& r) const {
+    if (!m_style.isVisible) return;
+    pull();
+    Rect b = bounds();
+    if (m_bg.a > 0) r.drawRect(b, m_bg);
+    if (m_borderWidth > 0.0f) r.drawRectBorder(b, m_border, m_borderWidth, 0.0f);
+
+    const float x = b.x + 4.0f;
+    float y = b.y + 2.0f - m_scroll;
+    const size_t first = static_cast<size_t>(m_scroll / m_rowH);
+    const size_t n = m_lines.size();
+    for (size_t i = first; i < n; ++i) {
+        if (y > b.y + b.h) break;
+        if (y + m_rowH > b.y)
+            r.drawText(m_lines[i].text.c_str(), x, y + m_rowH * 0.5f,
+                       m_fontSize, m_fontFam, m_lines[i].col,
+                       Align::Left, VertAlign::Middle);
+        y += m_rowH;
+    }
+    clampScroll();
+}
+
 } // namespace ogui

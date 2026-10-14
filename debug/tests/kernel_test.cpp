@@ -2556,6 +2556,56 @@ static void testSizeLimits() {
     CHECK(std::fabs(r3->bounds().w - 200.0f) < 0.01f);
 }
 
+static void testConsoleWidget() {
+    Kernel k;
+    k.init();
+    XmlParser p;
+    auto res = p.parse(R"XML(<screen id="s">
+  <console id="log" x="10" y="10" width="400" height="100" maxlines="3"/>
+</screen>)XML");
+    assert(res.root);
+    auto s = std::make_shared<Screen>("s");
+    s->widgets.push_back(res.root);
+    s->width = 800;
+    s->height = 600;
+    k.pushScreen(s);
+
+    InputState st = makeInput();
+    k.frame(st);
+    auto* cs = dynamic_cast<Console*>(k.findWidget("log"));
+    CHECK(cs != nullptr);
+    if (!cs) return;
+    CHECK(cs->lineCount() == 0);
+
+    k.addLog("first");
+    k.addLog("second");
+    k.frame(st);
+    CHECK(cs->lineCount() == 2);
+    CHECK(cs->line(0) == "second");   // newest first
+    CHECK(cs->line(1) == "first");
+
+    // maxLines caps the view to the newest entries.
+    k.addLog("third");
+    k.addLog("fourth");
+    k.addLog("fifth");
+    k.frame(st);
+    CHECK(cs->lineCount() == 3);
+    CHECK(cs->line(0) == "fifth");
+
+    // Wheel scrolls history; drawing stays clipped (no crash, no change
+    // to the mirrored content).
+    st.mouseX = 100.0f; st.mouseY = 50.0f;
+    st.scrollY = 1.0f; k.frame(st);
+    st.scrollY = 0.0f; k.frame(st);
+    CHECK(cs->lineCount() == 3);
+
+    // Clear drops the mirrored lines and the kernel history.
+    cs->clear();
+    k.frame(st);
+    CHECK(cs->lineCount() == 0);
+    CHECK(k.logs().empty());
+}
+
 static void testTabsScrolling() {
     Kernel k;
     k.init();
@@ -2656,6 +2706,7 @@ int main() {
     testRelativeGeometry();
     testSizeLimits();
     testTabsScrolling();
+    testConsoleWidget();
     testHost();
 
     if (g_failures) {
