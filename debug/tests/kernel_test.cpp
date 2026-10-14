@@ -2669,6 +2669,143 @@ static void testTabsScrolling() {
     CHECK(tabs->active() == 4);
 }
 
+static void testVisualStates() {
+    Kernel k;
+    k.init();
+    XmlParser p;
+    auto res = p.parse(R"XML(<screen id="s">
+  <button id="b" x="10" y="10" width="100" height="30"
+          background="#101010" color="#eeeeee" radius="2"
+          hover:background="#202020" hover:radius="8"
+          pressed:background="#303030" disabled:background="#050505"/>
+  <checkbox id="c" x="10" y="60" width="120" height="20" checked="true"
+            color="#aaaaaa" checked:color="#ff0000"/>
+  <textinput id="t" x="10" y="90" width="100" height="20"
+             background="#111111" border="#333333" focus:border="#00ff00"/>
+</screen>)XML");
+    assert(res.root);
+    auto s = std::make_shared<Screen>("s");
+    s->widgets.push_back(res.root);
+    s->width = 800;
+    s->height = 600;
+    k.pushScreen(s);
+    InputState st = makeInput();
+    st.mouseX = 700.0f;
+    st.mouseY = 700.0f;
+    k.frame(st);
+
+    auto* b = dynamic_cast<Button*>(k.findWidget("b"));
+    auto* c = dynamic_cast<Checkbox*>(k.findWidget("c"));
+    auto* t = dynamic_cast<TextInput*>(k.findWidget("t"));
+    CHECK(b && c && t);
+
+    // Pointer away: the plain (normal) values apply.
+    CHECK(b->visualColorNow("background")->r == 0x10);
+    CHECK(*b->visualFloatNow("radius") == 2.0f);
+
+    // Hover swaps the color and the float override in.
+    st.mouseX = 50.0f;
+    st.mouseY = 20.0f;
+    k.frame(st);
+    k.frame(st);
+    CHECK(b->visualColorNow("background")->r == 0x20);
+    CHECK(*b->visualFloatNow("radius") == 8.0f);
+
+    // Pressing (still over) takes the pressed overlay, priority over hover.
+    pressAt(k, st, 50.0f, 20.0f);
+    st.mouseDown[0] = true;   // keep the button held for a second frame
+    k.frame(st);
+    CHECK(b->visualColorNow("background")->r == 0x30);
+    releaseAt(k, st);
+    k.frame(st);
+    CHECK(b->visualColorNow("background")->r == 0x20);   // back to hover
+
+    // Disabled wins over every pointer state.
+    b->setEnabled(false);
+    k.frame(st);
+    CHECK(b->visualColorNow("background")->r == 0x05);
+    b->setEnabled(true);
+    k.frame(st);
+    k.frame(st);   // hover is recomputed at the end of each frame
+    CHECK(b->visualColorNow("background")->r == 0x20);
+
+    // Pointer leaves: base again.
+    st.mouseX = 700.0f;
+    st.mouseY = 700.0f;
+    k.frame(st);
+    k.frame(st);
+    CHECK(b->visualColorNow("background")->r == 0x10);
+
+    // Checked state is polled from the widget itself.
+    CHECK(c->visualColorNow("color")->r == 0xff);
+    c->setChecked(false);
+    k.frame(st);
+    CHECK(c->visualColorNow("color")->r == 0xaa);
+
+    // Focusing the text field applies the focus:border overlay.
+    pressAt(k, st, 50.0f, 95.0f);
+    releaseAt(k, st);
+    k.frame(st);
+    CHECK(k.focusedWidget() == t);
+    CHECK(t->visualColorNow("border")->g == 0xff);
+
+    // Overlays without a plain base attribute are dropped with a warning.
+    auto res2 = p.parse(R"XML(<screen id="s2">
+  <button id="x" hover:background="#202020"/>
+</screen>)XML");
+    CHECK(!res2.warnings.empty());
+    auto s2 = std::make_shared<Screen>("s2");
+    if (res2.root) s2->widgets.push_back(res2.root);
+    Kernel k2;
+    k2.init();
+    k2.pushScreen(s2);
+    InputState st2 = makeInput();
+    k2.frame(st2);
+    auto* x = dynamic_cast<Button*>(k2.findWidget("x"));
+    CHECK(x && x->visualColorNow("background") == nullptr);
+}
+
+static void testVisualTransitions() {
+    Kernel k;
+    k.init();
+    XmlParser p;
+    auto res = p.parse(R"XML(<screen id="s">
+  <button id="b" x="10" y="10" width="100" height="30"
+          background="#000000" hover:background="#008000" transition="0.2"/>
+</screen>)XML");
+    assert(res.root);
+    auto s = std::make_shared<Screen>("s");
+    s->widgets.push_back(res.root);
+    s->width = 800;
+    s->height = 600;
+    k.pushScreen(s);
+    InputState st = makeInput();
+    st.time = 0.0f;
+    st.mouseX = 700.0f;
+    st.mouseY = 700.0f;
+    k.frame(st);
+    auto* b = dynamic_cast<Button*>(k.findWidget("b"));
+    CHECK(b);
+    CHECK(b->visualColorNow("background")->g == 0x00);
+
+    // Hover at t=0.1 (recorded at the end of that frame); at t=0.2 the
+    // transition starts and its first dt=0.1 covers half of the 0.2s span.
+    st.mouseX = 50.0f;
+    st.mouseY = 20.0f;
+    st.time = 0.1f;
+    k.frame(st);
+    st.time = 0.2f;
+    k.frame(st);
+    CHECK(b->visualColorNow("background")->g == 0x40);
+    CHECK(b->isAnimating());
+
+    // Another 0.2s later it settles on the target.
+    st.time = 0.4f;
+    k.frame(st);
+    CHECK(b->visualColorNow("background")->g == 0x80);
+    CHECK(!b->isAnimating());
+}
+
 int main() {
     testDrawList();
     testHitTestAndFocus();
@@ -2707,6 +2844,8 @@ int main() {
     testSizeLimits();
     testTabsScrolling();
     testConsoleWidget();
+    testVisualStates();
+    testVisualTransitions();
     testHost();
 
     if (g_failures) {

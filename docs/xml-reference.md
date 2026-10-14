@@ -142,6 +142,41 @@ are clamped at parse time too.
 | `gradient` | fill gradient; `gradientDirection="horizontal"` runs the ramp left→right (radius ignored) |
 | `minWidth` / `minHeight` / `maxWidth` / `maxHeight` | pixel clamp on the resolved size, re-applied on every layout pass (see Geometry) |
 | `weight` | flex share inside `column`/`row`: weighted children split the leftover height/width proportionally; `0` keeps the authored size |
+| `enabled` / `disabled` | `false`/`true` makes the widget inert: no hover/press/focus, skipped by hit-testing (its whole subtree for input) |
+| `hover:background`, `pressed:color`, … | per-state visual overlays (see Visual states & transitions) |
+| `transition` | seconds to blend visual-state changes |
+
+## Visual states & transitions
+
+Any widget can declare per-state values with `state:attribute="..."` — no
+Lua needed. The plain attribute stays the `normal` base, so an overlay
+always has something to fall back to (a state overlay on an attribute that
+has no plain value is dropped with a parse warning).
+
+Supported states: `hover`, `pressed`, `focus`, `checked`, `selected`,
+`disabled` (plus `normal:` to override the base per state). Supported
+attributes: `background`, `color`, `border`, `bordercolor` (colours) and
+`borderwidth`, `radius` (floats). States may also be declared inside named
+`<style>` definitions.
+
+```xml
+<button text="Ok" background="#223" color="#eee" radius="4"
+        hover:background="#335" hover:radius="8"
+        pressed:background="#112" disabled:background="#111"/>
+```
+
+The Kernel recomputes each widget's active states every frame; when several
+are active the highest-priority registered overlay wins:
+`disabled > pressed > hover > selected > checked > focus`.
+`checked` comes from Checkbox/RadioButton/ToggleSwitch, `selected` from
+ComboBox/ListBox/Table/TreeView (selection set).
+
+`transition="0.2"` (seconds) blends colour channels and float values
+linearly between states instead of snapping; interruption re-targets from
+the current mid-flight values.
+
+`enabled`/`disabled` flip interactivity; Lua mirrors it with
+`ogui.set(id, "enabled", false)`.
 
 ## Named styles
 

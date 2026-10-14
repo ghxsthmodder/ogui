@@ -193,6 +193,8 @@ int l_get(lua_State* L) {
         lua_pushstring(L, k->getText(id).c_str());
     } else if (!std::strcmp(attr, "visible")) {
         lua_pushboolean(L, w->isVisible());
+    } else if (!std::strcmp(attr, "enabled")) {
+        lua_pushboolean(L, w->isEnabled());
     } else if (!std::strcmp(attr, "checked")) {
         if (checkedGet(w, num)) lua_pushboolean(L, num != 0.0);
         else lua_pushnil(L);
@@ -228,6 +230,9 @@ int l_set(lua_State* L) {
         if (ok) k->invalidate();
     } else if (!std::strcmp(attr, "visible")) {
         w->setVisible(lua_toboolean(L, 3) != 0);
+        ok = true;
+    } else if (!std::strcmp(attr, "enabled")) {
+        w->setEnabled(lua_toboolean(L, 3) != 0);
         ok = true;
     } else if (!std::strcmp(attr, "checked")) {
         ok = checkedSet(w, lua_toboolean(L, 3) != 0);

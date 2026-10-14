@@ -54,6 +54,9 @@ public:
     void setFontFamily(const std::string& family) { m_fontFamily = family; }
     void setFontSize(int size) { m_fontSize = size; }
     void setTextColor(const Color& col) { m_textColor = col; }
+    void applyVisualColor(const std::string& prop, const Color& v) override {
+        if (prop == "color") setTextColor(v);
+    }
     const std::string& fontFamily() const { return m_fontFamily; }
     int fontSize() const { return m_fontSize; }
     const Color& textColor() const { return m_textColor; }
@@ -99,6 +102,15 @@ public:
     void setBorderColor(const Color& col) { m_borderColor = col; }
     void setBorderWidth(float w) { m_borderWidth = w; }
     void setRadius(float r) { m_radius = r; }
+    void applyVisualColor(const std::string& prop, const Color& v) override {
+        if (prop == "background") setBgColor(v);
+        else if (prop == "color") setTextColor(v);
+        else if (prop == "border" || prop == "bordercolor") setBorderColor(v);
+    }
+    void applyVisualFloat(const std::string& prop, float v) override {
+        if (prop == "borderwidth") setBorderWidth(v);
+        else if (prop == "radius") setRadius(v);
+    }
     // Horizontal text placement inside the button (default center) and the
     // inset used by the left/right alignments.
     void setHAlign(Align a) { m_textAlign = a; }
@@ -165,9 +177,16 @@ public:
     void setBorderColor(const Color& col) { m_borderColor = col; }
     void setBorderWidth(float w) { m_borderWidth = w; }
     void setRadius(float r) { m_radius = r; }
+    void applyVisualColor(const std::string& prop, const Color& v) override {
+        if (prop == "background") setBgColor(v);
+        else if (prop == "border" || prop == "bordercolor") setBorderColor(v);
+    }
+    void applyVisualFloat(const std::string& prop, float v) override {
+        if (prop == "borderwidth") setBorderWidth(v);
+        else if (prop == "radius") setRadius(v);
+    }
 
     virtual void onDraw(Rasterizer& r) const override;
-
 protected:
     Color m_bgColor{ogui::palette().window};
     Color m_borderColor{ogui::palette().accent};
@@ -309,6 +328,15 @@ public:
     void setBorderColor(const Color& col) { m_borderColor = col; }
     void setBorderWidth(float w) { m_borderWidth = w; }
     void setRadius(float r) { m_radius = r; }
+    void applyVisualColor(const std::string& prop, const Color& v) override {
+        if (prop == "background") setBgColor(v);
+        else if (prop == "color") setFgColor(v);
+        else if (prop == "border" || prop == "bordercolor") setBorderColor(v);
+    }
+    void applyVisualFloat(const std::string& prop, float v) override {
+        if (prop == "borderwidth") setBorderWidth(v);
+        else if (prop == "radius") setRadius(v);
+    }
     void setFontSize(int s) { m_fontSize = s; }
 
     virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
@@ -478,6 +506,11 @@ public:
     void setTextColor(const Color& col) { m_textColor = col; }
     void setBoxColor(const Color& col) { m_boxColor = col; }
     void setCheckColor(const Color& col) { m_checkColor = col; }
+    bool isCheckedVisual() const override { return m_checked; }
+    void applyVisualColor(const std::string& prop, const Color& v) override {
+        if (prop == "color") setTextColor(v);
+        else if (prop == "background") setBoxColor(v);
+    }
     const std::string& fontFamily() const { return m_fontFamily; }
     int fontSize() const { return m_fontSize; }
 
@@ -860,7 +893,9 @@ public:
     virtual void onKeyDown(KeyCode key, uint32_t mods) override;
     virtual void onDraw(Rasterizer& r) const override;
     virtual void onPopupDismissed() override { if (m_onDismiss) m_onDismiss(); }
-    virtual bool isAnimating() const override { return m_fade.running(); }
+    virtual bool isAnimating() const override {
+        return m_fade.running() || Widget::isAnimating();
+    }
 
 private:
     int rowAt(float localY) const;
@@ -919,6 +954,12 @@ public:
     void setBgColor(const Color& c) { m_bg = c; }
     void setBorderColor(const Color& c) { m_border = c; }
     void setTextColor(const Color& c) { m_text = c; }
+    bool isSelectedVisual() const override { return m_selected >= 0; }
+    void applyVisualColor(const std::string& prop, const Color& v) override {
+        if (prop == "background") setBgColor(v);
+        else if (prop == "color") setTextColor(v);
+        else if (prop == "border" || prop == "bordercolor") setBorderColor(v);
+    }
     void setArrowColor(const Color& c) { m_arrow = c; }
     void setHighlightColor(const Color& c) { m_highlight = c; }
     void setHighlightTextColor(const Color& c) { m_highlightText = c; }
@@ -1076,6 +1117,11 @@ public:
 
     void setTextColor(const Color& c) { m_textColor = c; }
     Color textColor() const { return m_textColor; }
+    bool isCheckedVisual() const override { return m_checked; }
+    void applyVisualColor(const std::string& prop, const Color& v) override {
+        if (prop == "color") setTextColor(v);
+        else if (prop == "background") setCircleColor(v);
+    }
     void setFontFamily(const std::string& family) { m_fontFamily = family; }
     void setFontSize(int size) { m_fontSize = size; }
     void setDotColor(const Color& c) { m_dotColor = c; }
@@ -1247,6 +1293,12 @@ public:
     void setBorderColor(const Color& c) { m_border = c; }
     void setTextColor(const Color& c) { m_text = c; }
     void setHighlightColor(const Color& c) { m_highlight = c; }
+    bool isSelectedVisual() const override { return m_selected >= 0; }
+    void applyVisualColor(const std::string& prop, const Color& v) override {
+        if (prop == "background") setBgColor(v);
+        else if (prop == "color") setTextColor(v);
+        else if (prop == "border" || prop == "bordercolor") setBorderColor(v);
+    }
 
     virtual void layout(float parentWidth, float parentHeight) override;
     virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
@@ -1436,6 +1488,12 @@ public:
     void setBorderColor(const Color& c) { m_border = c; }
     void setTextColor(const Color& c) { m_text = c; }
     void setHighlightColor(const Color& c) { m_highlight = c; }
+    bool isSelectedVisual() const override { return m_selected >= 0; }
+    void applyVisualColor(const std::string& prop, const Color& v) override {
+        if (prop == "background") setBgColor(v);
+        else if (prop == "color") setTextColor(v);
+        else if (prop == "border" || prop == "bordercolor") setBorderColor(v);
+    }
 
     virtual void layout(float parentWidth, float parentHeight) override;
     virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
@@ -1593,6 +1651,12 @@ public:
     void setTextColor(const Color& c) { m_text = c; }
     void setHighlightColor(const Color& c) { m_highlight = c; }
     void setAccentColor(const Color& c) { m_accent = c; }
+    bool isSelectedVisual() const override { return m_selected >= 0; }
+    void applyVisualColor(const std::string& prop, const Color& v) override {
+        if (prop == "background") setBgColor(v);
+        else if (prop == "color") setTextColor(v);
+        else if (prop == "border" || prop == "bordercolor") setBorderColor(v);
+    }
     // File-tree presentation extras (all off by default so plain trees are
     // unchanged): folder/file icons, a per-node checkbox, and dotted guide
     // lines connecting each node to its parent.
@@ -1716,7 +1780,14 @@ public:
     virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
     virtual void onDraw(Rasterizer& r) const override;
     virtual void onTick(float dt) override;
-    virtual bool isAnimating() const override { return m_knobTween.running(); }
+    virtual bool isAnimating() const override {
+        return m_knobTween.running() || Widget::isAnimating();
+    }
+    bool isCheckedVisual() const override { return m_checked; }
+    void applyVisualColor(const std::string& prop, const Color& v) override {
+        if (prop == "background") m_bgColor = v;
+        else if (prop == "color") m_textColor = v;
+    }
 
     // Layout/spacing
     float m_gap = 6.0f;
@@ -1970,7 +2041,9 @@ public:
     virtual bool wantsScroll() const override { return true; }
     virtual void onDraw(Rasterizer& r) const override;
     virtual void onPopupDismissed() override { if (m_onDismiss) m_onDismiss(); }
-    virtual bool isAnimating() const override { return m_fade.running(); }
+    virtual bool isAnimating() const override {
+        return m_fade.running() || Widget::isAnimating();
+    }
 
 private:
     int rowAt(float localY) const;      // index into the visible rows

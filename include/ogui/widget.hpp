@@ -162,7 +162,7 @@ public:
     // True while this widget's appearance changes on its own (running
     // tween/marquee/spinner). The Kernel keeps the redraw dirty flag up while
     // any widget reports this; static screens then skip the rebuild.
-    virtual bool isAnimating() const { return m_boundsAnimating; }
+    virtual bool isAnimating() const { return m_boundsAnimating || m_transRunning; }
 
     // Tween this widget's bounds to `target` over `duration` seconds. The
     // base onTick() advances the animation; animateTo() snaps an in-flight
@@ -226,6 +226,44 @@ public:
     virtual void applyStyle(const Style& style);
     const Style& style() const { return m_style; }
 
+    // ---- visual state (#14) ----
+    // Declarative per-state overlays: `hover:background="..."`,
+    // `pressed:color`, `focus:border`, `disabled:*`, `checked:*`,
+    // `selected:*`. The plain attribute value is the "normal" base; every
+    // frame the Kernel calls refreshVisualState(), which computes the active
+    // state bits and applies the highest-priority registered override
+    // (disabled > pressed > hover > selected > checked > focus) through the
+    // applyVisual* hooks. Only widgets that registered overrides react.
+    enum VisualStateBit : uint8_t {
+        VS_Focused = 1, VS_Checked = 2, VS_Selected = 4,
+        VS_Hovered = 8, VS_Pressed = 16, VS_Disabled = 32,
+    };
+
+    void setEnabled(bool e);
+    bool isEnabled() const { return m_enabled; }
+
+    // `state` is "normal" (base), "hover", "pressed", "focus", "disabled",
+    // "checked" or "selected". Register base before overrides.
+    void addVisualOverride(const std::string& prop, const char* state,
+                           const Color& v);
+    void addVisualOverride(const std::string& prop, const char* state,
+                           float v);
+
+    // `transition="0.2"`: seconds to blend between state values (#15).
+    void setVisualTransition(float seconds) { m_transDur = seconds < 0 ? 0 : seconds; }
+
+    uint8_t visualStateBits() const;
+    void refreshVisualState();
+    const Color* visualColorNow(const std::string& prop) const;
+    const float* visualFloatNow(const std::string& prop) const;
+
+    // Widgets report their own toggle/selection state for overlays.
+    virtual bool isCheckedVisual() const { return false; }
+    virtual bool isSelectedVisual() const { return false; }
+    // Push a resolved value into the widget's flat draw fields.
+    virtual void applyVisualColor(const std::string& prop, const Color& v);
+    virtual void applyVisualFloat(const std::string& prop, float v);
+
     // ---- visibility / tooltip ----
     // A widget is only shown (and only takes input) when it AND all of its
     // ancestors are visible; hiding e.g. a <tab> hides its whole page.
@@ -275,6 +313,31 @@ protected:
     Rect m_boundsStart{};
     Rect m_boundsTarget{};
     Tween m_boundsTween{};
+
+    // Visual-state overlays (see refreshVisualState).
+    struct VisualColorProp {
+        Color normal{};
+        std::map<std::string, Color> byState;
+        Color applied{};
+        Color from{};
+    };
+    struct VisualFloatProp {
+        float normal = 0.0f;
+        std::map<std::string, float> byState;
+        float applied = 0.0f;
+        float from = 0.0f;
+    };
+    // Registered override of the highest-priority ACTIVE state, else base.
+    Color visualColorTarget(const std::string& prop) const;
+    float visualFloatTarget(const std::string& prop) const;
+    void tickVisualTransition(float dt);
+    bool m_enabled = true;
+    uint8_t m_visualBits = 0;
+    std::map<std::string, VisualColorProp> m_visualColors;
+    std::map<std::string, VisualFloatProp> m_visualFloats;
+    float m_transDur = 0.0f;        // transition seconds (0 = snap)
+    float m_transLeft = 0.0f;
+    bool m_transRunning = false;
 };
 
 } // namespace ogui

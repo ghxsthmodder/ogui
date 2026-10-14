@@ -29,6 +29,7 @@ Widget* hitTestTree(const std::vector<Widget::Ptr>& roots, const Offset2D& p,
         const auto& w = *it;
         if (!w) continue;
         if (!w->isVisible()) continue;   // hidden widgets (and subtrees) don't take input
+        if (!w->isEnabled()) continue;   // disabled widgets (and subtrees) are inert
         Rect b = w->bounds();
         const float ax = ox + b.x;
         const float ay = oy + b.y;
@@ -227,6 +228,7 @@ void Kernel::advanceAnimations(float dt) {
     forEachWidget(screen->widgets, [&](const Widget::Ptr& w) {
         if (w) {
             w->setKernel(this);
+            w->refreshVisualState();
             if (dt > 0.0f) {
                 w->onTick(dt);
                 if (w->isAnimating()) m_dirty = true;
@@ -237,6 +239,7 @@ void Kernel::advanceAnimations(float dt) {
     // its open-in fade/slide runs on the same clock.
     if (m_popup) {
         m_popup->setKernel(this);
+        m_popup->refreshVisualState();
         if (dt > 0.0f) {
             m_popup->onTick(dt);
             if (m_popup->isAnimating()) m_dirty = true;

@@ -146,6 +146,7 @@ void Widget::layout(float parentWidth, float parentHeight) {
 }
 
 void Widget::onTick(float dt) {
+    tickVisualTransition(dt);
     if (!m_boundsAnimating) return;
     if (!m_boundsTween.running()) {
         m_boundsAnimating = false;
@@ -169,6 +170,147 @@ void Widget::animateTo(const Rect& target, float duration, TweenEase ease) {
     m_bounds = target;
     m_boundsAnimating = true;
 }
+
+// ---- visual state (#14/#15) --------------------------------------
+
+namespace {
+// Priority order: a later name only applies if no earlier active state
+// registered an override for the property.
+const char* const kVisualStates[] = {
+    "disabled", "pressed", "hover", "selected", "checked", "focus"};
+const uint8_t kVisualStateBits[] = {
+    Widget::VS_Disabled, Widget::VS_Pressed, Widget::VS_Hovered,
+    Widget::VS_Selected, Widget::VS_Checked, Widget::VS_Focused};
+
+float mixf(float a, float b, float t) { return a + (b - a) * t; }
+
+Color mixColor(const Color& a, const Color& b, float t) {
+    return Color{
+        static_cast<uint8_t>(mixf(a.r, b.r, t) + 0.5f),
+        static_cast<uint8_t>(mixf(a.g, b.g, t) + 0.5f),
+        static_cast<uint8_t>(mixf(a.b, b.b, t) + 0.5f),
+        static_cast<uint8_t>(mixf(a.a, b.a, t) + 0.5f)};
+}
+} // namespace
+
+void Widget::setEnabled(bool e) {
+    if (m_enabled == e) return;
+    m_enabled = e;
+    refreshVisualState();
+    if (m_kernel) m_kernel->invalidate();
+}
+
+void Widget::addVisualOverride(const std::string& prop, const char* state,
+                               const Color& v) {
+    auto& p = m_visualColors[prop];
+    if (std::string(state) == "normal") {
+        p.normal = v;
+        p.applied = v;
+        p.from = v;
+    } else {
+        p.byState[state] = v;
+    }
+}
+
+void Widget::addVisualOverride(const std::string& prop, const char* state,
+                               float v) {
+    auto& p = m_visualFloats[prop];
+    if (std::string(state) == "normal") {
+        p.normal = v;
+        p.applied = v;
+        p.from = v;
+    } else {
+        p.byState[state] = v;
+    }
+}
+
+uint8_t Widget::visualStateBits() const {
+    uint8_t b = 0;
+    if (!m_enabled) b |= VS_Disabled;
+    if (m_kernel) {
+        if (m_kernel->focusedWidget() == this) b |= VS_Focused;
+        if (m_kernel->hoveredWidget() == this) b |= VS_Hovered;
+        if (m_kernel->pressedWidget() == this) b |= VS_Pressed;
+    }
+    if (isCheckedVisual()) b |= VS_Checked;
+    if (isSelectedVisual()) b |= VS_Selected;
+    return b;
+}
+
+Color Widget::visualColorTarget(const std::string& prop) const {
+    auto it = m_visualColors.find(prop);
+    if (it == m_visualColors.end()) return Color{};
+    for (int i = 0; i < 6; ++i) {
+        if (!(m_visualBits & kVisualStateBits[i])) continue;
+        auto s = it->second.byState.find(kVisualStates[i]);
+        if (s != it->second.byState.end()) return s->second;
+    }
+    return it->second.normal;
+}
+
+float Widget::visualFloatTarget(const std::string& prop) const {
+    auto it = m_visualFloats.find(prop);
+    if (it == m_visualFloats.end()) return 0.0f;
+    for (int i = 0; i < 6; ++i) {
+        if (!(m_visualBits & kVisualStateBits[i])) continue;
+        auto s = it->second.byState.find(kVisualStates[i]);
+        if (s != it->second.byState.end()) return s->second;
+    }
+    return it->second.normal;
+}
+
+void Widget::refreshVisualState() {
+    if (m_visualColors.empty() && m_visualFloats.empty() && m_enabled) return;
+    const uint8_t bits = visualStateBits();
+    if (bits == m_visualBits) return;
+    m_visualBits = bits;
+    bool running = false;
+    for (auto& [prop, p] : m_visualColors) {
+        const Color to = visualColorTarget(prop);
+        if (to.r == p.applied.r && to.g == p.applied.g &&
+            to.b == p.applied.b && to.a == p.applied.a)
+            continue;
+        if (m_transDur > 0.0f) { p.from = p.applied; running = true; }
+        else { p.applied = to; applyVisualColor(prop, to); }
+    }
+    for (auto& [prop, p] : m_visualFloats) {
+        const float to = visualFloatTarget(prop);
+        if (to == p.applied) continue;
+        if (m_transDur > 0.0f) { p.from = p.applied; running = true; }
+        else { p.applied = to; applyVisualFloat(prop, to); }
+    }
+    if (running) { m_transRunning = true; m_transLeft = m_transDur; }
+    if (m_kernel) m_kernel->invalidate();
+}
+
+void Widget::tickVisualTransition(float dt) {
+    if (!m_transRunning) return;
+    m_transLeft -= dt;
+    float t = m_transDur > 0.0f ? 1.0f - m_transLeft / m_transDur : 1.0f;
+    if (t > 1.0f) t = 1.0f;
+    for (auto& [prop, p] : m_visualColors) {
+        p.applied = mixColor(p.from, visualColorTarget(prop), t);
+        applyVisualColor(prop, p.applied);
+    }
+    for (auto& [prop, p] : m_visualFloats) {
+        p.applied = mixf(p.from, visualFloatTarget(prop), t);
+        applyVisualFloat(prop, p.applied);
+    }
+    if (m_transLeft <= 0.0f) m_transRunning = false;
+}
+
+const Color* Widget::visualColorNow(const std::string& prop) const {
+    auto it = m_visualColors.find(prop);
+    return it == m_visualColors.end() ? nullptr : &it->second.applied;
+}
+
+const float* Widget::visualFloatNow(const std::string& prop) const {
+    auto it = m_visualFloats.find(prop);
+    return it == m_visualFloats.end() ? nullptr : &it->second.applied;
+}
+
+void Widget::applyVisualColor(const std::string&, const Color&) {}
+void Widget::applyVisualFloat(const std::string&, float) {}
 
 bool Widget::hitTest(const Offset2D& p) const {
     Rect b = bounds();

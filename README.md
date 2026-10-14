@@ -12,6 +12,9 @@ creates for you (`ogui::Host`, a built-in Win32/WGL window and event loop).
   named styles, authored in a text editor and hot-reloaded by re-parsing.
 * **Input dispatch** — hover, capture (drag), focus, key routing, modifiers,
   click bindings, hover tooltips.
+* **Visual states** — declarative `hover:`/`pressed:`/`focus:`/`checked:`/
+  `selected:`/`disabled:` overlays on colors, border width and radius, with
+  optional `transition="0.2"` blending — no script required.
 * **Text** — UTF-8 end to end: atlas glyphs, word wrap, caret + selection,
   horizontal scrolling of long lines, clipboard integration.
 * **Two renderers for one DrawList** — `GlBackend` (OpenGL 3.3 core, every
@@ -258,6 +261,9 @@ Conventional names that are not abbreviations stay as-is: `x`, `y`, `id`,
 | `visible` | `true/false` — an invisible widget (and its subtree) is skipped by drawing *and* input |
 | `style` | named style(s) applied to the element; a comma/space list stacks (`"a,b"`, later wins) |
 | `background` `color` `border` `borderColor` `borderWidth` `radius` | colors/metrics |
+| `enabled` / `disabled` | `false`/`true` — an inert widget takes no hover/press/focus and is skipped by hit-testing (subtree included) |
+| `hover:background` `pressed:color` `focus:border` `disabled:*` `checked:*` `selected:*` | per-state visual overlays; the plain attribute is the `normal` base, priority `disabled > pressed > hover > selected > checked > focus` (see `docs/xml-reference.md`) |
+| `transition` | seconds to blend visual-state changes (linear, interruptible) |
 | `shadow` | soft drop shadow: `blur` or `blur,dy` or `blur,dx,dy` (pixels) |
 | `shadowColor` | shadow color (default `#000000`), e.g. `shadowColor="#000000"` |
 | `gradient` | vertical background gradient end color: `background` stays the top color; `gradientDirection="horizontal"` ramps left→right instead |

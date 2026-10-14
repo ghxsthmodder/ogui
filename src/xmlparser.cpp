@@ -1244,6 +1244,74 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
     if (tag == "screen") {
         // nothing extra yet
     }
+
+    // ---- visual state overlays (#14/#15) ----
+    // `hover:background="#..."`, `pressed:color`, `focus:border`,
+    // `disabled:*`, `checked:*`, `selected:*` register per-state values for
+    // background/color/border/bordercolor (colors) and borderwidth/radius
+    // (floats). The plain attribute is the "normal" base and is required —
+    // without it the overlays would have nothing to return to.
+    if (const std::string* v = get("enabled")) w->setEnabled(toBool(*v));
+    if (const std::string* v = get("disabled")) w->setEnabled(!toBool(*v));
+    if (const std::string* v = get("transition")) {
+        float d = 0.0f;
+        if (toFloat(*v, d)) w->setVisualTransition(d);
+    }
+    {
+        static const char* const kStateNames[] = {
+            "normal", "hover", "pressed", "focus", "disabled",
+            "checked", "selected"};
+        static const char* const kColorProps[] = {
+            "background", "color", "border", "bordercolor"};
+        static const char* const kFloatProps[] = {"borderwidth", "radius"};
+        auto isIn = [](const char* const* list, size_t n,
+                       const std::string& s) {
+            for (size_t i = 0; i < n; ++i)
+                if (s == list[i]) return true;
+            return false;
+        };
+        std::map<std::string,
+                 std::vector<std::pair<std::string, std::string>>> patches;
+        for (const auto& [key, val] : attrs) {
+            const size_t colon = key.find(':');
+            if (colon == std::string::npos) continue;
+            const std::string st = key.substr(0, colon);
+            const std::string prop = key.substr(colon + 1);
+            const bool isColor = isIn(kColorProps, 4, prop);
+            const bool isFloat = !isColor && isIn(kFloatProps, 2, prop);
+            if (!isColor && !isFloat) continue;
+            if (!isIn(kStateNames, 7, st)) continue;
+            patches[prop].emplace_back(st, val);
+        }
+        for (const auto& [prop, list] : patches) {
+            const bool isColor = isIn(kColorProps, 4, prop);
+            const std::string* base = get(prop.c_str());
+            if (isColor) {
+                if (!base) {
+                    addWarning("state overlays on '" + prop +
+                               "' need a plain '" + prop + "' base value");
+                    continue;
+                }
+                w->addVisualOverride(prop, "normal", colorOf(*base));
+            } else {
+                float bv = 0.0f;
+                if (!base || !toFloat(*base, bv)) {
+                    addWarning("state overlays on '" + prop +
+                               "' need a plain '" + prop + "' base value");
+                    continue;
+                }
+                w->addVisualOverride(prop, "normal", bv);
+            }
+            for (const auto& [st, val] : list) {
+                if (isColor) {
+                    w->addVisualOverride(prop, st.c_str(), colorOf(val));
+                } else {
+                    float f = 0.0f;
+                    if (toFloat(val, f)) w->addVisualOverride(prop, st.c_str(), f);
+                }
+            }
+        }
+    }
 }
 
 void XmlParser::applyContent(const std::shared_ptr<Widget>& w, const std::string& raw) {

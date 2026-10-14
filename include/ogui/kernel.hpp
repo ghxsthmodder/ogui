@@ -187,6 +187,9 @@ public:
     Widget* findWidget(const std::string& id);
     Widget* focusedWidget() const { return m_focus; }
     Widget* hoveredWidget() const { return m_hovered; }
+    // Widget that currently holds the mouse press (null when nothing is
+    // pressed); drives the "pressed" visual state.
+    Widget* pressedWidget() const { return m_pressed; }
     // Drop cached pointers to a widget that is about to leave the tree
     // (script-driven ogui.remove). Call before the last shared_ptr dies.
     void forgetWidget(Widget* w) {
