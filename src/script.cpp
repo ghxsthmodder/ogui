@@ -112,6 +112,7 @@ bool geomSet(Widget* w, const char* attr, double v, Kernel* k) {
     w->setGeometrySpec(spec, Widget::GeomAbsolute, Widget::GeomAbsolute,
                        Widget::GeomAbsolute, Widget::GeomAbsolute);
     w->setBounds(b);
+    w->clampToBounds();
     k->invalidate();
     return true;
 }

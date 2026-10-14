@@ -716,6 +716,18 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         flush();
         if (bits) w->setAnchor(bits);
     }
+    // minwidth/maxwidth/minheight/maxheight (px) clamp the resolved size on
+    // every layout pass, so percent/fill/anchor widths keep a pixel floor
+    // or ceiling.
+    {
+        float minW = 0, minH = 0, maxW = 0, maxH = 0;
+        bool hasLimits = false;
+        if (const std::string* v = get("minwidth")) { toFloat(*v, minW); hasLimits = true; }
+        if (const std::string* v = get("minheight")) { toFloat(*v, minH); hasLimits = true; }
+        if (const std::string* v = get("maxwidth")) { toFloat(*v, maxW); hasLimits = true; }
+        if (const std::string* v = get("maxheight")) { toFloat(*v, maxH); hasLimits = true; }
+        if (hasLimits) w->setSizeLimits(minW, minH, maxW, maxH);
+    }
     // Seed the bounds with the numeric values; relative components are
     // corrected by the first layout pass.
     if (hasW || hasH) {
@@ -726,6 +738,7 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         Rect b = w->bounds();
         w->setBounds(Rect{hasX ? x : b.x, hasY ? y : b.y, b.w, b.h});
     }
+    w->clampToBounds();
 
     // ---- common style attrs (a single applyStyle: it replaces the style) ----
     Style st;

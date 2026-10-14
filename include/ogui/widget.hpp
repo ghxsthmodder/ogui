@@ -137,6 +137,15 @@ public:
     }
     uint8_t anchor() const { return m_anchor; }
 
+    // Size constraints (px; 0 = unconstrained). They clamp the resolved
+    // bounds on every layout pass, whatever unit x/y/w/h were authored in,
+    // so a percent or fill width can still keep a pixel floor or ceiling.
+    void setSizeLimits(float minW, float minH, float maxW, float maxH);
+    Rect sizeLimits() const { return Rect{m_minW, m_minH, m_maxW, m_maxH}; }
+
+    // Clamp m_bounds to the size limits; called on every geometry resolve.
+    void clampToBounds();
+
     virtual void layout(float parentWidth, float parentHeight);
 
     // Per-frame tick (dt in seconds). The Kernel advances every widget once
@@ -249,6 +258,7 @@ protected:
     uint8_t m_anchor = 0;       // AnchorBits
     bool m_anchorCaptured = false;
     float m_anchorMargins[4]{};  // left, right, top, bottom (px)
+    float m_minW = 0.0f, m_minH = 0.0f, m_maxW = 0.0f, m_maxH = 0.0f;
     Matrix4x4 m_transform{};    // parent-space transform
     Style m_style;
     std::string m_tooltip;

@@ -2417,6 +2417,43 @@ static void testRelativeGeometry() {
     CHECK(std::fabs(pw->bounds().y - th) < 0.01f);
 }
 
+static void testSizeLimits() {
+    Kernel k;
+    k.init();
+    XmlParser p;
+    auto res = p.parse(R"XML(<screen id="s">
+  <panel id="cap" x="0" y="0" width="100%" height="100%" maxwidth="500" maxheight="300" background="#101010"/>
+  <panel id="floor" x="0" y="0" width="10%" height="10%" minwidth="200" minheight="150" background="#222"/>
+  <panel id="both" x="0" y="0" width="80" height="900" minwidth="100" maxwidth="400" background="#333"/>
+  <panel id="seed" width="600" height="40" maxwidth="300" minheight="60" background="#444"/>
+</screen>)XML");
+    assert(res.root);
+    auto s = std::make_shared<Screen>("s");
+    s->widgets.push_back(res.root);
+    s->width = 800;
+    s->height = 600;
+    k.pushScreen(s);
+
+    InputState st = makeInput();
+    k.frame(st);
+
+    auto* cap = dynamic_cast<Panel*>(k.findWidget("cap"));
+    auto* floor = dynamic_cast<Panel*>(k.findWidget("floor"));
+    auto* both = dynamic_cast<Panel*>(k.findWidget("both"));
+    auto* seed = dynamic_cast<Panel*>(k.findWidget("seed"));
+    CHECK(cap && floor && both && seed);
+    // Percent/fill sizes clamp to the ceiling.
+    CHECK(std::fabs(cap->bounds().w - 500.0f) < 0.01f);
+    CHECK(std::fabs(cap->bounds().h - 300.0f) < 0.01f);
+    CHECK(std::fabs(floor->bounds().w - 200.0f) < 0.01f);   // 80 -> min 200
+    CHECK(std::fabs(floor->bounds().h - 150.0f) < 0.01f);
+    // In-range authored sizes pass through untouched.
+    CHECK(std::fabs(both->bounds().w - 100.0f) < 0.01f);    // 80 -> min 100
+    // Absolute seed sizes clamp at parse time, before the first layout.
+    CHECK(std::fabs(seed->bounds().w - 300.0f) < 0.01f);    // 600 -> max 300
+    CHECK(std::fabs(seed->bounds().h - 60.0f) < 0.01f);     // 40 -> min 60
+}
+
 int main() {
     testDrawList();
     testHitTestAndFocus();
@@ -2452,6 +2489,7 @@ int main() {
     testSimplePorts();
     testImage();
     testRelativeGeometry();
+    testSizeLimits();
     testHost();
 
     if (g_failures) {

@@ -75,8 +75,24 @@ std::vector<Widget::Ptr> Widget::takeChildren() {
     return out;
 }
 
+void Widget::setSizeLimits(float minW, float minH, float maxW, float maxH) {
+    m_minW = minW; m_minH = minH; m_maxW = maxW; m_maxH = maxH;
+    clampToBounds();
+}
+
+void Widget::clampToBounds() {
+    if (m_minW <= 0.0f && m_minH <= 0.0f && m_maxW <= 0.0f && m_maxH <= 0.0f)
+        return;
+    Rect b = m_bounds;
+    if (m_maxW > 0.0f && b.w > m_maxW) b.w = m_maxW;
+    if (m_maxH > 0.0f && b.h > m_maxH) b.h = m_maxH;
+    if (m_minW > 0.0f && b.w < m_minW) b.w = m_minW;
+    if (m_minH > 0.0f && b.h < m_minH) b.h = m_minH;
+    m_bounds = b;
+}
+
 void Widget::resolveGeometry(float parentW, float parentH) {
-    if (m_geomModes == 0 && m_anchor == 0) return;
+    if (m_geomModes == 0 && m_anchor == 0) { clampToBounds(); return; }
     auto mode = [this](int shift) {
         return static_cast<GeomMode>((m_geomModes >> shift) & 3u);
     };
@@ -112,6 +128,7 @@ void Widget::resolveGeometry(float parentW, float parentH) {
         }
     }
     m_bounds = b;
+    clampToBounds();
 }
 
 void Widget::layout(float parentWidth, float parentHeight) {

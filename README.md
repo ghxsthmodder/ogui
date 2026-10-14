@@ -253,6 +253,7 @@ Conventional names that are not abbreviations stay as-is: `x`, `y`, `id`,
 | `tooltip` | text shown by the hover tooltip after ~0.5 s |
 | `x` `y` `width` `height` | bounds, **relative to the parent**; each accepts pixels (`20`), percent (`"50%"`) or — for `width`/`height` — `"fill"` (see below) |
 | `anchor` | pin edges across parent resizes: `anchor="right"`, `"l,r"`, `"top,bottom"` etc. (`left/right/top/bottom`, short forms `l/r/t/b`, space/comma-separated) |
+| `minWidth` `minHeight` `maxWidth` `maxHeight` | pixel clamp on the resolved size, applied on every layout pass whatever unit `width`/`height` used (`"50%"` + `maxWidth="500"` grows up to 500 px; `"10%"` + `minWidth="200"` never shrinks below) |
 | `visible` | `true/false` — an invisible widget (and its subtree) is skipped by drawing *and* input |
 | `style` | named style(s) applied to the element; a comma/space list stacks (`"a,b"`, later wins) |
 | `background` `color` `border` `borderColor` `borderWidth` `radius` | colors/metrics |
@@ -303,6 +304,17 @@ area below the title bar inside a `<window>`, the content width inside a
 Absolute components keep whatever the bounds currently hold, so runtime
 moves (window dragging, splitter panes) survive untouched. A widget with
 no percent/fill components behaves exactly as before.
+
+`minWidth`/`minHeight`/`maxWidth`/`maxHeight` clamp the resolved size in
+pixels on every layout pass, independent of the unit `width`/`height` were
+authored in:
+
+```xml
+<!-- grows with the parent, capped at 500px; never below 200px -->
+<panel id="card" x="0" y="0" width="50%" height="80" minWidth="200" maxWidth="500"/>
+```
+
+Authored absolute sizes are clamped at parse time too.
 
 ### Anchors
 

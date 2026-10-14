@@ -114,6 +114,12 @@ by space, comma, `;` or `|`) pins the described edges' *margins* across
 parent resizes — e.g. `anchor="right,bottom"` keeps a button glued to the
 lower-right corner.
 
+`minwidth` / `minheight` / `maxwidth` / `maxheight` (pixels) clamp the
+resolved size on every layout pass, whatever unit `x/y/width/height` used —
+e.g. `width="50%" maxwidth="500"` grows with the parent up to 500 px, and
+`width="10%" minwidth="200"` never shrinks below it. Authored absolute sizes
+are clamped at parse time too.
+
 ## Common attributes (all widgets)
 
 | Attribute | Effect |
@@ -133,6 +139,7 @@ lower-right corner.
 | `shadow` | drop shadow as `"blur[,dy[,dx]]"` |
 | `shadowColor` | shadow tint |
 | `gradient` | fill gradient; `gradientDirection="horizontal"` runs the ramp left→right (radius ignored) |
+| `minWidth` / `minHeight` / `maxWidth` / `maxHeight` | pixel clamp on the resolved size, re-applied on every layout pass (see Geometry) |
 
 ## Named styles
 
