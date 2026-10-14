@@ -986,6 +986,10 @@ public:
 
     void setHeaderHeight(float h) { m_headerHeight = h; }
     float headerHeight() const { return m_headerHeight; }
+    // "scrolling" mode: instead of truncating behind a "..." button, the
+    // header is a draggable/wheel-scrollable strip showing every tab.
+    void setScrollable(bool s) { m_scrollable = s; if (!s) m_stripX = 0.0f; }
+    float stripOffset() const { return m_stripX; }
     void setFontFamily(const std::string& family) { m_fontFamily = family; }
     void setFontSize(int size) { m_fontSize = size; }
     void setHeaderColor(const Color& col) { m_headerColor = col; }
@@ -1006,12 +1010,19 @@ public:
 
     virtual void layout(float parentWidth, float parentHeight) override;
     virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
+    virtual void onPointerMove(const Offset2D& p) override;
+    virtual void onPointerUp(MouseButton btn) override;
+    virtual void onPointerScroll(float dx, float dy) override;
+    virtual bool wantsScroll() const override { return m_scrollable; }
     virtual void onKeyDown(KeyCode key, uint32_t mods) override;
     virtual void onDraw(Rasterizer& r) const override;
 
 private:
     std::vector<Tab*> pages() const;   // non-owning, in document order
     void openOverflow();               // "..." popup listing hidden pages
+    float stripMax() const;            // scrollable strip's right-most offset
+    void clampStrip();                 // keep m_stripX inside [0, stripMax]
+    void revealTab(int i);             // scroll the strip so cell i is whole
 
     int m_active = 0;
     float m_headerHeight = 28.0f;
@@ -1028,6 +1039,10 @@ private:
     float m_borderWidth = 1.0f;
     ChangedCallback m_onChanged;
     std::shared_ptr<MenuPopup> m_overflow;
+    bool m_scrollable = false;
+    float m_stripX = 0.0f;        // strip scroll offset (px)
+    bool m_stripDrag = false;     // pointer is dragging the strip
+    float m_dragLastX = 0.0f;     // last drag sample, widget-local
 };
 
 // ------------------------------------------------------------------

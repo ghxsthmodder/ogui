@@ -264,7 +264,7 @@ no room below).
 | `column` / `row` | — | any widget (stacked) |
 | `grid` | `columns`, `gap`, `rowHeight` | any widget |
 | `splitter` | `orientation`/`vertical`, `split` (0..1), `handleSize`, `handleColor` | two panels |
-| `tabs` | `active`, `tabHeight`, `headerColor`, `tabColor`, `activeColor`, `accent` | `tab` |
+| `tabs` | `active`, `tabHeight`, `headerColor`, `tabColor`, `activeColor`, `accent`, `scrolling` (`true`: the header is a drag/wheel-scrollable strip instead of a `...` overflow) | `tab` |
 | `tab` | `label` | any widget |
 | `accordion` | `exclusive`, `gap` | `section` |
 | `section` | `header`/`text`, `expanded`, `headerHeight` | any widget |

@@ -1044,6 +1044,7 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
             toInt(*v, idx);
             tb->setActive(idx);
         }
+        if (const std::string* v = get("scrolling")) tb->setScrollable(toBool(*v));
         if (const std::string* v = get("tabheight")) {
             float th = 28.0f;
             toFloat(*v, th);

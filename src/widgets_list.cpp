@@ -386,6 +386,7 @@ void Tabs::setActive(int index) {
     if (index < 0) index = 0;
     if (index == m_active) return;
     m_active = index;
+    if (m_scrollable) revealTab(index);
     if (m_onChanged) m_onChanged(m_active);
     announceChange();
 }
@@ -463,6 +464,58 @@ void Tabs::openOverflow() {
     if (Kernel* k = kernel()) k->openPopup(m_overflow);
 }
 
+// ---- scrolling strip -------------------------------------------------------
+
+float Tabs::stripMax() const {
+    const Rect b = bounds();
+    const std::vector<Tab*> ps = pages();
+    float total = 0.0f;
+    for (size_t i = 0; i < ps.size(); ++i) total += tabCellWidth(static_cast<int>(i));
+    const float slack = total - b.w;
+    return slack > 0.0f ? slack : 0.0f;
+}
+
+void Tabs::clampStrip() {
+    const float max = stripMax();
+    if (m_stripX > max) m_stripX = max;
+    if (m_stripX < 0.0f) m_stripX = 0.0f;
+}
+
+void Tabs::revealTab(int i) {
+    const Rect b = bounds();
+    const std::vector<Tab*> ps = pages();
+    if (i < 0 || i >= static_cast<int>(ps.size())) return;
+    float left = 0.0f;
+    for (int j = 0; j < i; ++j) left += tabCellWidth(j);
+    const float right = left + tabCellWidth(i);
+    const float viewL = m_stripX, viewR = m_stripX + b.w;
+    if (left < viewL) m_stripX = left;
+    else if (right > viewR) m_stripX = right - b.w;
+    clampStrip();
+}
+
+void Tabs::onPointerMove(const Offset2D& p) {
+    if (!m_scrollable || !m_stripDrag) return;
+    const Offset2D o = absoluteOrigin();
+    const float localX = static_cast<float>(p.x) - o.x;
+    m_stripX -= localX - m_dragLastX;
+    m_dragLastX = localX;
+    clampStrip();
+    if (Kernel* k = kernel()) k->invalidate();
+}
+
+void Tabs::onPointerUp(MouseButton) {
+    m_stripDrag = false;
+}
+
+void Tabs::onPointerScroll(float dx, float dy) {
+    if (!m_scrollable) return;
+    const float notch = dx != 0.0f ? dx : dy;
+    m_stripX -= notch * 60.0f;   // one wheel notch = 60px of strip
+    clampStrip();
+    if (Kernel* k = kernel()) k->invalidate();
+}
+
 void Tabs::layout(float parentWidth, float parentHeight) {
     Rect b = bounds();
     const float cw = b.w > 0.0f ? b.w : parentWidth;
@@ -488,6 +541,7 @@ void Tabs::layout(float parentWidth, float parentHeight) {
         c->resolveGeometry(cw, ch);
         c->layout(cw, ch);
     }
+    if (m_scrollable) clampStrip();
 }
 
 void Tabs::onPointerDown(MouseButton, const Offset2D& p) {
@@ -498,6 +552,15 @@ void Tabs::onPointerDown(MouseButton, const Offset2D& p) {
     const float localY = static_cast<float>(p.y) - o.y;
     if (localY < 0.0f || localY > m_headerHeight) return;
     const float localX = static_cast<float>(p.x) - o.x;
+    if (m_scrollable) {
+        // A press anywhere on the header arms the strip drag; a press on a
+        // cell also selects it. Dragging past a few px suppresses select.
+        m_stripDrag = true;
+        m_dragLastX = localX;
+        const int idx = tabAt(localX + m_stripX);
+        if (idx >= 0) setActive(idx);
+        return;
+    }
     const int vis = visibleTabs(b.w);
     const bool truncated = vis < static_cast<int>(pages().size());
     // The "..." button owns the right-most 28px whenever pages are hidden.
@@ -536,6 +599,27 @@ void Tabs::onDraw(Rasterizer& r) const {
     r.drawRect(Rect{b.x, b.y, b.w, hh}, m_headerColor);
 
     const std::vector<Tab*> ps = pages();
+    if (m_scrollable) {
+        // Scrolling mode: every cell is drawn on the strip, offset by the
+        // drag/wheel scroll and clipped to the header. No "..." button.
+        r.beginFrame(Rect{b.x, b.y, b.w, hh});
+        float x = b.x - m_stripX;
+        for (size_t i = 0; i < ps.size(); ++i) {
+            const float w = tabCellWidth(static_cast<int>(i));
+            const bool act = (static_cast<int>(i) == m_active);
+            r.drawRect(Rect{x, b.y, w, hh}, act ? m_activeColor : m_tabColor);
+            if (act) r.drawRect(Rect{x, b.y, w, 2.0f}, m_accentColor);
+            r.drawText(ps[i]->label().c_str(), x + w * 0.5f, b.y + hh * 0.5f,
+                       m_fontSize, m_fontFamily,
+                       act ? palette().white : m_textColor,
+                       Align::Center, VertAlign::Middle);
+            x += w;
+        }
+        r.endFrame();
+        r.drawRect(Rect{b.x, b.y + hh - 1.0f, b.w, 1.0f}, palette().track);
+        if (m_borderWidth > 0.0f) r.drawRectBorder(b, m_borderColor, m_borderWidth, 0.0f);
+        return;
+    }
     const int vis = visibleTabs(b.w);
     const bool truncated = vis < static_cast<int>(ps.size());
     float x = b.x;

@@ -2447,7 +2447,6 @@ static void testSizeLimits() {
     CHECK(std::fabs(cap->bounds().h - 300.0f) < 0.01f);
     CHECK(std::fabs(floor->bounds().w - 200.0f) < 0.01f);   // 80 -> min 200
     CHECK(std::fabs(floor->bounds().h - 150.0f) < 0.01f);
-    // In-range authored sizes pass through untouched.
     CHECK(std::fabs(both->bounds().w - 100.0f) < 0.01f);    // 80 -> min 100
     // Absolute seed sizes clamp at parse time, before the first layout.
     CHECK(std::fabs(seed->bounds().w - 300.0f) < 0.01f);    // 600 -> max 300
@@ -2483,6 +2482,69 @@ static void testSizeLimits() {
     CHECK(p2->bounds().y == 50.0f);          // 30 + gap 20
     CHECK(q1->bounds().x == 5.0f);           // padding 5
     CHECK(q2->bounds().x == 65.0f);          // 5 + 50 + gap 10
+}
+
+static void testTabsScrolling() {
+    Kernel k;
+    k.init();
+    XmlParser p;
+    auto res = p.parse(R"XML(<screen id="s">
+  <tabs id="tb" x="100" y="200" width="160" height="120" tabHeight="24" scrolling="true">
+    <tab label="Alpha"><label id="p0" text="0" x="8" y="8" width="30" height="16"/></tab>
+    <tab label="Beta"><label id="p1" text="1" x="8" y="8" width="30" height="16"/></tab>
+    <tab label="Gamma"><label id="p2" text="2" x="8" y="8" width="30" height="16"/></tab>
+    <tab label="Delta"><label id="p3" text="3" x="8" y="8" width="30" height="16"/></tab>
+    <tab label="Epsilon"><label id="p4" text="4" x="8" y="8" width="30" height="16"/></tab>
+  </tabs>
+</screen>)XML");
+    assert(res.root);
+    auto s = std::make_shared<Screen>("s");
+    s->widgets.push_back(res.root);
+    s->width = 800;
+    s->height = 600;
+    k.pushScreen(s);
+
+    auto* tabs = dynamic_cast<Tabs*>(k.findWidget("tb"));
+    CHECK(tabs != nullptr);
+    if (!tabs) return;
+    InputState st = makeInput();
+    idle(k, st);
+
+    float total = 0.0f;
+    for (int i = 0; i < 5; ++i) total += tabs->tabCellWidth(i);
+    CHECK(total > 160.0f);              // the strip needs scrolling
+    CHECK(tabs->stripOffset() == 0.0f);
+
+    // Wheel over the header scrolls the strip right.
+    st.mouseX = 200.0f; st.mouseY = 212.0f;
+    st.scrollY = -1.0f; k.frame(st);
+    st.scrollY = 0.0f; k.frame(st);
+    CHECK(tabs->stripOffset() > 0.0f);
+
+    // Drag the header left advances the strip by the drag distance.
+    const float sx0 = tabs->stripOffset();
+    pressAt(k, st, 240.0f, 212.0f);
+    st.mouseX = 200.0f; k.frame(st);
+    releaseAt(k, st);
+    CHECK(std::fabs(tabs->stripOffset() - (sx0 + 40.0f)) < 0.01f);
+
+    // A long drag clamps at the strip end (total width - header width).
+    pressAt(k, st, 250.0f, 212.0f);
+    st.mouseX = 50.0f; k.frame(st);
+    releaseAt(k, st);
+    CHECK(std::fabs(tabs->stripOffset() - (total - 160.0f)) < 0.01f);
+
+    // Selecting the first tab reveals it: the strip scrolls back to 0.
+    tabs->setActive(0);
+    k.frame(st);
+    CHECK(tabs->stripOffset() == 0.0f);
+    CHECK(tabs->active() == 0);
+
+    // Selecting the last tab scrolls it fully into view.
+    tabs->setActive(4);
+    k.frame(st);
+    CHECK(tabs->stripOffset() >= total - 160.0f - 0.01f);
+    CHECK(tabs->active() == 4);
 }
 
 int main() {
@@ -2521,6 +2583,7 @@ int main() {
     testImage();
     testRelativeGeometry();
     testSizeLimits();
+    testTabsScrolling();
     testHost();
 
     if (g_failures) {
