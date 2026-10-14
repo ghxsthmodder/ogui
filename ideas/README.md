@@ -726,8 +726,10 @@ configuração, ferramentas e aplicações com dados extensos.
     update/desenho, widgets, paradas de Tab e tamanho do draw list via
     `ogui.stats()`; `setDebugEvents()` registra clique, foco e binding no log
     que o `console` já espelha; `ogui_screenshot --debug` renderiza tudo
-    headless. Faltam diagnóstico de layout/clipping (por que tais bounds, qual
-    clip cortou) e um validador XML de linha de comando.
+    headless, e `ogui_validate` (de `examples/validate.cpp`) valida arquivos ou
+    um `manifest.xml` na linha de comando, com `line:col` e código de saída.
+    Falta o diagnóstico de layout/clipping (por que tais bounds, qual clip
+    cortou).
 -   [x] Tab/Shift+Tab com ordem de foco previsível (document order, com
     wrap), `focusable`, `accessible`/`aria-label`, anel de foco via estados
     visuais `focus:`, Enter/Espaço ativando botão pelo mesmo caminho do
@@ -742,7 +744,15 @@ configuração, ferramentas e aplicações com dados extensos.
     janela, testes em 1×/1.5×/2× e `ogui_screenshot --scale`.
 -   [ ] Unicode, shaping e fallback de fontes.
 -   [ ] Markdown/RichText/Canvas e GraphEditor conforme a necessidade.
--   [ ] Documentação completa, exemplos e benchmarks.
+-   [x] Documentação completa e exemplos: `docs/xml-reference.md` cataloga cada
+    elemento, atributo, tipo, valor padrão e regra de validação;
+    `docs/examples.md` traz o layout mínimo, um contador com eventos, timers,
+    bindings e ciclo de vida, a ordem de carregamento e os escopos de script, o
+    registro de um widget C++ personalizado (`examples/custom_widget.cpp`) e o
+    erro típico. `examples/hello.xml` e `examples/counter.xml` rodam num
+    `Kernel` real e o teste `examples` extrai e executa cada bloco XML/Lua da
+    documentação, então a doc não apodrece em silêncio. `ogui_validate` valida
+    os layouts enviados. Faltam benchmarks.
 
 **Resultado esperado:** melhor experiência de desenvolvimento,
 compatibilidade e capacidade de manutenção.

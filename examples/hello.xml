@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<!-- hello.xml : the smallest ogui layout that renders.
+     One <screen> root, one label, one button. `onClick` names the binding a
+     host registers with Kernel::bind("onGo", ...) or that falls through to the
+     screen's Lua ogui_on_click hook. Geometry is in logical units. -->
+<screen id="hello">
+  <label id="greeting" text="Boas-vindas!" x="20" y="20" width="240" height="24"/>
+  <button id="go" text="Continuar" onClick="onGo" x="20" y="56" width="120" height="32"/>
+</screen>

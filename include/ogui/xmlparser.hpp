@@ -139,8 +139,10 @@ private:
     // Inherit a child style from its parent (for a child without explicit <style>).
     Style inheritStyle(const Style& parentStyle) const;
 
-    // Factory for concrete widget types.
-    std::shared_ptr<Widget> makeWidget(const std::string& tag, const Style& style);
+    // Factory for concrete widget types. The attributes are passed through so
+    // a registered custom widget can read values the parser does not know.
+    std::shared_ptr<Widget> makeWidget(const std::string& tag, const Style& style,
+                                       const std::map<std::string, std::string>& attrs);
 
     std::shared_ptr<Widget> m_root = nullptr;
 

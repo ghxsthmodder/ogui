@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<!-- bad_layout.xml : deliberately broken layout used by the `validate-bad`
+     ctest. ogui_validate must exit non-zero on it; the golden parser tests
+     assert the messages themselves. Keep the mistakes obvious and few. -->
+<screen id="bad">
+  <label id="ok" text="this one is fine" x="10" y="10" width="200" height="24"/>
+
+  <!-- not a registered tag -->
+  <hologram id="ghost" x="10" y="60" width="120" height="40"/>
+
+  <!-- <style> without a name: a warning, the element is dropped -->
+  <style background="#ff0000"/>
+</screen>

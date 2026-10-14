@@ -140,6 +140,16 @@ if(OGUI_BUILD_EXAMPLES)
         target_include_directories(ogui_screenshot PRIVATE ${STB_DIR})
     endif()
 
+    # Layout checker: parse-only, reports line:col errors like the host would
+    # see them. Useful in an editor's save hook or CI.
+    add_executable(ogui_validate examples/validate.cpp)
+    target_link_libraries(ogui_validate PRIVATE ogui)
+
+    # Registering a custom widget from host code (documentation example that
+    # checks itself; run by ctest as `custom-widget`).
+    add_executable(ogui_custom_widget examples/custom_widget.cpp)
+    target_link_libraries(ogui_custom_widget PRIVATE ogui)
+
     # Win32 + WGL reference host. Only meaningful on Windows (or when
     # cross-compiling with mingw).
     if(WIN32 OR MINGW)
@@ -183,6 +193,13 @@ if(OGUI_BUILD_TESTS)
     add_executable(ogui_script_test debug/tests/script_test.cpp)
     target_link_libraries(ogui_script_test PRIVATE ogui)
 
+    # The documentation examples: layouts driven through a Kernel, plus every
+    # fenced xml/lua block in docs/examples.md parsed and loaded.
+    add_executable(ogui_examples_test debug/tests/examples_test.cpp)
+    target_link_libraries(ogui_examples_test PRIVATE ogui)
+    target_compile_definitions(ogui_examples_test PRIVATE
+        OGUI_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+
     # Golden-image test: renders a fixed layout and diffs it against
     # debug/tests/golden/basic.png (regenerate with OGUI_UPDATE_GOLDEN=1).
     if(OGUI_USE_STATIC_STB)
@@ -196,10 +213,28 @@ if(OGUI_BUILD_TESTS)
     enable_testing()
     add_test(NAME parser COMMAND ogui_parser_test)
     add_test(NAME drawlist COMMAND ogui_drawlist_test)
+
+    # The shipped layouts must stay valid; the CLI's own error reporting is
+    # exercised on the deliberately broken file below (WILL_FAIL = exit != 0).
+    if(TARGET ogui_validate)
+        add_test(NAME validate COMMAND ogui_validate --manifest
+                 --chdir "${CMAKE_CURRENT_SOURCE_DIR}"
+                 "${CMAKE_CURRENT_SOURCE_DIR}/manifest.xml")
+        add_test(NAME validate-bad COMMAND ogui_validate
+                 --chdir "${CMAKE_CURRENT_SOURCE_DIR}"
+                 "${CMAKE_CURRENT_SOURCE_DIR}/debug/tests/bad_layout.xml")
+        set_tests_properties(validate-bad PROPERTIES WILL_FAIL TRUE)
+    endif()
+
+    # The custom-widget write-up, compiled and run.
+    if(TARGET ogui_custom_widget)
+        add_test(NAME custom-widget COMMAND ogui_custom_widget)
+    endif()
     add_test(NAME kernel COMMAND ogui_kernel_test)
     add_test(NAME screens COMMAND ogui_screens_test)
     add_test(NAME scrollbar COMMAND ogui_scrollbar_test)
     add_test(NAME script COMMAND ogui_script_test)
+    add_test(NAME examples COMMAND ogui_examples_test)
     if(TARGET ogui_golden_test)
         add_test(NAME golden COMMAND ogui_golden_test)
     endif()

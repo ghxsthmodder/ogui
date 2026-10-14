@@ -37,6 +37,14 @@ creates for you (`ogui::Host`, a built-in Win32/WGL window and event loop).
   a draw-list overlay (bounds, labels, focus order, hover) plus frame timing
   and an opt-in event log; the same hooks from C++ and Lua, and
   `ogui_screenshot --debug` renders them headlessly.
+* **Extendable** — `widgetRegistry()` maps an element name to a factory that
+  receives the authored attributes, so a custom `Widget` subclass becomes a
+  first-class element; unknown elements are reported with line:col instead of
+  throwing.
+* **Documented and tested** — [`docs/xml-reference.md`](docs/xml-reference.md)
+  catalogues every element, attribute and default; [`docs/examples.md`](docs/examples.md)
+  walks through minimal XML, Lua behaviour and custom widgets, and `ctest`
+  executes both the shipped examples and every snippet in those docs.
 * **Static library, few dependencies** — stb and Lua are vendored; the
   parser is a hand-rolled tokenizer with no third-party code.
 
@@ -76,7 +84,7 @@ Win32 + WGL demo directly (the project compiles the library sources itself).
 
 | Option | Default | Effect |
 | --- | --- | --- |
-| `OGUI_BUILD_EXAMPLES` | `ON` | `ogui_demo`, `ogui_screenshot`, `ogui_demo_win32` |
+| `OGUI_BUILD_EXAMPLES` | `ON` | `ogui_demo`, `ogui_screenshot`, `ogui_demo_win32`, `ogui_validate`, `ogui_custom_widget` |
 | `OGUI_BUILD_TESTS` | `ON` | unit tests + golden-image test |
 | `OGUI_USE_STATIC_STB` | `ON` | build stb_truetype/stb_image from `thirdparty/stb` |
 | `OGUI_USE_LUA` | `ON` | embed the vendored Lua 5.4 (`thirdparty/lua`) for `<script>` screens |
@@ -84,16 +92,28 @@ Win32 + WGL demo directly (the project compiles the library sources itself).
 ## Tests
 
 ```sh
-cd build && ctest --output-on-failure      # parser, drawlist, kernel, screens, scrollbar, script, golden
+cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-bad,
+                                        # custom-widget, kernel, screens, scrollbar,
+                                        # script, examples, golden
 ```
 
 * `parser` — XML tokenizer, attributes, styles, error reporting.
 * `drawlist` — rasterizer geometry, text measurement and wrapping.
+* `validate` — `ogui_validate --manifest` over every screen in `manifest.xml`:
+  the shipped layouts must parse with zero errors.
+* `validate-bad` — the same tool on `debug/tests/bad_layout.xml` must exit 1 and
+  report the unknown element with its line:col.
+* `custom-widget` — registers a `<led>` element through `widgetRegistry()` and
+  drives it through a real `Kernel` frame (tick, draw, dump, tab order, click).
 * `kernel` — input dispatch, focus/capture, text editing, tabs, tooltip.
 * `screens` — every manifest screen parses in both themes and keeps the ids the gallery binds to.
 * `scrollbar` — presses on the listbox/treeview/table/scrollview/window/textarea bars scroll instead of selecting or hitting children; dropdown popups fit the screen and scroll.
 * `script` — `<script>` collection, screen-bound Lua loading on screen
   switches, all four hooks and the `ogui.*` widget API; error capture.
+* `examples` — runs `examples/hello.xml` and `examples/counter.xml` through a
+  real `Kernel` (load/show hooks, a clicked button, a live binding) and then
+  parses every fenced `xml`/`lua` block in `docs/examples.md`, so the docs
+  cannot rot into snippets that no longer work.
 * `golden` — renders a fixed `@token` layout through
   `Kernel -> DrawList -> SoftwareRenderer` in both themes and diffs it
   against `debug/tests/golden/basic.png` (dark) and `debug/tests/golden/basic_light.png`
@@ -555,10 +575,34 @@ The headless render is:
 ./build/ogui_screenshot dbg.png 900 640 1 --debug focus    # pick layers
 ```
 
-What is not built yet: layout/clipping diagnostics (why a widget ended up at
-those bounds, which clip culled it) and an XML validator wired into the editor
-flow — `XmlParser` already reports `errors`/`warnings`, there is just no
-standalone driver for them.
+What is not built yet: layout/clipping diagnostics — the overlay shows the
+bounds a widget ended up with, but not *why* (which container rule or clip rect
+produced them).
+
+## Validating and documenting layouts
+
+`ogui_validate` runs the parser over files without opening a window, so a text
+editor or a CI step can lint a layout before it is ever rendered:
+
+```sh
+./build/ogui_validate layout_demo.xml
+./build/ogui_validate manifest.xml --manifest --chdir .    # every screen in it
+./build/ogui_validate themes/design.xml --theme            # a stylesheet
+```
+
+Output is `path: ok — N widgets, M scripts, K warning(s)` per file, then a
+`validate: N error(s), M warning(s)` total; exit status is 0 clean, 1 on any
+error, 2 on a usage or unreadable-file problem. `--theme` and `--manifest`
+switch what the listed files are read as, and because
+`<stylesheet path="..."/>` and `<script src="..."/>` resolve against the
+working directory, `--chdir` has to point at the directory the app runs from.
+
+The tutorials — smallest layout, a working counter, loading order and script
+scopes, event/timer/binding snippets, a custom C++ widget, and what a mistake
+looks like — live in [`docs/examples.md`](docs/examples.md). Every fenced block
+there is executed by the `examples` test (`ctest -R examples`), as are the two
+shipped files `examples/hello.xml` and `examples/counter.xml`;
+`examples/custom_widget.cpp` is the same custom-widget path, self-tested.
 
 ## Clipboard
 
@@ -597,7 +641,9 @@ detail.
 include/ogui/     public headers (api, kernel, widgets, xmlparser, ...)
 src/              library implementation
 examples/         demo.cpp (headless), demo_win32.cpp (WGL gallery host),
-                  gallery.hpp (multi-screen loader), screenshot.cpp
+                  gallery.hpp (multi-screen loader), screenshot.cpp,
+                  validate.cpp (ogui_validate), custom_widget.cpp,
+                  hello.xml + counter.xml (the docs' runnable examples)
 layouts/          extra gallery screens (text, selection, data, containers)
 assets/           files the demo loads at runtime (checker.png for <image>)
 manifest.xml      gallery screen list (edit to add/remove screens)

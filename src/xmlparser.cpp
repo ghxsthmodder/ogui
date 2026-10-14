@@ -517,7 +517,10 @@ std::string XmlParser::parseChars() {
 std::shared_ptr<Widget> XmlParser::createWidget(const std::string& tag,
                                                 const Style& style,
                                                 const std::map<std::string, std::string>& attrs) {
-    auto w = makeWidget(tag, style);
+    // The factory sees the authored attributes: a custom widget that needs a
+    // value the parser knows nothing about reads it here (built-in widgets
+    // ignore the map and take their values from applyAttributes below).
+    auto w = makeWidget(tag, style, attrs);
     if (!w) {
         return nullptr;
     }
@@ -1465,11 +1468,12 @@ Style XmlParser::inheritStyle(const Style& parentStyle) const {
 }
 
 std::shared_ptr<Widget> XmlParser::makeWidget(const std::string& tag,
-                                              const Style& style) {
+                                              const Style& style,
+                                              const std::map<std::string, std::string>& attrs) {
     auto& reg = widgetRegistry();
     auto it = reg.find(tag);
     if (it != reg.end()) {
-        return it->second(style, {});
+        return it->second(style, attrs);
     }
     return nullptr;
 }

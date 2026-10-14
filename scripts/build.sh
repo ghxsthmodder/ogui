@@ -88,6 +88,12 @@ build_win() {
     "$WIN_CXX" "${flags[@]}" -mwindows examples/demo_win32.cpp debug/build-win-objs/libogui.a \
         -o debug/demo.exe -lgdi32 -lopengl32 -lshell32
 
+    # Layout checker — console subsystem, so it can run from a shell or an
+    # editor save hook.
+    echo "  CXX examples/validate.cpp -> debug/validate.exe"
+    "$WIN_CXX" "${flags[@]}" examples/validate.cpp debug/build-win-objs/libogui.a \
+        -o debug/validate.exe
+
     # Sync the screens the demo loads at runtime into debug/ (the source of
     # truth stays at the project root; the copy makes debug/ self-contained).
     cp -f manifest.xml layout_demo.xml debug/

@@ -46,6 +46,20 @@ Anything that is neither root falls back to a plain label holding the raw
 text, and an unknown root tag reports `unknown root element <tag>` and yields
 an empty container.
 
+## Adding your own element
+
+`widgetRegistry()` is a public `std::map<std::string, WidgetFactory>`. A factory
+gets the current `Style` plus the authored attributes (keys lowercased), so one
+registration turns a class into a tag:
+
+```cpp
+ogui::widgetRegistry()["led"] = &makeLed;   // <led on="true" color="@accent"/>
+```
+
+Register it before parsing; replacing a built-in name works the same way.
+`examples/custom_widget.cpp` is a complete, self-tested version and
+[`examples.md`](examples.md) walks through it.
+
 ## General syntax rules
 
 - **Attribute names are case-insensitive** (`FontSize`, `fontSize`,
@@ -547,3 +561,18 @@ background on purpose.
 `XmlParser::parse()` returns `{root, errors, warnings, scripts}`. Errors never abort
 the parse: unknown root/element names are logged and skipped, and the caller
 always receives a usable tree.
+
+`ogui_validate` (built from `examples/validate.cpp`) is the command-line driver
+for that reporting — it parses files or a whole `manifest.xml`, prints each
+diagnostic as `error: line:col: message` under the file it came from, and exits
+non-zero if anything failed:
+
+```sh
+./build/ogui_validate layout_demo.xml
+./build/ogui_validate manifest.xml --manifest --chdir .    # every screen
+./build/ogui_validate themes/design.xml --theme            # a stylesheet
+```
+
+For end-to-end examples — a runnable minimal screen, Lua behaviour, script
+loading order, and registering a custom C++ widget — see
+[`examples.md`](examples.md).

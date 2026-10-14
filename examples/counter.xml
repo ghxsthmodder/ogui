@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<!-- counter.xml : the smallest layout with behaviour. One <script> chunk
+     shows the four things a screen normally needs: lifecycle hooks, click
+     events, timers and a data binding. Everything the script touches is
+     reachable by id; the engine owns the loop and only calls ogui_on_*. -->
+<screen id="counter">
+  <label id="title" text="Counter" x="20" y="16" width="200" height="22"/>
+  <label id="count" text="0" x="20" y="44" width="80" height="40" fontSize="24"/>
+  <button id="inc" text="+1" x="110" y="44" width="60" height="40"/>
+  <button id="dec" text="-1" x="176" y="44" width="60" height="40"/>
+
+  <!-- bound to the counter: no script code keeps them in sync -->
+  <progress id="meter" value="0" x="20" y="96" width="216" height="16"/>
+
+  <script>
+n = 0
+
+function ogui_on_load()            -- once, right after this chunk ran
+  ogui.set("count", "text", tostring(n))
+  ogui.log("counter: loaded")
+end
+
+function ogui_on_show()            -- every time the screen comes forward
+  ogui.after(0.5, function()       -- one-shot: fires from the frame loop
+    ogui.toast("counter pronto")
+  end)
+end
+
+function ogui_on_click(key)        -- clicks with no C++ binding land here
+  if key == "inc" then n = n + 1
+  elseif key == "dec" then n = n - 1
+  end
+  ogui.set("count", "text", tostring(n))
+  ogui.set("meter", "value", math.max(0, math.min(1, n / 10)))
+end
+
+function ogui_on_update(t, dt)     -- every frame
+  -- a slow drift keeps the meter alive without a hand-written loop
+end
+  </script>
+</screen>
