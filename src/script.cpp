@@ -541,6 +541,51 @@ int l_clear(lua_State* L) {
     return 1;
 }
 
+// ---- tree navigation -------------------------------------------------------
+
+// ogui.children(id) -> array of child ids (top level of a screen returns nil)
+int l_children(lua_State* L) {
+    const char* id = luaL_checkstring(L, 1);
+    Kernel* k = kernelOf(L);
+    Widget* w = k ? k->findWidget(id) : nullptr;
+    if (!w) { lua_pushnil(L); return 1; }
+    lua_newtable(L);
+    int n = 0;
+    for (const auto& c : w->children()) {
+        if (c) {
+            lua_pushinteger(L, ++n);
+            lua_pushstring(L, c->id().c_str());
+            lua_settable(L, -3);
+        }
+    }
+    return 1;
+}
+
+// ogui.parent(id) -> parent id, or nil at the screen root / unknown id
+int l_parent(lua_State* L) {
+    const char* id = luaL_checkstring(L, 1);
+    Kernel* k = kernelOf(L);
+    Widget* w = k ? k->findWidget(id) : nullptr;
+    if (!w || !w->parent()) { lua_pushnil(L); return 1; }
+    lua_pushstring(L, w->parent()->id().c_str());
+    return 1;
+}
+
+// ogui.index(id) -> 1-based position among siblings, or nil
+int l_index(lua_State* L) {
+    const char* id = luaL_checkstring(L, 1);
+    Kernel* k = kernelOf(L);
+    Widget* w = k ? k->findWidget(id) : nullptr;
+    if (!w || !w->parent()) { lua_pushnil(L); return 1; }
+    int pos = 0;
+    for (const auto& c : w->parent()->children()) {
+        ++pos;
+        if (c.get() == w) { lua_pushinteger(L, pos); return 1; }
+    }
+    lua_pushnil(L);
+    return 1;
+}
+
 // ---- per-widget event listeners --------------------------------------------
 
 // ogui.on(id, event, fn) -> handle | nil
@@ -598,6 +643,9 @@ const luaL_Reg oguiLib[] = {
     {"add",        l_add},
     {"remove",     l_remove},
     {"clear",      l_clear},
+    {"children",   l_children},
+    {"parent",     l_parent},
+    {"index",      l_index},
     {"on",         l_on},
     {"off",        l_off},
     {nullptr, nullptr},

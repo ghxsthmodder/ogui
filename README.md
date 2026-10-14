@@ -22,7 +22,8 @@ creates for you (`ogui::Host`, a built-in Win32/WGL window and event loop).
   `ogui_on_event` hooks through the `ogui` API table: widget attributes,
   input queries (`mouse`/`key`/`mods`), focus/hover, list content,
   engine-driven `tween` animations, `after`/`every` timers, dynamic
-  widget creation (`add`/`remove`/`clear`), per-widget event
+  widget creation (`add`/`remove`/`clear`), tree navigation
+  (`children`/`parent`/`index`), per-widget event
   listeners (`ogui.on`/`ogui.off`) and declarative data bindings
   (`ogui.bind`/`ogui.unbind`).
 * **Static library, few dependencies** — stb and Lua are vendored; the

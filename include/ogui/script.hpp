@@ -80,6 +80,9 @@ class Widget;
 //                            parentId -> first new id | nil, err
 //   ogui.remove(id)          drop a widget (safe on the pressed one)
 //   ogui.clear(id)           detach every child of a container -> count
+//   ogui.children(id)        ordered array of child ids (nil for unknown id)
+//   ogui.parent(id)          parent id, or nil at the screen root
+//   ogui.index(id)           1-based position among siblings, or nil
 //   ogui.on(id, event, fn)   attach a per-widget listener -> handle. Events
 //                            currently fired: "click", "focus", "blur",
 //                            "change" (user edits of a value/selection/text)

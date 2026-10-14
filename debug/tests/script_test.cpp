@@ -635,6 +635,44 @@ ogui.on("ck",  "change", function(id) ckc = ckc + 1 end)
         CHECK(k.getText("out") == "loaded");
     }
 
+    // ---- tree navigation: ogui.children / parent / index ----------------------
+    {
+        XmlParser p;
+        auto res = p.parse(R"(<screen id="nav">
+  <panel id="box" x="10" y="10" width="300" height="200">
+    <button id="c1" text="a"/>
+    <label id="c2" text="b"/>
+  </panel>
+</screen>)");
+        assert(res.root);
+        auto s = std::make_shared<Screen>("nav");
+        s->widgets.push_back(res.root);
+        s->width = 800; s->height = 600;
+        k.pushScreen(s);
+        InputState sn = makeInput();
+        sn.time = 15.0f;
+        k.frame(sn);   // attach kernel / resolve tree
+
+        k.script().loadString(R"(
+            local kids = ogui.children("box")
+            assert(#kids == 2 and kids[1] == "c1" and kids[2] == "c2")
+            assert(ogui.parent("c1") == "box")
+            assert(ogui.parent("box") == "nav")
+            assert(ogui.index("c1") == 1)
+            assert(ogui.index("c2") == 2)
+            assert(ogui.children("missing") == nil)
+            assert(ogui.parent("missing") == nil)
+            assert(ogui.index("missing") == nil)
+            local id = ogui.add("box", '<checkbox id="c3" text="c"/>')
+            assert(id == "c3")
+            assert(#ogui.children("box") == 3)
+            assert(ogui.index("c3") == 3)
+        )", "nav-tree");
+        CHECK(k.script().errors().empty());
+        k.popScreen();
+        CHECK(k.getText("out") == "loaded");
+    }
+
     // ---- data bindings: ogui.bind / ogui.unbind -------------------------------
     {
         XmlParser p;
