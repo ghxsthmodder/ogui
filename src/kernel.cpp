@@ -65,11 +65,19 @@ Widget* hitTestTree(const std::vector<Widget::Ptr>& roots, const Offset2D& p,
     return nullptr;
 }
 
-void setFocus(Widget*& focus, Widget* target) {
+void setFocus(Kernel& k, Widget*& focus, Widget* target) {
     if (focus == target) return;
-    if (focus) focus->onFocus(false);
+    if (focus) {
+        std::string id = focus->id();
+        focus->onFocus(false);
+        if (!id.empty()) k.script().fireEvent(id, "blur");
+    }
     focus = target;
-    if (focus) focus->onFocus(true);
+    if (focus) {
+        std::string id = focus->id();
+        focus->onFocus(true);
+        if (!id.empty()) k.script().fireEvent(id, "focus");
+    }
 }
 
 } // namespace
@@ -172,7 +180,7 @@ void Kernel::reloadScreenScripts() {
 void Kernel::pushScreen(std::shared_ptr<Screen> screen) {
     if (!screen) return;
     m_screenStack.push_back(screen);
-    setFocus(m_focus, nullptr);
+    setFocus(*this, m_focus, nullptr);
     reloadScreenScripts();
     invalidate();
 }
@@ -180,7 +188,7 @@ void Kernel::pushScreen(std::shared_ptr<Screen> screen) {
 void Kernel::popScreen() {
     if (m_screenStack.size() > 1) {
         m_screenStack.pop_back();
-        setFocus(m_focus, nullptr);
+        setFocus(*this, m_focus, nullptr);
         reloadScreenScripts();
         invalidate();
     }
@@ -197,7 +205,7 @@ void Kernel::switchScreen(std::shared_ptr<Screen> screen) {
             screen->height = cur->height;
         }
         m_screenStack.back() = screen;
-        setFocus(m_focus, nullptr);
+        setFocus(*this, m_focus, nullptr);
         reloadScreenScripts();
         invalidate();
     }
@@ -417,7 +425,7 @@ void Kernel::update() {
             m_captured = m_hovered;
             m_pressed = m_hovered;
             m_pressButton = btn;
-            setFocus(m_focus, m_hovered);
+            setFocus(*this, m_focus, m_hovered);
             if (m_captured) m_captured->onPointerDown(static_cast<MouseButton>(btn), p);
         }
         // Right-click: open the nearest ancestor's <contextmenu>, if any.

@@ -348,6 +348,9 @@ API table `ogui` (all calls are safe on unknown ids):
 | `ogui.add(parentId, xmlFragment)` | parse `xmlFragment` (a snippet of `<screen>` body) and attach it as children of `parentId`; returns the first new widget's id, or `nil, err` if the parent is missing or the fragment fails to parse |
 | `ogui.remove(id)` | drop a widget from its parent → `true`, or `nil, err` for a missing id or an orphan. Safe to call on the widget currently being pressed: the Kernel forgets focus/hover/press bindings before the shared_ptr disappears |
 | `ogui.clear(id)` | detach every child of a container → count removed |
+| `ogui.on(id, event, fn)` | attach a per-widget listener → integer handle. Events currently fired: `"click"`, `"focus"`, `"blur"` (the callback receives the widget id) |
+| `ogui.off(handle)` | remove one listener → boolean |
+| `ogui.off(id)` | remove every listener on that widget → count dropped; listeners also die automatically when the widget is removed or the screen swaps |
 | `ogui.quit()` | `Kernel::requestQuit` |
 
 Example:
@@ -368,6 +371,18 @@ end
 
 Runtime errors never unwind into the engine: they are captured in
 `ScriptHost::errors()` and mirrored to `Kernel::addLog`.
+
+Per-widget listeners (`ogui.on`) let several independent callbacks share one
+screen without routing every click through a single `ogui_on_click`, and
+`ogui.add`/`ogui.remove` build the tree at runtime:
+
+```lua
+function ogui_on_load()
+  local id = ogui.add("inbox", '<button id="row1" text="new row"/>')
+  ogui.on(id, "click", function(w) ogui.remove(w) end)  -- click removes itself
+  ogui.on(id, "focus", function(w) ogui.log("focused " .. w) end)
+end
+```
 
 ## Error reporting
 

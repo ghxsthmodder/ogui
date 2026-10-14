@@ -516,6 +516,7 @@ int l_remove(lua_State* L) {
     // (e.g. a handler removing the button it was pressed on), so the shared_ptr
     // erase below cannot leave the kernel pointing at freed memory.
     k->forgetWidget(w);
+    if (ScriptHost* h = hostOf(L)) h->removeAllListeners(id);
     parent->removeChild(w);
     k->invalidate();
     lua_pushboolean(L, 1);
@@ -528,11 +529,47 @@ int l_clear(lua_State* L) {
     Kernel* k = kernelOf(L);
     Widget* w = k ? k->findWidget(id) : nullptr;
     if (!w) { lua_pushinteger(L, 0); return 1; }
+    ScriptHost* h = hostOf(L);
     std::vector<Widget::Ptr> kids = w->takeChildren();
     for (const auto& c : kids)
-        if (c) k->forgetWidget(c.get());
+        if (c) {
+            k->forgetWidget(c.get());
+            if (h && !c->id().empty()) h->removeAllListeners(c->id());
+        }
     k->invalidate();
     lua_pushinteger(L, static_cast<int>(kids.size()));
+    return 1;
+}
+
+// ---- per-widget event listeners --------------------------------------------
+
+// ogui.on(id, event, fn) -> handle | nil
+int l_on(lua_State* L) {
+    const char* id = luaL_checkstring(L, 1);
+    const char* event = luaL_checkstring(L, 2);
+    luaL_checktype(L, 3, LUA_TFUNCTION);
+    ScriptHost* h = hostOf(L);
+    const int ref = luaL_ref(L, LUA_REGISTRYINDEX);   // consumes arg 3
+    const int handle = h ? h->addListener(id, event, ref) : -1;
+    if (handle <= 0) {
+        luaL_unref(L, LUA_REGISTRYINDEX, ref);
+        lua_pushnil(L);
+    } else {
+        lua_pushinteger(L, handle);
+    }
+    return 1;
+}
+
+// ogui.off(handle) -> bool;  ogui.off(id) -> count removed
+int l_off(lua_State* L) {
+    ScriptHost* h = hostOf(L);
+    if (!h) { lua_pushboolean(L, 0); return 1; }
+    if (lua_type(L, 1) == LUA_TNUMBER) {
+        lua_pushboolean(L, h->removeListener(static_cast<int>(lua_tointeger(L, 1))));
+    } else {
+        const char* id = luaL_checkstring(L, 1);
+        lua_pushinteger(L, h->removeAllListeners(id));
+    }
     return 1;
 }
 
@@ -561,6 +598,8 @@ const luaL_Reg oguiLib[] = {
     {"add",        l_add},
     {"remove",     l_remove},
     {"clear",      l_clear},
+    {"on",         l_on},
+    {"off",        l_off},
     {nullptr, nullptr},
 };
 
@@ -663,6 +702,7 @@ void ScriptHost::clear() {
     m_errors.clear();
     m_tweens.clear();
     m_timers.clear();   // registry refs die with the state in clear()
+    m_listeners.clear();
 }
 
 bool ScriptHost::startTween(const std::string& id, const std::string& attr,
@@ -768,6 +808,73 @@ void ScriptHost::advanceTimers(float dt) {
 #endif
 }
 
+// ---- per-widget event listeners --------------------------------------------
+
+int ScriptHost::addListener(const std::string& widgetId, const std::string& event, int ref) {
+#ifdef OGUI_HAS_LUA
+    if (!m_L || ref == LUA_NOREF || widgetId.empty() || event.empty()) return -1;
+    Listener l;
+    l.handle = m_nextListenerHandle++;
+    l.widgetId = widgetId;
+    l.event = event;
+    l.ref = ref;
+    m_listeners.push_back(l);
+    return l.handle;
+#else
+    (void)widgetId; (void)event; (void)ref;
+    return -1;
+#endif
+}
+
+bool ScriptHost::removeListener(int handle) {
+    for (auto it = m_listeners.begin(); it != m_listeners.end(); ++it)
+        if (it->handle == handle) {
+#ifdef OGUI_HAS_LUA
+            if (m_L) luaL_unref(m_L, LUA_REGISTRYINDEX, it->ref);
+#endif
+            m_listeners.erase(it);
+            return true;
+        }
+    return false;
+}
+
+int ScriptHost::removeAllListeners(const std::string& widgetId) {
+    int n = 0;
+    for (auto it = m_listeners.begin(); it != m_listeners.end(); ) {
+        if (it->widgetId == widgetId) {
+#ifdef OGUI_HAS_LUA
+            if (m_L) luaL_unref(m_L, LUA_REGISTRYINDEX, it->ref);
+#endif
+            it = m_listeners.erase(it);
+            ++n;
+        } else ++it;
+    }
+    return n;
+}
+
+void ScriptHost::fireEvent(const std::string& widgetId, const std::string& event) {
+#ifdef OGUI_HAS_LUA
+    if (!m_L || m_listeners.empty()) return;
+    // Copy the matching callbacks out before calling: a handler may legally
+    // ogui.off() (or even ogui.remove the widget), which must not invalidate
+    // this iteration.
+    std::vector<int> refs;
+    for (const Listener& l : m_listeners)
+        if (l.widgetId == widgetId && l.event == event) refs.push_back(l.ref);
+    for (int ref : refs) {
+        lua_rawgeti(m_L, LUA_REGISTRYINDEX, ref);
+        lua_pushstring(m_L, widgetId.c_str());
+        if (lua_pcall(m_L, 1, 0, 0) != LUA_OK) {
+            std::string msg = lua_tostring(m_L, -1) ? lua_tostring(m_L, -1) : "error";
+            lua_pop(m_L, 1);
+            recordError("event " + event + ": " + msg);
+        }
+    }
+#else
+    (void)widgetId; (void)event;
+#endif
+}
+
 template <typename Push>
 bool ScriptHost::callHook(const char* name, Push push) {
 #ifdef OGUI_HAS_LUA
@@ -815,6 +922,7 @@ void ScriptHost::notifyUpdate(float t, float dt) {
 
 void ScriptHost::notifyClick(const std::string& key) {
     callHook("ogui_on_click", [&key](lua_State* L) { lua_pushstring(L, key.c_str()); });
+    fireEvent(key, "click");
 }
 
 void ScriptHost::notifyEvent(const std::string& name, const std::string& key) {

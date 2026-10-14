@@ -80,6 +80,10 @@ class Widget;
 //                            parentId -> first new id | nil, err
 //   ogui.remove(id)          drop a widget (safe on the pressed one)
 //   ogui.clear(id)           detach every child of a container -> count
+//   ogui.on(id, event, fn)   attach a per-widget listener -> handle. Events
+//                            currently fired: "click", "focus", "blur".
+//   ogui.off(handle|id)      by handle -> bool; by widget id -> count of
+//                            listeners dropped
 //   ogui.quit()              Kernel::requestQuit
 //
 // Runtime errors are captured (never thrown): recorded in errors() and
@@ -143,6 +147,15 @@ public:
     int addTimer(float interval, bool repeat, int ref);
     bool cancelTimer(int id);
 
+    // ---- per-widget event listeners (ogui.on/ogui.off) ----
+    // Callbacks live in the Lua registry; they die with clear() and are
+    // dropped when the widget they target is removed via ogui.remove/clear.
+    int addListener(const std::string& widgetId, const std::string& event, int ref);
+    bool removeListener(int handle);
+    int removeAllListeners(const std::string& widgetId);
+    void fireEvent(const std::string& widgetId, const std::string& event);
+    size_t listenerCount() const { return m_listeners.size(); }
+
     // Raw state for hosts extending the bindings (nullptr before any
     // load or without a Lua build). The ogui table lives in its globals.
     lua_State* state() { return m_L; }
@@ -158,6 +171,12 @@ private:
         float interval = 0.0f;
         float elapsed = 0.0f;
         bool repeat = false;
+        int ref = -1;           // LUA_REGISTRYINDEX reference to the callback
+    };
+    struct Listener {
+        int handle = 0;
+        std::string widgetId;
+        std::string event;
         int ref = -1;           // LUA_REGISTRYINDEX reference to the callback
     };
 
@@ -176,6 +195,8 @@ private:
     std::vector<TweenJob> m_tweens;
     std::vector<TimerJob> m_timers;
     int m_nextTimerId = 1;
+    std::vector<Listener> m_listeners;
+    int m_nextListenerHandle = 1;
 };
 
 } // namespace ogui

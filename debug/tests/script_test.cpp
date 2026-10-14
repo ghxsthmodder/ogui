@@ -532,6 +532,53 @@ end
         CHECK(k.getText("out") == "loaded");
     }
 
+    // ---- per-widget event listeners: ogui.on / ogui.off -----------------------
+    {
+        XmlParser p;
+        auto res = p.parse(R"(<screen id="ev">
+  <button id="eb" text="press" x="10" y="50" width="120" height="40"/>
+  <label id="elog" text="none" x="10" y="120" width="200" height="24"/>
+</screen>)");
+        assert(res.root);
+        auto s = std::make_shared<Screen>("ev");
+        s->widgets.push_back(res.root);
+        s->scripts.push_back({R"(
+hits = 0
+foc = 0
+bl = 0
+ogui.on("eb", "click", function(id) hits = hits + 1; ogui.set("elog", "text", "click:" .. id) end)
+ogui.on("eb", "focus", function(id) foc = foc + 1 end)
+ogui.on("eb", "blur",  function(id) bl = bl + 1 end)
+)", false});
+        s->width = 800; s->height = 600;
+        k.pushScreen(s);
+        CHECK(k.script().errors().empty());
+        CHECK(k.script().listenerCount() == 3);
+
+        InputState se = makeInput();
+        se.time = 20.0f;
+        k.frame(se);
+        pressAt(k, se, 70.0f, 70.0f);   // click eb: focus fires on press
+        release(k, se);                 // click released -> click listener
+        CHECK(k.getText("elog") == "click:eb");
+
+        // second click still counts (listener persists)
+        pressAt(k, se, 70.0f, 70.0f);
+        release(k, se);
+        // remove focus (click empty area) -> blur
+        pressAt(k, se, 400.0f, 400.0f);
+        release(k, se);
+        k.script().loadString("assert(hits == 2) assert(foc == 1) assert(bl == 1)", "ev-foc");
+        CHECK(k.script().errors().empty());
+
+        // off by widget id drops all three listeners
+        k.script().loadString("assert(ogui.off(\"eb\") == 3)", "ev-off");
+        CHECK(k.script().errors().empty());
+        CHECK(k.script().listenerCount() == 0);
+        k.popScreen();
+        CHECK(k.getText("out") == "loaded");
+    }
+
     // ---- ogui.quit ------------------------------------------------------------
     {
         CHECK(!k.quitRequested());
