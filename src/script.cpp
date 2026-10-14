@@ -413,6 +413,33 @@ int l_tweenstop(lua_State* L) {
     return 1;
 }
 
+// ---- timers ----------------------------------------------------------------
+
+int addTimer(lua_State* L, bool repeat) {
+    const float secs = static_cast<float>(luaL_checknumber(L, 1));
+    luaL_checktype(L, 2, LUA_TFUNCTION);
+    auto* h = hostOf(L);
+    const int ref = luaL_ref(L, LUA_REGISTRYINDEX);   // consumes arg 2
+    const int id = h ? h->addTimer(secs, repeat, ref) : -1;
+    if (id <= 0) {
+        luaL_unref(L, LUA_REGISTRYINDEX, ref);
+        lua_pushnil(L);
+    } else {
+        lua_pushinteger(L, id);
+    }
+    return 1;
+}
+
+int l_after(lua_State* L)  { return addTimer(L, false); }
+int l_every(lua_State* L)  { return addTimer(L, true); }
+
+int l_cancel(lua_State* L) {
+    const int id = static_cast<int>(luaL_checkinteger(L, 1));
+    auto* h = hostOf(L);
+    lua_pushboolean(L, h && h->cancelTimer(id));
+    return 1;
+}
+
 int l_quit(lua_State* L) {
     if (Kernel* k = kernelOf(L)) k->requestQuit();
     return 0;
@@ -436,6 +463,9 @@ const luaL_Reg oguiLib[] = {
     {"items",      l_items},
     {"tween",      l_tween},
     {"tweenStop",  l_tweenstop},
+    {"after",      l_after},
+    {"every",      l_every},
+    {"cancel",     l_cancel},
     {"quit",       l_quit},
     {nullptr, nullptr},
 };
@@ -538,6 +568,7 @@ void ScriptHost::clear() {
 #endif
     m_errors.clear();
     m_tweens.clear();
+    m_timers.clear();   // registry refs die with the state in clear()
 }
 
 bool ScriptHost::startTween(const std::string& id, const std::string& attr,
@@ -585,6 +616,64 @@ void ScriptHost::advanceTweens(float dt) {
 #endif
 }
 
+int ScriptHost::addTimer(float interval, bool repeat, int ref) {
+#ifdef OGUI_HAS_LUA
+    if (!m_L || interval <= 0.0f || ref == LUA_NOREF) return -1;
+    TimerJob job;
+    job.id = m_nextTimerId++;
+    job.interval = interval;
+    job.repeat = repeat;
+    job.ref = ref;
+    m_timers.push_back(job);
+    return job.id;
+#else
+    (void)interval; (void)repeat; (void)ref;
+    return -1;
+#endif
+}
+
+bool ScriptHost::cancelTimer(int id) {
+    for (auto it = m_timers.begin(); it != m_timers.end(); ++it)
+        if (it->id == id) {
+#ifdef OGUI_HAS_LUA
+            if (m_L) luaL_unref(m_L, LUA_REGISTRYINDEX, it->ref);
+#endif
+            m_timers.erase(it);
+            return true;
+        }
+    return false;
+}
+
+void ScriptHost::advanceTimers(float dt) {
+#ifdef OGUI_HAS_LUA
+    if (!m_L || m_timers.empty()) return;
+    // Copy the due callbacks out before calling: a callback may legally
+    // cancel or create timers, which must not invalidate this iteration.
+    struct Due { int ref; bool repeat; };
+    std::vector<Due> due;
+    for (auto it = m_timers.begin(); it != m_timers.end(); ) {
+        it->elapsed += dt;
+        if (it->elapsed >= it->interval) {
+            due.push_back({it->ref, it->repeat});
+            it->elapsed = 0.0f;   // one fire per frame max
+            if (!it->repeat) { m_timers.erase(it); continue; }
+        }
+        ++it;
+    }
+    for (const Due& d : due) {
+        lua_rawgeti(m_L, LUA_REGISTRYINDEX, d.ref);
+        if (!d.repeat) luaL_unref(m_L, LUA_REGISTRYINDEX, d.ref);
+        if (lua_pcall(m_L, 0, 0, 0) != LUA_OK) {
+            std::string msg = lua_tostring(m_L, -1) ? lua_tostring(m_L, -1) : "error";
+            lua_pop(m_L, 1);
+            recordError("timer: " + msg);
+        }
+    }
+#else
+    (void)dt;
+#endif
+}
+
 template <typename Push>
 bool ScriptHost::callHook(const char* name, Push push) {
 #ifdef OGUI_HAS_LUA
@@ -610,7 +699,8 @@ void ScriptHost::notifyLoad() {
 }
 
 void ScriptHost::notifyUpdate(float t, float dt) {
-    advanceTweens(dt);   // engine-side: runs even with no ogui_on_update hook
+    advanceTweens(dt);   // engine-side: run even with no ogui_on_update hook
+    advanceTimers(dt);
     callHook("ogui_on_update", [t, dt](lua_State* L) {
         lua_pushnumber(L, t);
         lua_pushnumber(L, dt);

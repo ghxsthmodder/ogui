@@ -338,6 +338,9 @@ API table `ogui` (all calls are safe on unknown ids):
 | `ogui.items(id, tbl)` | replace `listbox`/`optionspin` entries with a Lua array of strings |
 | `ogui.tween(id, attr, to, dur[, ease[, delay]])` | animate `value`/`x`/`y`/`width`/`height` from the current value; `ease`: `"linear"` (default) / `"out"` / `"inout"` / `"back"`. Engine-driven — runs even without `ogui_on_update`; a new tween on the same `id+attr` replaces the old one |
 | `ogui.tweenStop([id[, attr]])` | cancel matching tweens → count stopped |
+| `ogui.after(secs, fn)` | one-shot timer → id; fires from the frame loop, outside any hook |
+| `ogui.every(secs, fn)` | repeating timer → id (one fire per frame max) |
+| `ogui.cancel(id)` | stop a timer → boolean; timers also die on screen swaps |
 | `ogui.quit()` | `Kernel::requestQuit` |
 
 Example:

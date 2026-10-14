@@ -371,6 +371,57 @@ int main() {
         sh.stopTween("btn");
     }
 
+    // ---- timers: after / every / cancel --------------------------------------
+    {
+        auto& sh = k.script();
+        InputState st = makeInput();
+        st.time = 9.0f;   // continue past the tween block's clock
+        sh.loadString(R"(
+            hits = 0
+            every = 0
+            t1 = ogui.after(0.3, function() hits = hits + 1 end)
+            t2 = ogui.every(0.2, function() every = every + 1 end)
+            assert(type(t1) == "number" and t1 ~= t2)
+            assert(ogui.cancel(99999) == false)
+        )", "timers");
+        CHECK(sh.errors().empty());
+        CHECK(sh.timerCount() == 2);
+
+        st.time += 0.1f; k.frame(st);   // 0.1: nothing yet
+        st.time += 0.1f; k.frame(st);   // 0.2: every fires once
+        st.time += 0.1f; k.frame(st);   // 0.3: after + every
+        CHECK(sh.loadString(R"(
+            assert(hits == 1, "after fired " .. hits)
+            assert(every == 2, "every fired " .. every)
+            assert(ogui.cancel(t2))
+            assert(ogui.cancel(t1) == false)   -- one-shot already gone
+        )", "timercheck"));
+        CHECK(sh.errors().empty());
+        CHECK(sh.timerCount() == 0);
+
+        // Reentrant: a callback creating another timer must not break the
+        // frame iteration; errors inside callbacks are recorded.
+        sh.loadString(R"(
+            nest = 0
+            ogui.after(0.1, function()
+                ogui.after(0.1, function() nest = nest + 1 end)
+                error("timer boom")
+            end)
+        )", "reenter");
+        st.time += 0.1f; k.frame(st);
+        CHECK(sh.errors().back().find("timer boom") != std::string::npos);
+        st.time += 0.1f; k.frame(st);
+        CHECK(sh.loadString("assert(nest == 1)", "nestcheck"));
+        CHECK(sh.errors().size() == 1);   // only the boom, nothing new
+
+        // Screen swap kills pending timers with the old state.
+        sh.loadString("ogui.after(0.1, function() error('leaked') end)", "leak");
+        CHECK(sh.timerCount() == 1);
+        k.pushScreen(makeScreen());
+        CHECK(sh.timerCount() == 0);
+        k.popScreen();
+    }
+
     // ---- ogui.quit ------------------------------------------------------------
     {
         CHECK(!k.quitRequested());

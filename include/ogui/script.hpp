@@ -66,6 +66,10 @@ class Widget;
 //                            ogui_on_update. A new tween on the same
 //                            id+attr replaces the old one.
 //   ogui.tweenStop([id[, attr]])  cancel matching tweens -> count
+//   ogui.after(secs, fn)     one-shot timer -> id (advanced by the
+//                            engine, fires outside any hook)
+//   ogui.every(secs, fn)     repeating timer -> id (one fire per frame max)
+//   ogui.cancel(id)          stop a timer -> bool
 //   ogui.quit()              Kernel::requestQuit
 //
 // Runtime errors are captured (never thrown): recorded in errors() and
@@ -115,6 +119,17 @@ public:
     int stopTween(const std::string& id = "", const std::string& attr = "");
     size_t tweenCount() const { return m_tweens.size(); }
 
+    // ---- script-driven timers (ogui.after/ogui.every/ogui.cancel) ----
+    // Callbacks live in the Lua registry; they advance with the frame
+    // clock and die with clear() (screen swaps never leak timers).
+    size_t timerCount() const { return m_timers.size(); }
+
+    // Timer bookkeeping used by the bindings: `ref` is a LUA_REGISTRYINDEX
+    // reference to the callback (ownership moves to the host on success).
+    // addTimer returns the new id, or -1 when invalid/no state.
+    int addTimer(float interval, bool repeat, int ref);
+    bool cancelTimer(int id);
+
     // Raw state for hosts extending the bindings (nullptr before any
     // load or without a Lua build). The ogui table lives in its globals.
     lua_State* state() { return m_L; }
@@ -125,10 +140,18 @@ private:
         std::string attr;
         Tween tw;
     };
+    struct TimerJob {
+        int id = 0;
+        float interval = 0.0f;
+        float elapsed = 0.0f;
+        bool repeat = false;
+        int ref = -1;           // LUA_REGISTRYINDEX reference to the callback
+    };
 
     void ensureState();
     void recordError(const std::string& msg);
     void advanceTweens(float dt);
+    void advanceTimers(float dt);
     // Calls the global function `name` if it is a function; push() adds
     // the arguments. Errors are recorded, never thrown.
     template <typename Push>
@@ -138,6 +161,8 @@ private:
     Kernel* m_kernel = nullptr;
     std::vector<std::string> m_errors;
     std::vector<TweenJob> m_tweens;
+    std::vector<TimerJob> m_timers;
+    int m_nextTimerId = 1;
 };
 
 } // namespace ogui
