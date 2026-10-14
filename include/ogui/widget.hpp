@@ -64,6 +64,13 @@ public:
     const Callback& clickHandler() const { return m_onClick; }
     void click() { if (m_onClick) m_onClick(); }
 
+    // Fire a Lua per-widget event ("change" / "submit") on the kernel's
+    // script host. No-ops when the widget has no id or no kernel attached.
+    // Call these only from user-interaction paths, never from programmatic
+    // setters, so a listener that writes the value back cannot loop.
+    void announceChange();
+    void announceSubmit();
+
     // ---- hierarchy ----
     virtual Widget* parent() const { return m_parent; }
     virtual void setParent(Widget* parent);

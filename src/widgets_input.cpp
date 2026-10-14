@@ -11,6 +11,7 @@ Checkbox::~Checkbox() = default;
 void Checkbox::toggle() {
     m_checked = !m_checked;
     if (m_onChanged) m_onChanged(m_checked);
+    announceChange();
 }
 
 void Checkbox::onPointerDown(MouseButton, const Offset2D&) {
@@ -76,6 +77,7 @@ void RadioButton::toggle() {
     }
     m_checked = true;
     if (m_onChanged) m_onChanged(m_checked);
+    announceChange();
 }
 
 void RadioButton::setChecked(bool c) {
@@ -185,6 +187,7 @@ void Slider::commit(float v) {
     if (nv == m_value) return;
     m_value = nv;
     if (m_onChanged) m_onChanged(m_value);
+    announceChange();
 }
 
 float Slider::tFromValue() const {
@@ -292,6 +295,7 @@ void SpinBox::stepBy(int dir) {
     if (nv == m_value) return;
     m_value = nv;
     if (m_onChanged) m_onChanged(m_value);
+    announceChange();
 }
 
 std::string SpinBox::formatValue() const {
@@ -318,8 +322,8 @@ void SpinBox::onKeyDown(KeyCode key, uint32_t) {
         case Key_Right: stepBy(+1); break;
         case Key_Down:
         case Key_Left:  stepBy(-1); break;
-        case Key_Home:  setValue(m_min); if (m_onChanged) m_onChanged(m_value); break;
-        case Key_End:   setValue(m_max); if (m_onChanged) m_onChanged(m_value); break;
+        case Key_Home:  setValue(m_min); if (m_onChanged) m_onChanged(m_value); announceChange(); break;
+        case Key_End:   setValue(m_max); if (m_onChanged) m_onChanged(m_value); announceChange(); break;
         default: break;
     }
 }
@@ -409,6 +413,7 @@ void OptionSpin::stepBy(int dir) {
     if (ni == m_index) return;
     m_index = ni;
     if (m_onChanged) m_onChanged(m_index, m_options[static_cast<size_t>(m_index)]);
+    announceChange();
 }
 
 void OptionSpin::onPointerDown(MouseButton, const Offset2D& p) {
@@ -430,12 +435,16 @@ void OptionSpin::onKeyDown(KeyCode key, uint32_t) {
         case Key_Down:
         case Key_Left:  stepBy(-1); break;
         case Key_Home:  setIndex(0);
-                        if (!m_options.empty() && m_onChanged)
-                            m_onChanged(m_index, m_options[static_cast<size_t>(m_index)]);
+                        if (!m_options.empty()) {
+                            if (m_onChanged) m_onChanged(m_index, m_options[static_cast<size_t>(m_index)]);
+                            announceChange();
+                        }
                         break;
         case Key_End:   setIndex(static_cast<int>(m_options.size()) - 1);
-                        if (!m_options.empty() && m_onChanged)
-                            m_onChanged(m_index, m_options[static_cast<size_t>(m_index)]);
+                        if (!m_options.empty()) {
+                            if (m_onChanged) m_onChanged(m_index, m_options[static_cast<size_t>(m_index)]);
+                            announceChange();
+                        }
                         break;
         default: break;
     }
@@ -505,12 +514,12 @@ void RangeSlider::setRange(float lo, float hi) {
 
 void RangeSlider::setLow(float v) {
     const float nv = std::clamp(v, m_min, m_high);
-    if (nv != m_low) { m_low = nv; if (m_onChanged) m_onChanged(m_low, m_high); }
+    if (nv != m_low) { m_low = nv; if (m_onChanged) m_onChanged(m_low, m_high); announceChange(); }
 }
 
 void RangeSlider::setHigh(float v) {
     const float nv = std::clamp(v, m_low, m_max);
-    if (nv != m_high) { m_high = nv; if (m_onChanged) m_onChanged(m_low, m_high); }
+    if (nv != m_high) { m_high = nv; if (m_onChanged) m_onChanged(m_low, m_high); announceChange(); }
 }
 
 float RangeSlider::valueFromLocalX(float localX) const {
@@ -538,6 +547,7 @@ void RangeSlider::commit(float low, float high) {
     m_low = low;
     m_high = high;
     if (m_onChanged) m_onChanged(m_low, m_high);
+    announceChange();
 }
 
 void RangeSlider::onPointerDown(MouseButton, const Offset2D& p) {
@@ -623,6 +633,7 @@ void ToggleSwitch::setState(bool state) {
     else { m_knob = state ? 1.0f : 0.0f; m_knobTween.stop(); }
     if (Kernel* kn = kernel()) kn->invalidate();
     if (m_onChanged) m_onChanged(m_checked);
+    announceChange();
 }
 
 void ToggleSwitch::onTick(float dt) {

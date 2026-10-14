@@ -1,6 +1,7 @@
 #include "ogui/widget.hpp"
 #include "ogui/rasterizer.hpp"
 #include "ogui/kernel.hpp"
+#include "ogui/script.hpp"
 #include <cstring>
 
 namespace ogui {
@@ -39,6 +40,14 @@ void Widget::addChild(Ptr child) {
     if (!child) return;
     child->setParent(this);
     if (m_kernel) m_kernel->invalidate();
+}
+
+void Widget::announceChange() {
+    if (m_kernel && !m_id.empty()) m_kernel->script().fireEvent(m_id, "change");
+}
+
+void Widget::announceSubmit() {
+    if (m_kernel && !m_id.empty()) m_kernel->script().fireEvent(m_id, "submit");
 }
 
 void Widget::removeChild(Ptr child) {

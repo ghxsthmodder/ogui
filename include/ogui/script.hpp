@@ -81,7 +81,11 @@ class Widget;
 //   ogui.remove(id)          drop a widget (safe on the pressed one)
 //   ogui.clear(id)           detach every child of a container -> count
 //   ogui.on(id, event, fn)   attach a per-widget listener -> handle. Events
-//                            currently fired: "click", "focus", "blur".
+//                            currently fired: "click", "focus", "blur",
+//                            "change" (user edits of a value/selection/text)
+//                            and "submit" (Enter in a TextInput). Programmatic
+//                            writes via ogui.set never fire them, so a listener
+//                            that writes back cannot loop.
 //   ogui.off(handle|id)      by handle -> bool; by widget id -> count of
 //                            listeners dropped
 //   ogui.quit()              Kernel::requestQuit

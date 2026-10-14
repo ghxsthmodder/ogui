@@ -348,7 +348,7 @@ API table `ogui` (all calls are safe on unknown ids):
 | `ogui.add(parentId, xmlFragment)` | parse `xmlFragment` (a snippet of `<screen>` body) and attach it as children of `parentId`; returns the first new widget's id, or `nil, err` if the parent is missing or the fragment fails to parse |
 | `ogui.remove(id)` | drop a widget from its parent → `true`, or `nil, err` for a missing id or an orphan. Safe to call on the widget currently being pressed: the Kernel forgets focus/hover/press bindings before the shared_ptr disappears |
 | `ogui.clear(id)` | detach every child of a container → count removed |
-| `ogui.on(id, event, fn)` | attach a per-widget listener → integer handle. Events currently fired: `"click"`, `"focus"`, `"blur"` (the callback receives the widget id) |
+| `ogui.on(id, event, fn)` | attach a per-widget listener → integer handle. Events fired: `"click"`, `"focus"`, `"blur"`, `"change"` (user edits a value/selection/text) and `"submit"` (Enter in a `TextInput`); the callback receives the widget id |
 | `ogui.off(handle)` | remove one listener → boolean |
 | `ogui.off(id)` | remove every listener on that widget → count dropped; listeners also die automatically when the widget is removed or the screen swaps |
 | `ogui.quit()` | `Kernel::requestQuit` |

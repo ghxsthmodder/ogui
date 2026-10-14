@@ -579,6 +579,62 @@ ogui.on("eb", "blur",  function(id) bl = bl + 1 end)
         CHECK(k.getText("out") == "loaded");
     }
 
+    // ---- change / submit events on user interaction ---------------------------
+    {
+        XmlParser p;
+        auto res = p.parse(R"(<screen id="chg">
+  <textinput id="ti" x="10" y="10" width="200" height="24"/>
+  <checkbox id="ck" text="c" x="10" y="50" width="60" height="24"/>
+  <label id="clog" text="none" x="10" y="90" width="200" height="24"/>
+</screen>)");
+        assert(res.root);
+        auto s = std::make_shared<Screen>("chg");
+        s->widgets.push_back(res.root);
+        s->scripts.push_back({R"(
+chg = 0
+sub = 0
+ckc = 0
+ogui.on("ti", "change", function(id) chg = chg + 1; ogui.set("clog", "text", "chg:" .. id) end)
+ogui.on("ti", "submit", function(id) sub = sub + 1 end)
+ogui.on("ck",  "change", function(id) ckc = ckc + 1 end)
+)", false});
+        s->width = 800; s->height = 600;
+        k.pushScreen(s);
+        CHECK(k.script().errors().empty());
+
+        InputState sc = makeInput();
+        sc.time = 25.0f;
+        k.frame(sc);
+        // focus the text field, then type 'h' (an onChar edge) -> change
+        pressAt(k, sc, 60.0f, 20.0f);
+        release(k, sc);
+        sc.lastChar = 'h';
+        k.frame(sc);
+        sc.lastChar = 0;
+        k.frame(sc);
+        CHECK(k.getText("clog") == "chg:ti");
+
+        // Enter -> submit
+        sc.keyDown[Key_Enter] = true;
+        k.frame(sc);
+        sc.keyDown[Key_Enter] = false;
+        k.frame(sc);
+
+        // clicking the checkbox -> its own change listener
+        pressAt(k, sc, 30.0f, 60.0f);
+        release(k, sc);
+
+        // a programmatic set must NOT fire change (no loop)
+        k.script().loadString(
+            "ogui.set(\"ti\", \"text\", \"reset\"); "
+            "ogui.set(\"ck\", \"checked\", false)", "chg-prog");
+        CHECK(k.script().errors().empty());
+        k.script().loadString("assert(chg == 1) assert(sub == 1) assert(ckc == 1)", "chg-count");
+        CHECK(k.script().errors().empty());
+        k.popScreen();
+        CHECK(k.getText("out") == "loaded");
+    }
+
     // ---- ogui.quit ------------------------------------------------------------
     {
         CHECK(!k.quitRequested());

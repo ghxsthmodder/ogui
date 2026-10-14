@@ -130,6 +130,15 @@ void TextInput::onPointerMove(const Offset2D& p) {
 }
 
 void TextInput::onKeyDown(KeyCode key, uint32_t mods) {
+    const std::string before = m_text;
+    onKeyEdit(key, mods);
+    if (m_text != before) announceChange();
+    // Single-line field: Enter commits the text (a multi-line TextArea
+    // overrides onKeyDown and turns Enter into a newline instead).
+    if (key == Key_Enter || key == Key_KP_Enter) announceSubmit();
+}
+
+void TextInput::onKeyEdit(KeyCode key, uint32_t mods) {
     if (!m_focused) return;
     const bool shift = (mods & Mod_Shift) != 0;
     const bool ctrl = (mods & Mod_Ctrl) != 0;
@@ -256,6 +265,7 @@ void TextInput::onChar(uint32_t ch) {
         buf[n++] = static_cast<char>(0x80 | (ch & 0x3F));
     }
     insertText(std::string(buf, static_cast<size_t>(n)));
+    announceChange();
 }
 
 void TextInput::onFocus(bool focused) {
@@ -606,10 +616,16 @@ void TextArea::onPointerMove(const Offset2D& p) {
 }
 
 void TextArea::onKeyDown(KeyCode key, uint32_t mods) {
+    const std::string before = m_text;
+    onKeyEdit(key, mods);
+    if (m_text != before) announceChange();
+}
+
+void TextArea::onKeyEdit(KeyCode key, uint32_t mods) {
     if (!m_focused) return;
     const bool shift = (mods & Mod_Shift) != 0;
     if (mods & Mod_Ctrl) {           // A/C/X/V/Arrows behave as in TextInput
-        TextInput::onKeyDown(key, mods);
+        TextInput::onKeyEdit(key, mods);
         return;
     }
 
@@ -641,7 +657,7 @@ void TextArea::onKeyDown(KeyCode key, uint32_t mods) {
                                 ls[static_cast<size_t>(li)].len); return;
         default: break;
     }
-    TextInput::onKeyDown(key, mods);
+    TextInput::onKeyEdit(key, mods);
 }
 
 void TextArea::onPointerScroll(float, float dy) {

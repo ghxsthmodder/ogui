@@ -337,6 +337,9 @@ protected:
     // Clamps caret/anchor, refreshes [start,end] and scrolls the caret into
     // view (the text slice is what gets drawn when the line overflows).
     virtual void syncState();
+    // Raw key handling for a single-line field. onKeyDown() wraps this to
+    // fire the Lua "change"/"submit" events when the text actually moved.
+    void onKeyEdit(KeyCode key, uint32_t mods);
     // Caret index for a click at widget-local x.
     size_t indexAtX(float lx) const;
     // Deletes the selection and puts the caret where it started.
@@ -1095,6 +1098,8 @@ public:
 private:
     struct Line { size_t start; size_t len; };   // byte range in m_text
 
+    // Raw multi-line key handling; onKeyDown() wraps it to fire "change".
+    void onKeyEdit(KeyCode key, uint32_t mods);
     std::vector<Line> lines() const;
     // Index of the line containing the caret.
     int lineOf(size_t index) const;

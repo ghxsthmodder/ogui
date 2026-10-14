@@ -52,6 +52,7 @@ void ColorPopup::pick(const Offset2D& p, bool fromHue) {
         m_v = std::clamp(1.0f - sy, 0.0f, 1.0f);
     }
     if (m_onChanged) m_onChanged(m_h, m_s, m_v);
+    announceChange();
 }
 
 void ColorPopup::onPointerDown(MouseButton btn, const Offset2D& p) {
@@ -192,6 +193,7 @@ void ColorPicker::onPointerDown(MouseButton btn, const Offset2D&) {
         m_h = h; m_s = s; m_v = v;
         applyHsv();
         if (m_onChanged) m_onChanged(colorHex());
+        announceChange();
         if (Kernel* k = kernel()) k->invokeBinding(binding());
     });
     const Offset2D o = absoluteOrigin();
@@ -302,6 +304,7 @@ void PathPicker::listDir(const std::string& dir) {
             if (Kernel* k = kernel()) k->closePopup();
             if (m_popup) m_popup->setVisible(false);
             if (m_onChanged) m_onChanged(m_value);
+            announceChange();
             if (Kernel* k = kernel()) k->invokeBinding(binding());
         }
     });
@@ -422,6 +425,7 @@ Color RampEditor::sample(float pos) const {
 
 void RampEditor::notify() {
     if (m_onChanged) m_onChanged();
+    announceChange();
 }
 
 void RampEditor::onPointerDown(MouseButton btn, const Offset2D& p) {
@@ -535,6 +539,7 @@ float CurveEditor::evaluate(float t) const {
 
 void CurveEditor::notify() {
     if (m_onChanged) m_onChanged();
+    announceChange();
 }
 
 void CurveEditor::onPointerDown(MouseButton btn, const Offset2D& p) {

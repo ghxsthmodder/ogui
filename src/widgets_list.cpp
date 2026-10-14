@@ -272,7 +272,7 @@ void ComboBox::commit(int index) {
     const bool changed = (m_selected != index);
     m_selected = index;
     closePopup();
-    if (changed && m_onChanged) m_onChanged(m_selected);
+    if (changed) { if (m_onChanged) m_onChanged(m_selected); announceChange(); }
 }
 
 void ComboBox::onPointerDown(MouseButton, const Offset2D&) {
@@ -387,6 +387,7 @@ void Tabs::setActive(int index) {
     if (index == m_active) return;
     m_active = index;
     if (m_onChanged) m_onChanged(m_active);
+    announceChange();
 }
 
 float Tabs::tabCellWidth(int i) const {
@@ -665,6 +666,7 @@ void ListBox::commit(int row) {
     const bool changed = (m_selected != row);
     m_selected = row;
     if (changed && m_onChanged) m_onChanged(m_selected);
+    if (changed) announceChange();
 }
 
 void ListBox::onPointerDown(MouseButton, const Offset2D& p) {
@@ -1097,6 +1099,7 @@ void Table::commit(int row) {
     const bool changed = (m_selected != orig);
     m_selected = orig;
     if (changed && m_onChanged) m_onChanged(m_selected);
+    if (changed) announceChange();
 }
 
 void Table::onPointerDown(MouseButton, const Offset2D& p) {
@@ -1574,6 +1577,7 @@ void TreeView::commit(int row) {
     const bool changed = (m_selected != row);
     m_selected = row;
     if (changed && m_onChanged) m_onChanged(m_selected);
+    if (changed) announceChange();
 }
 
 const std::string& TreeView::selectedLabel() const {
