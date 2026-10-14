@@ -1206,8 +1206,18 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         else if (const std::string* v = get("on")) ts->setState(toBool(*v));
         if (const std::string* v = get("text")) ts->setText(*v);
     } else if (auto* col = dynamic_cast<Column*>(w.get())) {
-        (void)col;
-        // Column layout knobs are handled by Style (padding/margin) above.
+        // Column layout knobs are handled by Style (padding/margin/gap)
+        // above; `align` places children horizontally within the column.
+        if (const std::string* v = get("align")) {
+            col->setChildAlign(*v == "center" ? Align::Center
+                                              : (*v == "right" ? Align::Right : Align::Left));
+        }
+    } else if (auto* row = dynamic_cast<Row*>(w.get())) {
+        // `valign` places shorter children against the tallest row member.
+        if (const std::string* v = get("valign")) {
+            row->setChildValign(*v == "middle" ? VertAlign::Middle
+                                               : (*v == "bottom" ? VertAlign::Bottom : VertAlign::Top));
+        }
     }
 
     if (tag == "screen") {

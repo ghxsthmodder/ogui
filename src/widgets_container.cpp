@@ -197,8 +197,18 @@ void Column::layout(float parentWidth, float parentHeight) {
         c->layout(cw, ch);
 
         Rect after = c->bounds();
+        if (m_align != Align::Left) {
+            // Cross-axis alignment ignores the authored x: the child is
+            // centred or flush-right within the column's content width.
+            const float contentW = parentWidth - pad * 2.0f;
+            const float nx = m_align == Align::Center
+                ? pad + (contentW - after.w) * 0.5f
+                : pad + contentW - after.w;
+            after.x = nx;
+            c->setBounds(after);
+        }
         y += after.h + gap;
-        maxW = std::max(maxW, cx + after.w);
+        maxW = std::max(maxW, after.x + after.w);
     }
 
     float totalH = y > pad ? y - gap : pad;
@@ -222,6 +232,18 @@ void Row::layout(float parentWidth, float parentHeight) {
                   : (m_style.margin > 0.0f ? m_style.margin : 4.0f);
     float x = pad;
     float maxH = 0.0f;
+
+    if (m_valign != VertAlign::Top) {
+        // First pass: the tallest child defines the band shorter children
+        // are centred or bottom-aligned inside.
+        for (const auto& c : children()) {
+            if (!c) continue;
+            c->resolveGeometry(parentWidth, parentHeight);
+            const Rect cb = c->bounds();
+            maxH = std::max(maxH, cb.h > 0.0f ? cb.h : parentHeight);
+        }
+    }
+
     for (const auto& c : children()) {
         if (!c) continue;
         // Percent/fill children resolve against the row's content area.
@@ -229,7 +251,10 @@ void Row::layout(float parentWidth, float parentHeight) {
         Rect cb = c->bounds();
         const float cw = cb.w > 0.0f ? cb.w : 100.0f;
         const float ch = cb.h > 0.0f ? cb.h : parentHeight;
-        c->setBounds(Rect{x, cb.y, cw, ch});
+        float cy = cb.y;
+        if (m_valign == VertAlign::Middle) cy = (maxH - ch) * 0.5f;
+        else if (m_valign == VertAlign::Bottom) cy = maxH - ch;
+        c->setBounds(Rect{x, cy, cw, ch});
         c->layout(cw, ch);
         Rect after = c->bounds();
         x += after.w + gap;

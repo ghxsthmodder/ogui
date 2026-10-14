@@ -2482,6 +2482,42 @@ static void testSizeLimits() {
     CHECK(p2->bounds().y == 50.0f);          // 30 + gap 20
     CHECK(q1->bounds().x == 5.0f);           // padding 5
     CHECK(q2->bounds().x == 65.0f);          // 5 + 50 + gap 10
+
+    // align="center|right" places column children horizontally;
+    // valign="middle|bottom" places shorter row children vertically.
+    Kernel k3;
+    k3.init();
+    auto res3 = p.parse(R"XML(<screen id="s">
+  <column id="ac" x="0" y="0" width="200" height="0" align="center">
+    <panel id="n1" width="60" height="10" background="#111"/>
+  </column>
+  <column id="ar" x="300" y="0" width="200" height="0" align="right">
+    <panel id="n2" width="60" height="10" background="#222"/>
+  </column>
+  <row id="vm" x="0" y="400" width="0" height="40" valign="middle">
+    <panel id="t1" width="30" height="40" background="#333"/>
+    <panel id="t2" width="30" height="20" background="#444"/>
+  </row>
+</screen>)XML");
+    assert(res3.root);
+    auto s3 = std::make_shared<Screen>("s");
+    s3->widgets.push_back(res3.root);
+    s3->width = 800;
+    s3->height = 600;
+    k3.pushScreen(s3);
+    InputState st3 = makeInput();
+    k3.frame(st3);
+    auto* n1 = dynamic_cast<Panel*>(k3.findWidget("n1"));
+    auto* n2 = dynamic_cast<Panel*>(k3.findWidget("n2"));
+    auto* t1 = dynamic_cast<Panel*>(k3.findWidget("t1"));
+    auto* t2 = dynamic_cast<Panel*>(k3.findWidget("t2"));
+    CHECK(n1 && n2 && t1 && t2);
+    // Columns stretch to their parent's width, so alignment centers
+    // within that (the authored column width is a floor, not a cap).
+    CHECK(std::fabs(n1->bounds().x - 370.0f) < 0.01f);      // (800-60)/2
+    CHECK(std::fabs(n2->bounds().x - 740.0f) < 0.01f);      // 800-60
+    CHECK(t1->bounds().y == 0.0f);                          // tallest stays
+    CHECK(std::fabs(t2->bounds().y - 10.0f) < 0.01f);       // (40-20)/2
 }
 
 static void testTabsScrolling() {

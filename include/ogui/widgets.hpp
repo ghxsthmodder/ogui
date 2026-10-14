@@ -384,7 +384,13 @@ class Column : public Widget {
 public:
     Column();
     virtual ~Column() override;
+    // Horizontal placement of children narrower than the content width:
+    // left keeps the authored x (indentation); center/right align them.
+    void setChildAlign(Align a) { m_align = a; }
     virtual void layout(float parentWidth, float parentHeight) override;
+
+private:
+    Align m_align = Align::Left;
 };
 
 // Row: lays children horizontally
@@ -392,7 +398,13 @@ class Row : public Widget {
 public:
     Row();
     virtual ~Row() override;
+    // Vertical placement of children shorter than the tallest row member:
+    // top keeps the authored y; middle/bottom align them.
+    void setChildValign(VertAlign a) { m_valign = a; }
     virtual void layout(float parentWidth, float parentHeight) override;
+
+private:
+    VertAlign m_valign = VertAlign::Top;
 };
 
 // ------------------------------------------------------------------
