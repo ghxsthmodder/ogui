@@ -1132,6 +1132,42 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         if (const std::string* v = get("label")) li->setLabel(*v);
         else if (const std::string* v = get("text")) li->setLabel(*v);
         if (const std::string* v = get("value")) li->setValue(*v);
+    } else if (auto* pg = dynamic_cast<PropertyGrid*>(w.get())) {
+        if (const std::string* v = get("rowheight")) {
+            float rh = 24.0f;
+            toFloat(*v, rh);
+            pg->setRowHeight(rh);
+        }
+        if (const std::string* v = get("color")) pg->setValueColor(colorOf(*v));
+        if (const std::string* v = get("labelcolor")) pg->setLabelColor(colorOf(*v));
+        if (const std::string* v = get("groupcolor")) pg->setGroupColor(colorOf(*v));
+        if (const std::string* v = get("highlight")) pg->setHighlightColor(colorOf(*v));
+        if (const std::string* v = get("background")) pg->setBgColor(colorOf(*v));
+        if (const std::string* v = get("bordercolor")) pg->setBorderColor(colorOf(*v));
+        else if (const std::string* v = get("border")) pg->setBorderColor(colorOf(*v));
+        if (hasStyle) { pg->setFontFamily(st.fontFamily); pg->setFontSize(st.fontSize); }
+    } else if (auto* pi = dynamic_cast<PropertyItem*>(w.get())) {
+        if (const std::string* v = get("name")) pi->setName(*v);
+        else if (const std::string* v = get("label")) pi->setName(*v);
+        if (const std::string* v = get("category")) pi->setGroup(*v);
+        else if (const std::string* v = get("group")) pi->setGroup(*v);
+        if (const std::string* v = get("type")) pi->setKind(PropertyItem::kindFromName(*v));
+        if (const std::string* v = get("value")) pi->setValue(*v);
+        if (const std::string* v = get("readonly")) pi->setReadOnly(toBool(*v));
+        if (const std::string* v = get("options")) {
+            std::vector<std::string> opts;
+            size_t start = 0;
+            while (start <= v->size()) {
+                size_t semi = v->find(';', start);
+                if (semi == std::string::npos) {
+                    if (start < v->size()) opts.push_back(v->substr(start));
+                    break;
+                }
+                if (semi > start) opts.push_back(v->substr(start, semi - start));
+                start = semi + 1;
+            }
+            pi->setOptions(opts);
+        }
     } else if (auto* tb = dynamic_cast<Table*>(w.get())) {
         if (const std::string* v = get("rowheight")) {
             float rh = 22.0f;

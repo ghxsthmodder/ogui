@@ -25,6 +25,7 @@ creates for you (`ogui::Host`, a built-in Win32/WGL window and event loop).
   `ogui_on_event` hooks through the `ogui` API table: widget attributes,
   input queries (`mouse`/`key`/`mods`), focus/hover, list content
   (full `items` or incremental `ogui.list` insert/remove/set),
+  `ogui.prop` reads/writes `propertygrid` models by name,
   engine-driven `tween` animations, `after`/`every` timers, dynamic
   widget creation (`add`/`remove`/`clear`), tree navigation
   (`children`/`parent`/`index`), per-widget event
@@ -373,6 +374,8 @@ theme default.
 | `listbox` / `virtuallist` | scrollable list with single selection (click, wheel, Up/Down/Home/End); rows are drawn from a string model so large lists stay cheap — `virtuallist` is the same widget, and `ogui.list` inserts/removes/changes rows incrementally | `selected`, `rowHeight`, `highlight` + `<item>` children |
 | `console` | read-only log view mirroring `Kernel::logs()` — newest line on top, wheel scrolls history, error/script lines tinted red | `rowHeight`, `maxLines` (default 200) |
 | `item` | a `listbox` entry | `label` / `text`, `value` |
+| `propertygrid` | two-column typed property editor: label left, kind-appropriate editor right (bool → checkbox, number/text/color → inline edit, enum → click-cycle select). Group headers where `category` changes; click/Up/Down select, Enter/F2 edit, Space toggles bools, Left/Right cycle enums, Esc cancels. Wheel scrolls; overlay scrollbar on overflow | `rowHeight`, `color`, `labelColor`, `groupColor`, `highlight`, `background`, `borderColor` + `<property>` children |
+| `property` | a `propertygrid` row (data only): `name`/`label`, `type` (`bool`/`number`/`text`/`enum`/`color`), `value`, `category`/`group`, `options="a;b;c"` (enum), `readonly` | — |
 | `table` | data grid: header click sorts (re-click flips direction), row click selects, wheel + Up/Down/Home/End; drag a header edge to resize a `resizable` column, click a cell in an `editable` column (or press F2) to edit it inline (Enter saves, Esc cancels), overflowing cell text marquees per `scrollingText` | `selected`, `rowHeight`, `headerHeight`, `sortable`, `headerBackground`, `highlight` + `<th>`/`<tr>` children |
 | `th` | a `table` column | `label` / `text`, `width` (0 = share leftover width), `resizable`, `editable`, `scrollingText` (`automatic` / `onmouseenter`) |
 | `tr` | a `table` row: cells from `cells="a;b"` or nested `<cell>` children | `cells` (`;`-separated), `value`, `editableCells` (`;`-separated column labels), `resizable`, `scrollingText` |

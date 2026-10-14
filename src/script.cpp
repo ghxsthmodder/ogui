@@ -445,6 +445,91 @@ int l_list(lua_State* L) {
     return 1;
 }
 
+// ogui.prop(id, op, ...) — PropertyGrid model access.
+//   count            -> number of items
+//   get(name)        -> value string (nil when the name is unknown)
+//   set(name, value) -> bool; programmatic, silent, validated per kind
+//   add(name, type, value[, group[, options]]) -> bool; creates the item
+//                  (type: bool|number|text|enum|color, options ";"-separated)
+//   remove(name)     -> bool
+//   list()           -> table {name = value, ...}
+//   selected / select(i)
+int l_prop(lua_State* L) {
+    const char* id = luaL_checkstring(L, 1);
+    const char* op = luaL_checkstring(L, 2);
+    Kernel* k = kernelOf(L);
+    Widget* w = k ? k->findWidget(id) : nullptr;
+    auto* pg = dynamic_cast<PropertyGrid*>(w);
+    if (!pg)
+        return luaL_error(L, "ogui.prop: widget \"%s\" is not a property grid", id);
+    if (!std::strcmp(op, "count")) {
+        lua_pushinteger(L, pg->count());
+        return 1;
+    }
+    if (!std::strcmp(op, "get")) {
+        const char* name = luaL_checkstring(L, 3);
+        if (pg->indexOf(name) < 0) lua_pushnil(L);
+        else {
+            const std::string v = pg->valueOf(name);
+            lua_pushlstring(L, v.c_str(), v.size());
+        }
+        return 1;
+    }
+    if (!std::strcmp(op, "list")) {
+        lua_newtable(L);
+        for (int i = 0; i < pg->count(); ++i) {
+            const PropertyItem* it = pg->itemAt(i);
+            if (!it) continue;
+            lua_pushlstring(L, it->value().c_str(), it->value().size());
+            lua_setfield(L, -2, it->name().c_str());
+        }
+        return 1;
+    }
+    if (!std::strcmp(op, "set")) {
+        size_t len = 0;
+        const char* v = luaL_checklstring(L, 4, &len);
+        lua_pushboolean(L, pg->setValue(luaL_checkstring(L, 3),
+                                        std::string(v, len)));
+    } else if (!std::strcmp(op, "add")) {
+        auto item = std::make_shared<PropertyItem>();
+        item->setName(luaL_checkstring(L, 3));
+        item->setKind(PropertyItem::kindFromName(luaL_optstring(L, 4, "text")));
+        item->setValue(luaL_optstring(L, 5, ""));
+        item->setGroup(luaL_optstring(L, 6, ""));
+        if (!lua_isnoneornil(L, 7)) {
+            const std::string opts = luaL_checkstring(L, 7);
+            std::vector<std::string> list;
+            size_t start = 0;
+            while (start <= opts.size()) {
+                const size_t semi = opts.find(';', start);
+                if (semi == std::string::npos) {
+                    if (start < opts.size()) list.push_back(opts.substr(start));
+                    break;
+                }
+                if (semi > start) list.push_back(opts.substr(start, semi - start));
+                start = semi + 1;
+            }
+            item->setOptions(list);
+        }
+        pg->addItem(item);
+        lua_pushboolean(L, 1);
+    } else if (!std::strcmp(op, "remove")) {
+        lua_pushboolean(L, pg->removeItem(luaL_checkstring(L, 3)));
+    } else if (!std::strcmp(op, "selected")) {
+        lua_pushinteger(L, pg->selectedIndex());
+        return 1;
+    } else if (!std::strcmp(op, "select")) {
+        pg->setSelectedIndex(static_cast<int>(luaL_checkinteger(L, 3)));
+        lua_pushboolean(L, 1);
+    } else {
+        return luaL_error(L, "ogui.prop: unknown op \"%s\" "
+                             "(count|get|set|add|remove|list|selected|select)",
+                          op);
+    }
+    k->invalidate();
+    return 1;
+}
+
 // ---- tweens ----------------------------------------------------------------
 
 int l_tween(lua_State* L) {
@@ -691,6 +776,7 @@ const luaL_Reg oguiLib[] = {
     {"clickCount", l_clickcount},
     {"items",      l_items},
     {"list",       l_list},
+    {"prop",       l_prop},
     {"tween",      l_tween},
     {"tweenStop",  l_tweenstop},
     {"after",      l_after},

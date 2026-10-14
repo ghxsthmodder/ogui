@@ -704,7 +704,7 @@ menos lógica repetida.
 ### Fase 4 --- Widgets de maior retorno
 
 -   [x] VirtualList.
--   [ ] PropertyGrid.
+-   [x] PropertyGrid.
 -   [x] Console/LogView.
 -   [ ] TreeTable.
 -   [ ] Painéis divisíveis e, se necessário, docking.

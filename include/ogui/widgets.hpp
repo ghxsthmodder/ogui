@@ -1363,6 +1363,138 @@ enum class CellScroll : uint8_t {
     OnHover,     // scrolls only while the pointer is over the cell
 };
 
+// ------------------------------------------------------------------
+// PropertyItem: a data row feeding a PropertyGrid (label + typed value).
+// It never draws; the grid collects the entries during layout.
+// ------------------------------------------------------------------
+class PropertyItem : public Widget {
+public:
+    enum class Kind { Bool, Number, Text, Enum, Color };
+    static Kind kindFromName(const std::string& t);
+
+    void setName(const std::string& n) { m_name = n; }
+    const std::string& name() const { return m_name; }
+    void setKind(Kind k) { m_kind = k; }
+    Kind kind() const { return m_kind; }
+    void setValue(const std::string& v) { m_value = v; }
+    const std::string& value() const { return m_value; }
+    void setGroup(const std::string& g) { m_group = g; }
+    const std::string& group() const { return m_group; }
+    void setOptions(const std::vector<std::string>& o) { m_options = o; }
+    const std::vector<std::string>& options() const { return m_options; }
+    void setReadOnly(bool r) { m_readOnly = r; }
+    bool readOnly() const { return m_readOnly; }
+
+private:
+    std::string m_name;
+    std::string m_value;
+    std::string m_group;
+    std::vector<std::string> m_options;
+    Kind m_kind = Kind::Text;
+    bool m_readOnly = false;
+};
+
+// ------------------------------------------------------------------
+// PropertyGrid: two-column editor over a flat list of PropertyItems.
+// Left column is the label, right column is a type-appropriate editor
+// (checkbox for bool, inline text for number/text, a colour swatch for
+// colour, a cycling select for enum). Rows are grouped by `group`. The
+// model lives in the collected items, not child widgets, so it can also
+// be built entirely from Lua/C++. Selection with click or Up/Down; the
+// right column enters inline edit for text/number on Enter or dbl-click.
+// ------------------------------------------------------------------
+class PropertyGrid : public Widget {
+public:
+    using ValueCallback = std::function<void(const std::string& name,
+                                             const std::string& value)>;
+
+    PropertyGrid();
+    virtual ~PropertyGrid() override;
+
+    void addItem(PropertyItem::Ptr item);         // adopt a parsed/Lua item
+    bool removeItem(const std::string& name);
+    void clear();
+    int count() const { return static_cast<int>(m_items.size()); }
+    PropertyItem* itemAt(int i);
+    int indexOf(const std::string& name) const;
+    std::string valueOf(const std::string& name) const;
+    // Programmatic set: silent (never fires setOnChanged), clamps/validates
+    // to the item's kind. Returns false for an unknown name.
+    bool setValue(const std::string& name, const std::string& v);
+    void setOnChanged(ValueCallback cb) { m_onChanged = std::move(cb); }
+    int selectedIndex() const { return m_sel; }
+    void setSelectedIndex(int i);
+    // Validation message of the last rejected edit (empty when none); it
+    // shows in the row until the next commit or focus loss.
+    const std::string& errorText() const { return m_error; }
+    int errorIndex() const { return m_errorIndex; }
+
+    void setRowHeight(float px) { m_rowH = px; }
+    void setGroupColor(const Color& c) { m_groupColor = c; }
+    void setLabelColor(const Color& c) { m_labelColor = c; }
+    void setValueColor(const Color& c) { m_valueColor = c; }
+    void setBgColor(const Color& c) { m_bg = c; }
+    void setBorderColor(const Color& c) { m_border = c; }
+    void setHighlightColor(const Color& c) { m_highlight = c; }
+    void setFontFamily(const std::string& f) { m_fontFam = f; }
+    void setFontSize(int s) { m_fontSize = s; }
+
+    virtual void layout(float parentWidth, float parentHeight) override;
+    virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
+    virtual void onPointerUp(MouseButton btn) override;
+    virtual void onPointerMove(const Offset2D& p) override;
+    virtual void onPointerScroll(float dx, float dy) override;
+    virtual void onKeyDown(KeyCode key, uint32_t mods) override;
+    virtual void onChar(uint32_t ch) override;
+    virtual void onFocus(bool focused) override;
+    virtual void onDraw(Rasterizer& r) const override;
+    virtual bool wantsScroll() const override { return true; }
+
+private:
+    struct GridRow {
+        int item = -1;              // -1 = group header band
+        std::string group;          // header text when item < 0
+    };
+    void collect();                 // gather child PropertyItems once
+    void rebuildRows();             // flatten items + group headers
+    void clampScroll();
+    int rowAt(float localY) const;  // visual row under a widget-local y
+    int visualRow(int item) const;  // visual row of an item (-1 if none)
+    bool boolValue(const PropertyItem& it) const;
+    bool editableText(const PropertyItem& it) const;  // number/text/color
+    void drawEditor(Rasterizer& r, const PropertyItem& it,
+                    const Rect& cell, bool editing, const Color& col) const;
+    void commitEdit(bool save);
+    void toggleItem(PropertyItem& it);
+    void cycleEnum(PropertyItem& it, int dir);
+    void ensureVisible(int row);
+    void notify(PropertyItem& it);   // user value change -> callbacks
+    float labelW() const;
+
+    std::vector<PropertyItem::Ptr> m_items;
+    std::vector<GridRow> m_rows;
+    std::string m_fontFam = "sans";
+    int m_fontSize = 13;
+    float m_rowH = 24.0f;
+    float m_scroll = 0.0f;
+    float m_labelFrac = 0.4f;       // left column share of the width
+    int m_sel = -1;
+    bool m_editing = false;
+    int m_editIndex = -1;           // row being text-edited
+    std::string m_editText;
+    size_t m_editCaret = 0;
+    std::string m_error;            // last rejected-edit message
+    int m_errorIndex = -1;          // row the error belongs to
+    bool m_collected = false;       // child PropertyItems gathered once
+    Color m_bg{ogui::palette().window};
+    Color m_border{ogui::palette().accent};
+    Color m_groupColor{ogui::hexColor("#334455")};
+    Color m_labelColor{ogui::palette().text};
+    Color m_valueColor{ogui::palette().textBright};
+    Color m_highlight{ogui::hexColor("#334455")};
+    ValueCallback m_onChanged;
+};
+
 class TableColumn : public Widget {
 public:
     TableColumn();

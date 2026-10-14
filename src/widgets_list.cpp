@@ -1,4 +1,6 @@
 #include "widgets_internal.hpp"
+#include <cmath>
+#include <cstdlib>
 
 namespace ogui {
 
@@ -2400,6 +2402,545 @@ void ContextMenu::openAt(float x, float y) {
         if (Kernel* k = kernel()) k->invokeBinding(cmd);
     });
     if (Kernel* k = kernel()) k->openPopup(m_popup);
+}
+
+// ------------------------------------------------------------------
+// PropertyItem / PropertyGrid
+// ------------------------------------------------------------------
+
+PropertyItem::Kind PropertyItem::kindFromName(const std::string& t) {
+    if (t == "bool" || t == "boolean" || t == "checkbox") return Kind::Bool;
+    if (t == "number" || t == "int" || t == "float") return Kind::Number;
+    if (t == "enum" || t == "select" || t == "options") return Kind::Enum;
+    if (t == "color") return Kind::Color;
+    return Kind::Text;
+}
+
+PropertyGrid::PropertyGrid() = default;
+PropertyGrid::~PropertyGrid() = default;
+
+namespace {
+
+bool isNumberText(const std::string& s) {
+    char* end = nullptr;
+    const double v = std::strtod(s.c_str(), &end);
+    (void)v;
+    if (end == s.c_str()) return false;
+    while (end && *end == ' ') ++end;
+    return end && *end == '\0';
+}
+
+bool isColorText(const std::string& s) {
+    if (s.size() != 7 && s.size() != 9) return false;
+    if (s[0] != '#') return false;
+    for (size_t i = 1; i < s.size(); ++i) {
+        const char c = s[i];
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
+              (c >= 'A' && c <= 'F')))
+            return false;
+    }
+    return true;
+}
+
+void appendUtf8(std::string& out, size_t& caret, uint32_t ch) {
+    char buf[4];
+    int n = 0;
+    if (ch < 0x80) {
+        buf[n++] = static_cast<char>(ch);
+    } else if (ch < 0x800) {
+        buf[n++] = static_cast<char>(0xC0 | (ch >> 6));
+        buf[n++] = static_cast<char>(0x80 | (ch & 0x3F));
+    } else if (ch < 0x10000) {
+        buf[n++] = static_cast<char>(0xE0 | (ch >> 12));
+        buf[n++] = static_cast<char>(0x80 | ((ch >> 6) & 0x3F));
+        buf[n++] = static_cast<char>(0x80 | (ch & 0x3F));
+    } else {
+        buf[n++] = static_cast<char>(0xF0 | (ch >> 18));
+        buf[n++] = static_cast<char>(0x80 | ((ch >> 12) & 0x3F));
+        buf[n++] = static_cast<char>(0x80 | ((ch >> 6) & 0x3F));
+        buf[n++] = static_cast<char>(0x80 | (ch & 0x3F));
+    }
+    out.insert(caret, std::string(buf, static_cast<size_t>(n)));
+    caret += static_cast<size_t>(n);
+}
+
+} // namespace
+
+void PropertyGrid::addItem(PropertyItem::Ptr item) {
+    if (!item || !dynamic_cast<PropertyItem*>(item.get())) return;
+    m_items.push_back(std::move(item));
+    m_collected = true;
+    rebuildRows();
+    if (m_kernel) m_kernel->invalidate();
+}
+
+bool PropertyGrid::removeItem(const std::string& name) {
+    for (size_t i = 0; i < m_items.size(); ++i) {
+        auto* it = static_cast<PropertyItem*>(m_items[i].get());
+        if (it->name() == name) {
+            m_items.erase(m_items.begin() + static_cast<long>(i));
+            if (m_sel == static_cast<int>(i)) m_sel = -1;
+            else if (m_sel > static_cast<int>(i)) --m_sel;
+            rebuildRows();
+            if (m_kernel) m_kernel->invalidate();
+            return true;
+        }
+    }
+    return false;
+}
+
+void PropertyGrid::clear() {
+    m_items.clear();
+    m_sel = -1;
+    m_editing = false;
+    m_editIndex = -1;
+    m_error.clear();
+    m_errorIndex = -1;
+    rebuildRows();
+    if (m_kernel) m_kernel->invalidate();
+}
+
+PropertyItem* PropertyGrid::itemAt(int i) {
+    if (i < 0 || i >= static_cast<int>(m_items.size())) return nullptr;
+    return static_cast<PropertyItem*>(m_items[static_cast<size_t>(i)].get());
+}
+
+int PropertyGrid::indexOf(const std::string& name) const {
+    for (size_t i = 0; i < m_items.size(); ++i)
+        if (static_cast<PropertyItem*>(m_items[i].get())->name() == name)
+            return static_cast<int>(i);
+    return -1;
+}
+
+std::string PropertyGrid::valueOf(const std::string& name) const {
+    for (const auto& p : m_items) {
+        auto* it = static_cast<PropertyItem*>(p.get());
+        if (it->name() == name) return it->value();
+    }
+    return {};
+}
+
+bool PropertyGrid::setValue(const std::string& name, const std::string& v) {
+    const int idx = indexOf(name);
+    if (idx < 0) return false;
+    auto* it = itemAt(idx);
+    if (it->kind() == PropertyItem::Kind::Number && !isNumberText(v))
+        return false;
+    if (it->kind() == PropertyItem::Kind::Color && !isColorText(v))
+        return false;
+    if (it->kind() == PropertyItem::Kind::Enum && !it->options().empty()) {
+        bool known = false;
+        for (const auto& o : it->options())
+            if (o == v) { known = true; break; }
+        if (!known) return false;
+    }
+    it->setValue(v);
+    if (m_errorIndex == idx) { m_error.clear(); m_errorIndex = -1; }
+    if (m_kernel) m_kernel->invalidate();
+    return true;
+}
+
+void PropertyGrid::setSelectedIndex(int i) {
+    if (i < 0 || i >= static_cast<int>(m_items.size())) i = -1;
+    m_sel = i;
+    if (m_sel >= 0) ensureVisible(visualRow(m_sel));
+    if (m_kernel) m_kernel->invalidate();
+}
+
+void PropertyGrid::collect() {
+    if (m_collected) return;
+    m_items.clear();
+    for (const auto& c : children())
+        if (dynamic_cast<PropertyItem*>(c.get())) m_items.push_back(c);
+    m_collected = true;
+    rebuildRows();
+}
+
+void PropertyGrid::rebuildRows() {
+    m_rows.clear();
+    std::string prev;
+    bool first = true;
+    for (size_t i = 0; i < m_items.size(); ++i) {
+        auto* it = static_cast<PropertyItem*>(m_items[i].get());
+        const std::string& g = it->group();
+        if (first || g != prev) {
+            if (!g.empty()) m_rows.push_back({-1, g});
+            prev = g;
+            first = false;
+        }
+        m_rows.push_back({static_cast<int>(i), std::string()});
+    }
+    clampScroll();
+}
+
+float PropertyGrid::labelW() const {
+    return bounds().w * m_labelFrac;
+}
+
+bool PropertyGrid::boolValue(const PropertyItem& it) const {
+    return it.value() == "true" || it.value() == "1";
+}
+
+bool PropertyGrid::editableText(const PropertyItem& it) const {
+    switch (it.kind()) {
+        case PropertyItem::Kind::Number:
+        case PropertyItem::Kind::Text:
+        case PropertyItem::Kind::Color: return true;
+        default: return false;
+    }
+}
+
+void PropertyGrid::clampScroll() {
+    const float viewH = std::max(bounds().h, 0.0f);
+    const float total = m_rowH * static_cast<float>(m_rows.size());
+    m_scroll = std::clamp(m_scroll, 0.0f, std::max(total - viewH, 0.0f));
+}
+
+int PropertyGrid::rowAt(float localY) const {
+    const float y = localY + m_scroll;
+    if (y < 0.0f) return -1;
+    const int vr = static_cast<int>(y / m_rowH);
+    return vr >= 0 && vr < static_cast<int>(m_rows.size()) ? vr : -1;
+}
+
+int PropertyGrid::visualRow(int item) const {
+    for (size_t vr = 0; vr < m_rows.size(); ++vr)
+        if (m_rows[vr].item == item) return static_cast<int>(vr);
+    return -1;
+}
+
+void PropertyGrid::ensureVisible(int row) {
+    if (row < 0) return;
+    const float y = static_cast<float>(row) * m_rowH;
+    const float viewH = std::max(bounds().h, 0.0f);
+    if (y + m_rowH - m_scroll > viewH) m_scroll = y + m_rowH - viewH;
+    if (y < m_scroll) m_scroll = y;
+    clampScroll();
+}
+
+void PropertyGrid::notify(PropertyItem& it) {
+    if (m_onChanged) m_onChanged(it.name(), it.value());
+    announceChange();
+    if (m_kernel) m_kernel->invalidate();
+}
+
+void PropertyGrid::toggleItem(PropertyItem& it) {
+    it.setValue(boolValue(it) ? "false" : "true");
+    notify(it);
+}
+
+void PropertyGrid::cycleEnum(PropertyItem& it, int dir) {
+    const auto& opts = it.options();
+    if (opts.empty()) return;
+    int cur = -1;
+    for (size_t i = 0; i < opts.size(); ++i)
+        if (opts[i] == it.value()) { cur = static_cast<int>(i); break; }
+    const int n = static_cast<int>(opts.size());
+    cur = ((cur + dir) % n + n) % n;
+    it.setValue(opts[static_cast<size_t>(cur)]);
+    notify(it);
+}
+
+void PropertyGrid::commitEdit(bool save) {
+    if (!m_editing) return;
+    const int idx = m_editIndex;
+    m_editing = false;
+    m_editIndex = -1;
+    if (!save || idx < 0) { m_editText.clear(); return; }
+    auto* it = itemAt(idx);
+    if (!it) { m_editText.clear(); return; }
+    std::string err;
+    if (it->kind() == PropertyItem::Kind::Number && !isNumberText(m_editText))
+        err = "expected a number";
+    else if (it->kind() == PropertyItem::Kind::Color && !isColorText(m_editText))
+        err = "expected #rrggbb";
+    if (!err.empty()) {
+        m_error = err;
+        m_errorIndex = idx;
+        m_editText.clear();
+        if (m_kernel) m_kernel->invalidate();
+        return;
+    }
+    m_error.clear();
+    m_errorIndex = -1;
+    if (it->value() != m_editText) {
+        it->setValue(m_editText);
+        notify(*it);
+    }
+    m_editText.clear();
+}
+
+void PropertyGrid::layout(float parentWidth, float parentHeight) {
+    collect();
+    Widget::layout(parentWidth, parentHeight);
+    clampScroll();
+}
+
+void PropertyGrid::onPointerDown(MouseButton, const Offset2D& p) {
+    collect();
+    const Offset2D o = absoluteOrigin();
+    const float lx = static_cast<float>(p.x) - o.x;
+    const float ly = static_cast<float>(p.y) - o.y;
+    if (m_editing) commitEdit(true);
+    const int vr = rowAt(ly);
+    if (vr < 0) return;
+    const int item = m_rows[static_cast<size_t>(vr)].item;
+    if (item < 0) return;                 // header band
+    m_sel = item;
+    if (m_kernel) m_kernel->invalidate();
+    if (lx < labelW()) return;            // label column only selects
+    auto* it = itemAt(item);
+    if (!it || it->readOnly()) return;
+    switch (it->kind()) {
+        case PropertyItem::Kind::Bool:
+            toggleItem(*it);
+            return;
+        case PropertyItem::Kind::Enum:
+            cycleEnum(*it, 1);
+            return;
+        default:
+            m_editing = true;
+            m_editIndex = item;
+            m_editText = it->value();
+            m_editCaret = m_editText.size();
+            ensureVisible(vr);
+            if (m_kernel) m_kernel->invalidate();
+            return;
+    }
+}
+
+void PropertyGrid::onPointerUp(MouseButton) {}
+
+void PropertyGrid::onPointerMove(const Offset2D&) {}
+
+void PropertyGrid::onPointerScroll(float, float dy) {
+    m_scroll -= dy * m_rowH * 3.0f;
+    clampScroll();
+    if (m_kernel) m_kernel->invalidate();
+}
+
+void PropertyGrid::onChar(uint32_t ch) {
+    if (!m_editing) return;
+    if (ch < 32 || ch == 127) return;     // control chars
+    appendUtf8(m_editText, m_editCaret, ch);
+    if (m_kernel) m_kernel->invalidate();
+}
+
+void PropertyGrid::onFocus(bool focused) {
+    if (!focused && m_editing) commitEdit(true);
+}
+
+void PropertyGrid::onKeyDown(KeyCode key, uint32_t) {
+    collect();
+    if (m_editing) {
+        switch (key) {
+            case Key_Enter:
+            case Key_KP_Enter: commitEdit(true); return;
+            case Key_Escape:
+                commitEdit(false);
+                m_error.clear();
+                m_errorIndex = -1;
+                return;
+            case Key_Backspace:
+                if (m_editCaret > 0) {
+                    const size_t prev =
+                        utf8PrevBoundary(m_editText, m_editCaret);
+                    m_editText.erase(prev, m_editCaret - prev);
+                    m_editCaret = prev;
+                }
+                return;
+            case Key_Delete:
+                if (m_editCaret < m_editText.size()) {
+                    const size_t next =
+                        utf8NextBoundary(m_editText, m_editCaret);
+                    m_editText.erase(m_editCaret, next - m_editCaret);
+                }
+                return;
+            case Key_Left:
+                if (m_editCaret > 0)
+                    m_editCaret = utf8PrevBoundary(m_editText, m_editCaret);
+                return;
+            case Key_Right:
+                if (m_editCaret < m_editText.size())
+                    m_editCaret = utf8NextBoundary(m_editText, m_editCaret);
+                return;
+            case Key_Home: m_editCaret = 0; return;
+            case Key_End:  m_editCaret = m_editText.size(); return;
+            default: return;
+        }
+    }
+    // Walk visual rows from `startVr` (exclusive) in `dir`, stopping at the
+    // first real item row (group headers are skipped).
+    auto moveSel = [&](int startVr, int dir) {
+        int vr = startVr;
+        for (size_t guard = 0; guard < m_rows.size() + 1; ++guard) {
+            vr += dir;
+            if (vr < 0 || vr >= static_cast<int>(m_rows.size())) return;
+            const int item = m_rows[static_cast<size_t>(vr)].item;
+            if (item >= 0) {
+                m_sel = item;
+                ensureVisible(vr);
+                if (m_kernel) m_kernel->invalidate();
+                return;
+            }
+        }
+    };
+    switch (key) {
+        case Key_Up:
+            if (m_sel >= 0) moveSel(visualRow(m_sel), -1);
+            return;
+        case Key_Down:
+            moveSel(m_sel >= 0 ? visualRow(m_sel) : -1, 1);
+            return;
+        case Key_Home:  moveSel(-1, 1); return;
+        case Key_End:   moveSel(static_cast<int>(m_rows.size()), -1); return;
+        case Key_F2:
+        case Key_Enter:
+        case Key_KP_Enter: {
+            auto* it = itemAt(m_sel);
+            if (it && !it->readOnly() && editableText(*it)) {
+                m_editing = true;
+                m_editIndex = m_sel;
+                m_editText = it->value();
+                m_editCaret = m_editText.size();
+                if (m_kernel) m_kernel->invalidate();
+            }
+            return;
+        }
+        case Key_Space: {
+            auto* it = itemAt(m_sel);
+            if (!it || it->readOnly()) return;
+            if (it->kind() == PropertyItem::Kind::Bool) toggleItem(*it);
+            else if (it->kind() == PropertyItem::Kind::Enum) cycleEnum(*it, 1);
+            return;
+        }
+        case Key_Left: {
+            auto* it = itemAt(m_sel);
+            if (it && !it->readOnly() && it->kind() == PropertyItem::Kind::Enum)
+                cycleEnum(*it, -1);
+            return;
+        }
+        case Key_Right: {
+            auto* it = itemAt(m_sel);
+            if (it && !it->readOnly() && it->kind() == PropertyItem::Kind::Enum)
+                cycleEnum(*it, 1);
+            return;
+        }
+        default: return;
+    }
+}
+
+void PropertyGrid::drawEditor(Rasterizer& r, const PropertyItem& it,
+                              const Rect& cell, bool editing,
+                              const Color& col) const {
+    const float ty = cell.y + (m_rowH - m_fontSize) * 0.5f;
+    const float boxH = std::min(14.0f, m_rowH - 6.0f);
+    const float boxY = cell.y + (m_rowH - boxH) * 0.5f;
+    switch (it.kind()) {
+        case PropertyItem::Kind::Bool: {
+            r.drawRect({cell.x + 6.0f, boxY, boxH, boxH},
+                       boolValue(it) ? palette().accent : palette().surfaceLo);
+            r.drawRectBorder({cell.x + 6.0f, boxY, boxH, boxH},
+                             palette().borderStrong, 1.0f, 3.0f);
+            if (const Font* f = r.resolveFont(m_fontFam, m_fontSize))
+                r.drawTextShifted(it.value().c_str(), cell.x + 6.0f + boxH + 8.0f,
+                                  ty, m_fontSize, *f, col);
+            return;
+        }
+        case PropertyItem::Kind::Color: {
+            r.drawRect({cell.x + 6.0f, boxY, boxH, boxH},
+                       ogui::hexColor(it.value()));
+            r.drawRectBorder({cell.x + 6.0f, boxY, boxH, boxH},
+                             palette().borderStrong, 1.0f, 2.0f);
+            if (const Font* f = r.resolveFont(m_fontFam, m_fontSize))
+                r.drawTextShifted(it.value().c_str(), cell.x + 6.0f + boxH + 8.0f,
+                                  ty, m_fontSize, *f, col);
+            return;
+        }
+        case PropertyItem::Kind::Enum: {
+            const Font* f = r.resolveFont(m_fontFam, m_fontSize);
+            if (f)
+                r.drawTextShifted((it.value() + "  < >").c_str(), cell.x + 6.0f,
+                                  ty, m_fontSize, *f, col);
+            return;
+        }
+        case PropertyItem::Kind::Number:
+        case PropertyItem::Kind::Text: {
+            const Font* f = r.resolveFont(m_fontFam, m_fontSize);
+            if (!f) return;
+            if (editing) {
+                Color band = m_highlight;
+                band.a = 150;
+                r.drawRect(cell, band);
+                r.drawTextShifted(m_editText.c_str(), cell.x + 6.0f, ty,
+                                  m_fontSize, *f, palette().white);
+                const float cx =
+                    cell.x + 6.0f + f->measureRange(m_editText.c_str(), m_editCaret);
+                r.drawRect({cx, cell.y + 3.0f, 1.0f, m_rowH - 6.0f},
+                           palette().white);
+            } else {
+                r.drawTextShifted(it.value().c_str(), cell.x + 6.0f, ty,
+                                  m_fontSize, *f, col);
+            }
+            return;
+        }
+    }
+}
+
+void PropertyGrid::onDraw(Rasterizer& r) const {
+    if (!m_style.isVisible) return;
+    const Rect b = bounds();
+    if (m_bg.a > 0) r.drawRect(b, m_bg);
+    if (m_border.a > 0) r.drawRectBorder(b, m_border, 1.0f, 4.0f);
+
+    r.beginFrame(b);
+    const Font* f = r.resolveFont(m_fontFam, m_fontSize);
+    const float split = labelW();
+    if (f && !m_rows.empty()) {
+        // column divider hairline
+        r.drawRect({b.x + split, b.y, 1.0f, b.h}, palette().border);
+    }
+    float y = b.y - m_scroll;
+    for (size_t vr = 0; vr < m_rows.size(); ++vr, y += m_rowH) {
+        if (y + m_rowH < b.y) continue;
+        if (y > b.y + b.h) break;
+        const GridRow& row = m_rows[vr];
+        if (row.item < 0) {
+            Color band = m_groupColor;
+            band.a = 150;
+            r.drawRect({b.x, y, b.w, m_rowH}, band);
+            if (f)
+                r.drawTextShifted(row.group.c_str(), b.x + 8.0f,
+                                  y + (m_rowH - m_fontSize) * 0.5f, m_fontSize,
+                                  *f, palette().textBright);
+            continue;
+        }
+        const PropertyItem& it =
+            *static_cast<const PropertyItem*>(m_items[row.item].get());
+        const bool sel = row.item == m_sel;
+        if (sel) {
+            Color hl = m_highlight;
+            hl.a = 100;
+            r.drawRect({b.x, y, b.w, m_rowH}, hl);
+            r.drawRect({b.x, y, 2.0f, m_rowH}, m_border);
+        }
+        if (f) {
+            r.drawTextShifted(it.name().c_str(), b.x + 8.0f,
+                              y + (m_rowH - m_fontSize) * 0.5f, m_fontSize, *f,
+                              m_labelColor);
+            const Rect cell{b.x + split, y, b.w - split, m_rowH};
+            if (!m_error.empty() && m_errorIndex == row.item) {
+                r.drawTextShifted(m_error.c_str(), cell.x + 6.0f,
+                                  y + (m_rowH - m_fontSize) * 0.5f, m_fontSize,
+                                  *f, palette().danger);
+            } else {
+                const bool editing = m_editing && m_editIndex == row.item;
+                const Color col = it.readOnly() ? palette().dim : m_valueColor;
+                drawEditor(r, it, cell, editing, col);
+            }
+        }
+    }
+    r.endFrame();
 }
 
 } // namespace ogui

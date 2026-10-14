@@ -282,6 +282,8 @@ registrations) out of the screen and into a shared document:
 | `cell` | `editable`, `resizable`, `scrollingText`; text content also works (`<cell>Zoe</cell>`) | — |
 | `tree` | `rowHeight`, `indent`, `autoHeight`, `selected`, `icons`, `checks`, `guides`, `dir` | `treeitem` |
 | `treeitem` | `label`, `value`, `expanded`, `folder`/`file`, `checked` | nested `treeitem` |
+| `propertygrid` | two-column typed-property editor: label on the left, a kind-appropriate editor on the right (bool → checkbox, number/text/color → inline text, enum → click-cycling select). Click/`Up`/`Down` select, `Enter`/`F2` edit text kinds, `Space` toggles bools, `Left`/`Right` cycle enums, `Esc` cancels a commit. Group headers appear wherever a `category` changes. Attributes: `rowHeight`, `color` (value text), `labelColor`, `groupColor`, `highlight`, `background`, `borderColor` | `property` (`PropertyItem`) |
+| `property` | data-only row feeding a `propertygrid`: `name`/`label`, `type` (`bool`/`number`/`text`/`enum`/`color`), `value`, `category`/`group`, `options="a;b;c"` (enum), `readonly` | — |
 
 `listbox`, `table`, `tree`, `scrollview` and `window` draw an overlay
 scrollbar (drag the thumb, or click the empty track to jump) whenever
@@ -386,6 +388,7 @@ API table `ogui` (all calls are safe on unknown ids):
 | `ogui.clickCount()` | presses at this spot inside the double-click window |
 | `ogui.items(id, tbl)` | replace `listbox`/`optionspin` entries with a Lua array of strings |
 | `ogui.list(id, op, ...)` | incremental `listbox`/`virtuallist` row updates — `count`, `get(i)`, `insert(i,text)` (`i` = `-1` appends), `remove(i)`, `set(i,text)`, `scroll(i)` (scrollIntoView). Mutation is silent (no `change` event); selection travels with its row |
+| `ogui.prop(id, op, ...)` | `propertygrid` model access — `count`, `get(name)` (nil when unknown), `set(name,value)` (silent, validated per kind), `add(name,type,value[,group[,options]])` (`options` `;`-separated for `enum`), `remove(name)`, `list()` (table `{name=value}`), `selected` / `select(i)` |
 | `ogui.tween(id, attr, to, dur[, ease[, delay]])` | animate `value`/`x`/`y`/`width`/`height` from the current value; `ease`: `"linear"` (default) / `"out"` / `"inout"` / `"back"`. Engine-driven — runs even without `ogui_on_update`; a new tween on the same `id+attr` replaces the old one |
 | `ogui.tweenStop([id[, attr]])` | cancel matching tweens → count stopped |
 | `ogui.after(secs, fn)` | one-shot timer → id; fires from the frame loop, outside any hook |

@@ -10,6 +10,8 @@
 #include <cassert>
 #include <cmath>
 #include <iostream>
+#include <utility>
+#include <vector>
 
 using namespace ogui;
 
@@ -2169,6 +2171,153 @@ static void testVirtualList() {
     CHECK(vl->count() == 0);
 }
 
+static void testPropertyGrid() {
+    Kernel k;
+    k.init();
+    XmlParser p;
+    auto res = p.parse(R"XML(<screen id="s">
+  <propertygrid id="pg" x="20" y="20" width="400" height="180" rowheight="24">
+    <property name="visible" type="bool" value="true" category="Base"/>
+    <property name="size" type="number" value="12"/>
+    <property name="title" type="text" value="hi" readonly="true"/>
+    <property name="mode" type="enum" value="a" options="a;b;c" category="Advanced"/>
+    <property name="tint" type="color" value="#ff0000"/>
+  </propertygrid>
+</screen>)XML");
+    CHECK(res.root != nullptr);
+    if (!res.root) return;
+    auto s = std::make_shared<Screen>("s");
+    s->widgets.push_back(res.root);
+    s->width = 800;
+    s->height = 600;
+    k.pushScreen(s);
+    auto* pg = dynamic_cast<PropertyGrid*>(k.findWidget("pg"));
+    CHECK(pg != nullptr);
+    if (!pg) return;
+
+    InputState st = makeInput();
+    idle(k, st);   // first layout collects the <property> children
+    CHECK(pg->count() == 5);
+    CHECK(pg->indexOf("mode") == 3);
+    CHECK(pg->valueOf("size") == "12");
+    CHECK(!k.buildDrawList().empty());
+
+    std::vector<std::pair<std::string, std::string>> changes;
+    pg->setOnChanged([&](const std::string& n, const std::string& v) {
+        changes.emplace_back(n, v);
+    });
+
+    // Row map (with group headers): vr0=Base, vr1=visible, vr2=size,
+    // vr3=title, vr4=Advanced, vr5=mode, vr6=tint.
+    // labelW = 400*0.4 = 160; grid abs origin is (20,20).
+
+    // Clicking the bool value cell toggles and announces.
+    pressAt(k, st, 20 + 200, 20 + 1 * 24 + 12);
+    releaseAt(k, st);
+    CHECK(pg->valueOf("visible") == "false");
+    CHECK(pg->selectedIndex() == 0);
+    CHECK(changes.size() == 1 && changes[0].first == "visible");
+
+    // Clicking a label cell only selects (no edit, no announce).
+    pressAt(k, st, 20 + 10, 20 + 2 * 24 + 12);
+    releaseAt(k, st);
+    CHECK(pg->selectedIndex() == 1);
+    CHECK(changes.size() == 1);
+
+    // Clicking the value cell opens inline edit; typing appends, Enter
+    // commits and fires the callback.
+    pressAt(k, st, 20 + 200, 20 + 2 * 24 + 12);
+    releaseAt(k, st);
+    st.lastChar = '5';
+    k.frame(st);
+    st.lastChar = 0;
+    tapKey(k, st, Key_Enter);
+    CHECK(pg->valueOf("size") == "125");
+    CHECK(changes.size() == 2 && changes[1].first == "size" && changes[1].second == "125");
+
+    // Invalid commit: value keeps, error shows on the row.
+    pressAt(k, st, 20 + 200, 20 + 2 * 24 + 12);
+    releaseAt(k, st);
+    tapKey(k, st, Key_Backspace);
+    tapKey(k, st, Key_Backspace);   // "1"
+    st.lastChar = 'x';
+    k.frame(st);
+    st.lastChar = 0;
+    tapKey(k, st, Key_Enter);
+    CHECK(pg->valueOf("size") == "125");
+    CHECK(pg->errorText() == "expected a number");
+    CHECK(pg->errorIndex() == 1);
+
+    // Escape cancels a fresh edit and clears the error.
+    pressAt(k, st, 20 + 200, 20 + 2 * 24 + 12);
+    releaseAt(k, st);
+    tapKey(k, st, Key_Escape);
+    CHECK(pg->errorText().empty());
+    CHECK(pg->valueOf("size") == "125");
+
+    // Read-only rows never enter edit mode: typing does nothing.
+    pressAt(k, st, 20 + 200, 20 + 3 * 24 + 12);
+    releaseAt(k, st);
+    st.lastChar = 'Z';
+    k.frame(st);
+    st.lastChar = 0;
+    tapKey(k, st, Key_Enter);
+    CHECK(pg->valueOf("title") == "hi");
+
+    // Enum: click cycles forward.
+    pressAt(k, st, 20 + 200, 20 + 5 * 24 + 12);
+    releaseAt(k, st);
+    CHECK(pg->valueOf("mode") == "b");
+    CHECK(changes.size() == 3 && changes[2].first == "mode");
+
+    // Keyboard nav skips headers; Left/Right cycle the enum, Space too.
+    pg->setSelectedIndex(2);        // title (vr3)
+    tapKey(k, st, Key_Down);        // skips the vr4 header -> mode (vr5)
+    CHECK(pg->selectedIndex() == 3);
+    tapKey(k, st, Key_Right);       // b -> c
+    CHECK(pg->valueOf("mode") == "c");
+    tapKey(k, st, Key_Space);       // c wraps -> a
+    CHECK(pg->valueOf("mode") == "a");
+    tapKey(k, st, Key_Left);        // a wraps -> c
+    CHECK(pg->valueOf("mode") == "c");
+    tapKey(k, st, Key_End);         // last item: tint
+    CHECK(pg->selectedIndex() == 4);
+    tapKey(k, st, Key_Home);        // first item: visible (past the vr0 header)
+    CHECK(pg->selectedIndex() == 0);
+
+    // Programmatic sets are silent and validated.
+    CHECK(pg->setValue("tint", "#00ff00c0"));
+    CHECK(pg->valueOf("tint") == "#00ff00c0");
+    CHECK(!pg->setValue("tint", "#zzzzzz"));
+    CHECK(!pg->setValue("size", "NaN-ish"));
+    CHECK(!pg->setValue("ghost", "1"));
+    CHECK(!pg->setValue("mode", "z"));    // not an option
+    CHECK(changes.size() == 6);           // only user edits announced
+
+    // Scrolling moves through the rows.
+    st.scrollY = -1.0f;
+    k.frame(st);
+    st.scrollY = 0.0f;
+    idle(k, st);
+
+    // C++ model edits.
+    auto extra = std::make_shared<PropertyItem>();
+    extra->setName("extra");
+    extra->setKind(PropertyItem::Kind::Text);
+    extra->setValue("e");
+    pg->addItem(extra);
+    CHECK(pg->count() == 6 && pg->indexOf("extra") == 5);
+    CHECK(pg->removeItem("size"));
+    CHECK(pg->indexOf("size") == -1 && pg->count() == 5);
+    CHECK(!pg->removeItem("size"));
+    pg->setSelectedIndex(99);
+    CHECK(pg->selectedIndex() == -1);
+    idle(k, st);
+    CHECK(pg->count() == 5);   // re-layout does not re-collect
+    pg->clear();
+    CHECK(pg->count() == 0 && pg->valueOf("visible").empty());
+}
+
 static void testTreeView() {
     Kernel k;
     k.init();
@@ -2948,6 +3097,8 @@ int main() {
     testVisualStates();
     testVisualTransitions();
     testRowWrap();
+    testVirtualList();
+    testPropertyGrid();
     testHost();
 
     if (g_failures) {

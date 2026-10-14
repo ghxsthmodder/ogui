@@ -291,6 +291,10 @@ int main() {
     <option text="y"/>
   </combobox>
   <label id="tip" text="t" x="10" y="310" width="100" height="20"/>
+  <propertygrid id="pg" x="180" y="10" width="200" height="120">
+    <property name="visible" type="bool" value="true" category="Base"/>
+    <property name="size" type="number" value="12"/>
+  </propertygrid>
 </screen>)");
         assert(res.root);
         auto s = std::make_shared<Screen>("lists");
@@ -332,12 +336,31 @@ int main() {
             assert(not pcall(ogui.list, "tip", "count"))
             ogui.set("tip", "tooltip", "say hi")
             assert(ogui.get("tip", "tooltip") == "say hi")
+            -- ogui.prop: property grid model access
+            assert(ogui.prop("pg", "count") == 2)
+            assert(ogui.prop("pg", "get", "size") == "12")
+            assert(ogui.prop("pg", "get", "ghost") == nil)
+            assert(ogui.prop("pg", "set", "size", "42"))
+            assert(ogui.prop("pg", "get", "size") == "42")
+            assert(not ogui.prop("pg", "set", "size", "abc"))  -- number-validated
+            assert(ogui.prop("pg", "add", "mode", "enum", "a", "Adv", "a;b"))
+            assert(ogui.prop("pg", "count") == 3)
+            local t = ogui.prop("pg", "list")
+            assert(t.mode == "a" and t.visible == "true")
+            assert(ogui.prop("pg", "remove", "mode"))
+            assert(ogui.prop("pg", "selected") == -1)
+            ogui.prop("pg", "select", 0)
+            assert(ogui.prop("pg", "selected") == 0)
+            assert(not pcall(ogui.prop, "tip", "count"))
             assert(ogui.set("combo", "selected", 1))
             assert(ogui.get("combo", "selected") == 1)
         )", "lists");
         CHECK(k.script().errors().empty());
         auto* lb = dynamic_cast<ListBox*>(k.findWidget("lb"));
         CHECK(lb && lb->count() == 4 && lb->selectedIndex() == 1);
+        auto* pg = dynamic_cast<PropertyGrid*>(k.findWidget("pg"));
+        CHECK(pg && pg->count() == 2 && pg->valueOf("size") == "42"
+              && pg->selectedIndex() == 0);
         k.popScreen();   // back to "s": its inline script reloads
         CHECK(k.getText("out") == "loaded");
     }
