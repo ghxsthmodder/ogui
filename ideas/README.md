@@ -667,24 +667,43 @@ especificadas antes da implementação.
 
 ### Fase 1 --- Base confiável
 
--   [ ] Sistema de propriedades tipadas.
--   [ ] Eventos tipados e regras de propagação.
--   [ ] Referências seguras e índice de IDs.
--   [ ] Validação de XML e estilos.
--   [ ] Testes de criação, remoção, foco, eventos e Lua.
--   [ ] Métricas básicas de desempenho.
+-   [ ] Sistema de propriedades tipadas. *(parcial: cada widget tipa os
+    próprios atributos no parser e mantém os brutos acessíveis; não há um
+    registro único de propriedades com get/set por nome)*
+-   [ ] Eventos tipados e regras de propagação. *(parcial: click/focus/blur e
+    `announceChange`/`announceSubmit` são roteados pelo `Kernel`; não há
+    bolha/captura nem `stopPropagation`)*
+-   [ ] Referências seguras e índice de IDs. *(parcial: `shared_ptr` nas
+    árvores, `Kernel::forgetWidget` e handlers que removem o próprio widget
+    são seguros; `findWidget` ainda varre a tela linearmente)*
+-   [x] Validação de XML e estilos: `ogui_validate` mais os testes `validate` e
+    `validate-bad` sobre todos os layouts enviados.
+-   [x] Testes de criação, remoção, foco, eventos e Lua: entradas `kernel`,
+    `screens` e `script` do ctest.
+-   [x] Métricas básicas de desempenho: `Kernel::FrameStats`
+    (`updateMs`/`drawMs`, widgets, vértices, índices, cmds, paradas de foco)
+    exposto a `ogui.stats`.
 
 **Resultado esperado:** uma base consistente para implementar novos
 recursos sem multiplicar exceções.
 
 ### Fase 2 --- Interface dinâmica com Lua
 
--   [ ] Criar, localizar, anexar, remover e destruir widgets em Lua.
--   [ ] API consistente de eventos.
--   [ ] Timers `after`, `every` e `cancel`.
--   [ ] Hooks de ciclo de vida das telas.
--   [ ] Definição do isolamento de ambientes Lua.
--   [ ] Limpeza automática de listeners, timers e bindings.
+-   [x] Criar, localizar, anexar, remover e destruir widgets em Lua:
+    `ogui.add`/`ogui.remove`/`ogui.clear` com `Kernel::forgetWidget` para o
+    handler que destrói o próprio widget pressionado.
+-   [x] API consistente de eventos: `ogui.on`/`ogui.off` para click, focus e
+    blur, hooks `ogui_on_*` e eventos de change/submit vindos da interação do
+    usuário.
+-   [x] Timers `after`, `every` e `cancel` avançados pelo relógio de frames do
+    `Kernel`.
+-   [x] Hooks de ciclo de vida das telas: `ogui_on_show`/`_hide`/`_unload` em
+    torno das trocas de tela.
+-   [x] Definição do isolamento de ambientes Lua: um `lua_State` por `Kernel`,
+    reconstruído quando a tela em primeiro plano muda, com o estado do script
+    anterior descartado junto (`ScriptHost::clear`).
+-   [x] Limpeza automática de listeners, timers e bindings: ao remover o widget
+    e ao trocar de tela.
 
 **Resultado esperado:** scripts conseguem controlar a interface durante
 a execução de forma segura e previsível.
