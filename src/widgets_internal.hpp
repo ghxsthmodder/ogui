@@ -15,20 +15,55 @@
 
 namespace ogui {
 
+    // Code point starting at s[i] (any i inside it works: a caret that fell on
+    // a continuation byte snaps back to its lead byte). `len` receives the
+    // sequence length in bytes, `start` the offset of its lead byte.
+    inline uint32_t utf8At(const std::string& s, size_t i, size_t& len,
+                           size_t* start = nullptr) {
+        if (i >= s.size()) { len = 0; if (start) *start = i; return 0; }
+        size_t j = i;
+        while (j > 0 && (static_cast<unsigned char>(s[j]) & 0xC0) == 0x80) --j;
+        const unsigned char* p = reinterpret_cast<const unsigned char*>(s.data()) + j;
+        const unsigned char* base = p;
+        const uint32_t cp = utf8Next(p);
+        len = static_cast<size_t>(p - base);
+        if (start) *start = j;
+        return cp;
+    }
+
     // Caret positions live in std::string byte offsets, so every move/edit
     // has to land on a UTF-8 boundary or it splits an accented character
     // in half and leaves stray continuation bytes in the text.
+    //
+    // The boundaries are *clusters*, not code points: "e" + U+0301 is one
+    // character on screen and one Backspace, so an edit never leaves a floating
+    // accent behind.
     inline size_t utf8PrevBoundary(const std::string& s, size_t i) {
         if (i == 0) return 0;
-        size_t j = i - 1;
-        while (j > 0 && (static_cast<unsigned char>(s[j]) & 0xC0) == 0x80) --j;
-        return j;
+        if (i > s.size()) i = s.size();
+        size_t pos = i;
+        for (;;) {
+            size_t len = 0, start = pos;
+            utf8At(s, pos - 1, len, &start);      // code point before the caret
+            if (start == pos) return pos;         // nothing left to consume
+            if (isCombiningMark(utf8At(s, start, len))) {
+                pos = start;                      // glue: keep walking back
+                continue;
+            }
+            return start;                         // the base of the cluster
+        }
     }
 
     inline size_t utf8NextBoundary(const std::string& s, size_t i) {
         if (i >= s.size()) return s.size();
-        size_t j = i + 1;
-        while (j < s.size() && (static_cast<unsigned char>(s[j]) & 0xC0) == 0x80) ++j;
+        size_t len = 0, start = i;
+        utf8At(s, i, len, &start);
+        size_t j = start + len;
+        while (j < s.size()) {
+            size_t mlen = 0;
+            if (!isCombiningMark(utf8At(s, j, mlen))) break;
+            j += mlen;
+        }
         return j;
     }
 

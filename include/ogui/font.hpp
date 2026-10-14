@@ -9,6 +9,8 @@
 
 namespace ogui {
 
+class Font;
+
 // Decodes the code point at *p and advances *p past it. Stray bytes are
 // consumed one at a time so broken input degrades instead of stalling.
 inline uint32_t utf8Next(const unsigned char*& p) {
@@ -31,6 +33,34 @@ inline uint32_t utf8Next(const unsigned char*& p) {
     return acc;
 }
 
+// True for code points that stack onto the previous base letter instead of
+// advancing the pen: combining diacritics, Hebrew/Arabic/Thai vowel marks,
+// Japanese voiced-sound marks and the symbol/variation marks. This is the set
+// of scripts a system font on this platform can actually render — a full
+// General_Category=Mn table would be dead weight without shaping to go with
+// it, and the fallback chain resolves the rest.
+inline bool isCombiningMark(uint32_t c) {
+    static constexpr uint32_t R[][2] = {
+        {0x0300, 0x036F},   // combining diacritical marks
+        {0x0483, 0x0489},   // Cyrillic combining
+        {0x0591, 0x05BD}, {0x05BF, 0x05BF},
+        {0x05C1, 0x05C2}, {0x05C4, 0x05C5}, {0x05C7, 0x05C7},   // Hebrew points
+        {0x0610, 0x061A}, {0x064B, 0x065F}, {0x0670, 0x0670},
+        {0x06D6, 0x06DC}, {0x06DF, 0x06E4}, {0x06E7, 0x06E8},
+        {0x06EA, 0x06ED}, {0x0730, 0x074A}, {0x07A6, 0x07B0},   // Arabic
+        {0x0E31, 0x0E31}, {0x0E34, 0x0E3A}, {0x0E47, 0x0E4E},
+        {0x0EB1, 0x0EB1}, {0x0EB4, 0x0EBC}, {0x0EC8, 0x0ECD},   // Thai / Lao
+        {0x102D, 0x1030}, {0x1032, 0x1037}, {0x1039, 0x103A},
+        {0x1058, 0x1059},                                       // Myanmar
+        {0x1DC0, 0x1DFF}, {0x20D0, 0x20F0},                     // Latin extended
+        {0x2CEF, 0x2CF1}, {0x302A, 0x302F}, {0x3099, 0x309A},   // CJK / Kana
+        {0xA66F, 0xA672}, {0xFE00, 0xFE0F}, {0xFE20, 0xFE2F},
+    };
+    for (const auto& r : R)
+        if (c >= r[0] && c <= r[1]) return true;
+    return false;
+}
+
 // ---- font + glyph atlas ----------------------------------------------------
 struct GlyphInfo {
     int advanceX = 0;   // advance in atlas pixels (already scaled)
@@ -41,6 +71,24 @@ struct GlyphInfo {
     int yoff = 0;       // offset from baseline to bitmap top (atlas pixels, y down)
     int atlasX = 0;     // bitmap position in the atlas (pixels)
     int atlasY = 0;
+};
+
+// A code point resolved to the face that actually carries its bitmap. Baking
+// happens on demand, so the face may be one of the fallback families rather
+// than the one the widget asked for — the draw loop has to take the atlas (and
+// therefore the texture) from `font`, not from the requested face.
+struct ResolvedGlyph {
+    const Font* font = nullptr;   // owns the bitmap below
+    const GlyphInfo* info = nullptr;
+    bool mark = false;            // combining mark: contributes no advance
+
+    // True when this resolves to something placeable. A miss is the .notdef
+    // box of the requested face, so it stays true for unknown code points too
+    // (they take a real advance and show a visible hole instead of collapsing).
+    explicit operator bool() const { return font != nullptr && info != nullptr; }
+
+    // Normalized rect inside font->atlas(). Empty when the entry has no ink.
+    Rect uv() const;
 };
 
 // A8 glyph atlas (single texture, grid packed). Texels carry coverage only;
@@ -60,8 +108,10 @@ public:
     Font(const Font&) = delete;
     Font& operator=(const Font&) = delete;
 
-    Font(Font&& other) noexcept;
-    Font& operator=(Font&& other) noexcept;
+    // Every member is a container, so the compiler-generated moves are enough:
+    // a moved-out font reports loaded() == false and owns nothing.
+    Font(Font&& other) noexcept = default;
+    Font& operator=(Font&& other) noexcept = default;
 
     // Load a .ttf/.otf and build the atlas. `logicalHeight` is the text size
     // in logical pixels; `pxPerUnit` is the device pixels per logical unit
@@ -70,14 +120,52 @@ public:
               float pxPerUnit = 1.0f);
     bool unload();
 
+    // This face's entry for `ch`, baked on demand. Falls back to resolve() for
+    // a code point the face does not carry, so measure()/indexFromX() see the
+    // advance of the glyph that actually gets drawn (a fallback face is baked
+    // at the same size, so its advances are directly comparable).
     const GlyphInfo& glyph(uint32_t ch) const;
+
+    // Full Unicode resolution: this face's bitmap, else the first face in the
+    // FontManager fallback chain that covers the code point, else this face's
+    // .notdef box. Glyphs are baked into reserved atlas cells on first use and
+    // the answer is cached, so the steady-state cost is one map lookup.
+    // `font` in the result points at the face that owns `info` — take the
+    // texture (and the UVs) from there, not from the requested face.
+    ResolvedGlyph resolve(uint32_t ch) const;
+
+    // True when this face has an outline for `ch` (index 0 counts as "no").
+    // Known for the whole BMP, which is where every non-CJK-unified script
+    // lives; higher planes report false and take the fallback chain.
+    bool covers(uint32_t ch) const {
+        return ch < 0x10000 && !m_cover.empty() &&
+               ((m_cover[ch >> 6] >> (ch & 63)) & 1u) != 0;
+    }
+
+    // Rasterizes `ch` into a reserved atlas cell. Const because baking through
+    // a lookup is the whole point: the drawing path only ever holds const
+    // fonts. False when the face has no outline, the cell is too small for the
+    // ink box (clipped instead when it merely overflows) or the reserve is
+    // exhausted.
+    bool bake(uint32_t ch) const;
+
+    // Bakes the placeholder drawn for a code point no face in the chain
+    // carries: a hollow box one em wide, so missing text stays visible and
+    // keeps its measure instead of collapsing the words behind it.
+    const GlyphInfo& notdef() const;
+
+    // Increments whenever new pixels land in the atlas. Existing cells never
+    // move (the atlas is allocated once, reserve included), so a backend only
+    // has to re-upload the buffer; UVs emitted earlier stay valid.
+    unsigned atlasRevision() const { return m_revision; }
 
     // Kerning adjustment in LOGICAL pixels applied between two adjacent code
     // points; 0 when the pair has none. Baked from the font's kern table at
     // load time for the printable-ASCII grid.
     float kern(uint32_t prev, uint32_t cur) const;
 
-    // Normalized UV rect of a glyph inside the atlas.
+    // Normalized UV rect of a glyph inside the atlas of the face that carries
+    // it (see resolve()); empty when the code point has no ink.
     Rect glyphUV(uint32_t ch) const;
 
     // Atlas access (A8 coverage). Returns nullptr when not loaded.
@@ -94,6 +182,10 @@ public:
     void setAtlasTexture(int id) { m_atlasTex = id; }
 
     const std::string& path() const { return m_path; }
+    // Family this face was requested under; FontManager uses it to skip the
+    // face itself when walking the fallback chain.
+    const std::string& family() const { return m_family; }
+    void setFamily(const std::string& f) { m_family = f; }
     int size() const { return m_logicalHeight; }
     bool loaded() const { return !m_pixels.empty(); }
     // Device pixels per logical pixel this atlas was baked for.
@@ -117,17 +209,35 @@ public:
 
 private:
     std::string m_path;
+    std::string m_family;            // key it was requested under (fallbacks)
     int m_logicalHeight = 0;         // requested size in logical pixels
     float m_pxPerUnit = 1.0f;        // atlas bake factor
+    float m_scale = 1.0f;            // stb units -> atlas pixels
     int m_ascent = 0;                // atlas pixels
     int m_descent = 0;               // atlas pixels
+    int m_notdefAdvance = 0;         // atlas pixels, from the font's .notdef
     int m_atlasTex = 0;
-    std::map<uint32_t, GlyphInfo> m_glyphs;
+
+    // Grid this atlas is packed on: one cell per glyph, allocated once so a
+    // late bake can never move an earlier glyph.
+    int m_cellW = 0, m_cellH = 0;
+    int m_cols = 0, m_rows = 0;
+
+    std::vector<uint64_t> m_cover;   // BMP outline presence, 1 bit per cp
     std::unordered_map<uint32_t, int8_t> m_kern;  // prev*128+cur -> atlas px
 
-    std::vector<uint8_t> m_pixels;   // A8 flat: w*h
-    int m_w = 0, m_h = 0;
-    int m_rowBytes = 0;
+    // Baking happens through const lookups (glyph()/measure()/drawText() only
+    // ever see a const Font), so the atlas, its glyph table and its caches are
+    // mutable.
+    mutable std::map<uint32_t, GlyphInfo> m_glyphs;
+    mutable int m_nextFreeCell = 0;
+    mutable std::vector<uint8_t> m_pixels;   // A8 flat: w*h
+    mutable int m_w = 0, m_h = 0;
+    mutable int m_rowBytes = 0;
+    mutable unsigned m_revision = 0;
+    mutable std::map<uint32_t, ResolvedGlyph> m_resolved;   // cp -> face + entry
+    mutable GlyphInfo m_notdef;
+    mutable bool m_notdefBaked = false;
 
     std::vector<unsigned char> m_buffer;   // raw file data (owned)
 };
@@ -158,6 +268,20 @@ public:
     // Directories probed when a family has no explicit path.
     void addSearchDir(const std::string& dir);
 
+    // Families consulted, in order, when the requested face has no outline for
+    // a code point. Seeded with the generic aliases, so Cyrillic, Greek,
+    // Hebrew, Thai and the CJK blocks land on whichever installed font carries
+    // them; a host adds the rest (`setFontPath("noto cjk", ...)` and then
+    // `addFallback("noto cjk")`). Duplicates are ignored.
+    void addFallback(const std::string& family);
+    const std::vector<std::string>& fallbacks() const { return m_fallbacks; }
+
+    // First face of that chain carrying an outline for `ch`, baked into its own
+    // atlas, or nullptr when nothing carries it. Loads faces on demand. Called
+    // by Font::resolve(); it never re-enters the chain, so a code point costs
+    // one walk at most.
+    const Font* fallbackFace(const Font& requester, uint32_t ch) const;
+
     void clear();   // drops the cache (keeps mappings)
 
     // Visits every cached font (used by the GL backend to upload atlases).
@@ -170,11 +294,13 @@ public:
 
 private:
     FontManager();
-    std::string resolve(const std::string& family);
+    std::string resolve(const std::string& family) const;
+    const Font* load(const std::string& family, int size) const;
 
-    std::map<std::pair<std::string, int>, std::unique_ptr<Font>> m_cache;
+    mutable std::map<std::pair<std::string, int>, std::unique_ptr<Font>> m_cache;
     std::map<std::string, std::string> m_paths;
     std::vector<std::string> m_dirs;
+    std::vector<std::string> m_fallbacks;
     float m_scale = 1.0f;
 };
 

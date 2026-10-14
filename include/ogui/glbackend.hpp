@@ -87,6 +87,9 @@ private:
 
     // Font atlas slot (Font::atlasTexture(), negative) -> GL texture.
     std::unordered_map<int, unsigned> m_fontTexs;
+    // ... and the atlas revision that is currently on the GPU. Glyphs bake on
+    // demand, so a texture is re-uploaded when the two differ.
+    std::unordered_map<int, unsigned> m_fontTexRev;
 
     // Image slot (ImageManager id, positive) -> GL texture.
     std::unordered_map<int, unsigned> m_imageTexs;

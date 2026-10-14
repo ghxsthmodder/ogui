@@ -393,11 +393,33 @@ bool GlBackend::ensureFontTexture(Font& font) {
     if (!font.atlas()) return false;
     const int slot = font.atlasTexture();
     if (slot == 0) return false;              // atlas never built
-    if (m_fontTexs.count(slot) != 0) return true;
+    const unsigned revision = font.atlasRevision();
+    auto it = m_fontTexs.find(slot);
+    if (it != m_fontTexs.end()) {
+        // Glyphs bake on demand, so a live atlas keeps changing after it was
+        // uploaded. Reserved cells never move, so re-uploading the whole buffer
+        // costs nothing at steady state (revision is unchanged) and every
+        // already-emitted UV stays valid.
+        if (m_fontTexRev[slot] == revision) return true;
+        GLint prevTex = 0;
+        m_api->GetIntegerv(GL_TEXTURE_BINDING_2D, &prevTex);
+        m_api->BindTexture(GL_TEXTURE_2D, it->second);
+        GLint prevAlign = 4;
+        m_api->GetIntegerv(GL_UNPACK_ALIGNMENT, &prevAlign);
+        m_api->PixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        m_api->TexImage2D(GL_TEXTURE_2D, 0, static_cast<GLint>(GL_R8),
+                          font.atlasWidth(), font.atlasHeight(), 0, GL_RED,
+                          GL_UNSIGNED_BYTE, font.atlas());
+        m_api->PixelStorei(GL_UNPACK_ALIGNMENT, prevAlign);
+        m_api->BindTexture(GL_TEXTURE_2D, static_cast<GLuint>(prevTex));
+        m_fontTexRev[slot] = revision;
+        return true;
+    }
     const uint8_t* px = font.atlas();
     const int tex = createTextureA8(px, font.atlasWidth(), font.atlasHeight());
     if (tex == 0) return false;
     m_fontTexs[slot] = static_cast<unsigned>(tex);
+    m_fontTexRev[slot] = revision;
     return true;
 }
 
@@ -448,6 +470,7 @@ bool GlBackend::syncFonts() {
         if (live.count(it->first) != 0) { ++it; continue; }
         GLuint tex = it->second;
         m_api->DeleteTextures(1, &tex);
+        m_fontTexRev.erase(it->first);
         it = m_fontTexs.erase(it);
     }
     return ok;

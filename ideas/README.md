@@ -742,7 +742,21 @@ configuração, ferramentas e aplicações com dados extensos.
     atlas em `size * scale` mantendo métricas lógicas. `Kernel::scale()`,
     `setScale()`, `logicalWidth()`, `logicalHeight()`, `Host` lendo o dpi da
     janela, testes em 1×/1.5×/2× e `ogui_screenshot --scale`.
--   [ ] Unicode, shaping e fallback de fontes.
+-   [x] Unicode e fallback de fontes: UTF-8 do parser ao rasterizador, com
+    glifos gravados sob demanda em células do atlas reservadas na carga e que
+    nunca se movem, `atlasRevision()` avisando o backend para reenviar o atlas, e
+    uma cadeia de famílias (`sans, serif, mono`, extensível com
+    `FontManager::addFallback()`) cobrindo o que a família pedida não tem.
+    Código ponto sem cobertura em nenhuma face desenha uma caixa `.notdef`
+    compartilhada na largura `em`; marcas combinantes avançam zero e se
+    centram sobre a base; caret/backspace e `Font::indexFromX` operam por
+    cluster; `layoutText` quebra em CJK/Hangul/kana e puxa pontuação de
+    fechamento para a linha. Testes em `debug/tests/unicode_test.cpp`
+    (gravura sob demanda, fallback serif→sans, `.notdef`, clusters, quebra
+    CJK, tinta cirílica no `SoftwareRenderer`) e a avaliação de dependências —
+    por que HarfBuzz ainda não entrou — em `docs/unicode.md`. Faltam shaping
+    de verdade (GSUB/GPOS, ligaturas, âncoras de acento), bidi e cobertura
+    não-BMP, todos documentados como decisão consciente.
 -   [ ] Markdown/RichText/Canvas e GraphEditor conforme a necessidade.
 -   [x] Documentação completa e exemplos: `docs/xml-reference.md` cataloga cada
     elemento, atributo, tipo, valor padrão e regra de validação;

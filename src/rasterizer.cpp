@@ -468,20 +468,31 @@ bool Rasterizer::drawTextShifted(const char* text, float x, float y, int /*size*
     else if (valign == VertAlign::Bottom) baseline = y - lineH + font.ascent();
     else baseline = y + font.ascent();
 
-    const int texId = font.atlasTexture();
+    const int reqTexId = font.atlasTexture();
     float penX = drawX;
     uint32_t prev = 0;
+    float prevAdvance = 0.0f;
 
     const unsigned char* p = reinterpret_cast<const unsigned char*>(text);
     while (*p) {
         uint32_t ch = utf8Next(p);
-        const GlyphInfo& gi = font.glyph(ch);
+        // The face that carries the ink may be a fallback, so both the box and
+        // the texture come from the resolution, not from `font`.
+        const ResolvedGlyph g = font.resolve(ch);
+        if (!g) continue;
+        const GlyphInfo& gi = *g.info;
+        float inkX = penX;
         if (prev) penX += font.kern(prev, ch);
+        // A mark sits on the base that precedes it. Nothing here shapes anchors
+        // (that is HarfBuzz territory), so the pen walks back to the middle of
+        // the previous glyph, which is where a centred accent reads correctly.
+        if (g.mark && prev) inkX = penX - prevAdvance * 0.5f;
 
         if (gi.width > 0 && gi.height > 0) {
-            Rect uv = font.glyphUV(ch);
+            const int texId = g.font ? g.font->atlasTexture() : reqTexId;
+            Rect uv = g.uv();
             Rect dst{
-                penX + static_cast<float>(gi.xoff) * k,
+                inkX + static_cast<float>(gi.xoff) * k,
                 baseline + static_cast<float>(gi.yoff) * k,
                 static_cast<float>(gi.width) * k,
                 static_cast<float>(gi.height) * k,
@@ -491,7 +502,8 @@ bool Rasterizer::drawTextShifted(const char* text, float x, float y, int /*size*
                 drawRectUV(dst, uv, col, texId);
             }
         }
-        penX += static_cast<float>(gi.advanceX) * k;
+        prevAdvance = static_cast<float>(gi.advanceX) * k;
+        penX += prevAdvance;
         prev = ch;
     }
     return true;
@@ -510,9 +522,47 @@ size_t utf8LenAt(const char* s) {
     return 1;
 }
 
+// Code point at s, decoded the same way the draw loop does.
+uint32_t cpAt(const char* s) {
+    const unsigned char* q = reinterpret_cast<const unsigned char*>(s);
+    return utf8Next(q);
+}
+
 // ASCII space/tab only: both single-byte, so this is safe next to UTF-8
 // continuation bytes. NBSP (U+00A0) deliberately does NOT break lines.
 bool isBreakSpace(char c) { return c == ' ' || c == '\t'; }
+
+// Scripts written without spaces: every ideograph, kana syllable and Hangul
+// syllable is its own line-break opportunity, which is the only way a CJK
+// paragraph wraps at all.
+bool isCjkUnit(uint32_t c) {
+    return (c >= 0x3041 && c <= 0x3096) || (c >= 0x30A1 && c <= 0x30FA) ||  // kana
+           (c >= 0x31F0 && c <= 0x31FF) ||                                  // kana ext
+           (c >= 0x3400 && c <= 0x4DBF) || (c >= 0x4E00 && c <= 0x9FFF) ||  // ideographs
+           (c >= 0xF900 && c <= 0xFAFF) ||                                   // compat ideographs
+           (c >= 0xAC00 && c <= 0xD7A3);                                     // Hangul
+}
+
+// Closing punctuation and iteration marks must not be left alone at the start
+// of the next line: UAX #14 keeps them on the line they close.
+bool isTailPunctuation(uint32_t c) {
+    if (c >= 0x3001 && c <= 0x3003) return true;   // 、。〃
+    if (c >= 0x3005 && c <= 0x3007) return true;   // 々〆〇
+    if (c >= 0x3008 && c <= 0x3011) return true;   // 〈〉《》「」『』【】
+    if (c >= 0x3014 && c <= 0x301B) return true;   // 〔〕〖〗〘〙〚〛
+    if (c >= 0x305C && c <= 0x305D) return true;   // small kana
+    if (c == 0x30FC) return true;                  // 々 lengthening mark
+    if (c >= 0xFF01 && c <= 0xFF05) return true;   // ！＂＃＄％
+    if (c >= 0xFF07 && c <= 0xFF09) return true;   // ＇（）
+    if (c == 0xFF0C || c == 0xFF0E) return true;   // ，．
+    if (c >= 0xFF1A && c <= 0xFF1B) return true;   // ：；
+    if (c == 0xFF1F) return true;                  // ！
+    if (c >= 0xFF3B && c <= 0xFF3D) return true;   // ［￥］
+    if (c >= 0xFF5B && c <= 0xFF5D) return true;   // ｛｜｝
+    if (c == 0xFF60 || (c >= 0xFF61 && c <= 0xFF62) || c == 0xFF63) return true;
+    if (c == 0xFF9E || c == 0xFF9F) return true;   // ﾟﾞ
+    return false;
+}
 } // namespace
 
 std::vector<TextLine> layoutText(const char* text, float maxWidth,
@@ -556,7 +606,8 @@ std::vector<TextLine> layoutText(const char* text, float maxWidth,
                 size_t p = i;
                 while (p < paraEnd) {
                     const size_t cpStart = p;
-                    p += utf8LenAt(text + p);
+                    const uint32_t cp = cpAt(text + cpStart);
+                    p += utf8LenAt(text + cpStart);
                     if (p > paraEnd) p = paraEnd;
                     // Accept the first code point unconditionally so an
                     // oversized word still advances instead of looping.
@@ -565,7 +616,12 @@ std::vector<TextLine> layoutText(const char* text, float maxWidth,
                         break;
                     }
                     lastFit = p;
-                    if (isBreakSpace(text[cpStart])) breakAfter = p;
+                    if (isBreakSpace(text[cpStart]) || cp == 0x3000) {
+                        breakAfter = p;              // space: end after it
+                    } else if (isCjkUnit(cp) && p < paraEnd &&
+                               !isTailPunctuation(cpAt(text + p))) {
+                        breakAfter = p;              // one ideograph per break
+                    }
                 }
 
                 size_t lineEnd;
@@ -579,6 +635,14 @@ std::vector<TextLine> layoutText(const char* text, float maxWidth,
                     lineEnd = lastFit;             // hard break inside the word
                     p = lastFit;
                 }
+                // Never start a line with something that closes the previous
+                // one: pull the tail punctuation (or the mark that belongs to
+                // it) onto this line even when that overflows a little.
+                while (lineEnd < paraEnd && isCombiningMark(cpAt(text + lineEnd)))
+                    lineEnd += utf8LenAt(text + lineEnd);
+                while (lineEnd < paraEnd && isTailPunctuation(cpAt(text + lineEnd)))
+                    lineEnd += utf8LenAt(text + lineEnd);
+                if (lineEnd > p) p = lineEnd;
                 pushLine(start, lineEnd);
                 i = p;
             }

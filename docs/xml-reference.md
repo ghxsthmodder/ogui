@@ -163,6 +163,27 @@ From C++ the derived numbers are `Kernel::scale()`, `Kernel::setScale(s)`,
 window dpi every frame and writes `Screen::scale`; a custom host does the same
 from its toolkit's content scale factor. A `scale` of 0 or less degrades to 1.
 
+## Text and Unicode
+
+Every `text`, `label`, `placeholder` and attribute value is plain UTF-8: the
+parser never decodes it, the widgets keep byte offsets, and the rasterizer
+decodes code points when it draws. Nothing in the pipeline is ASCII-only.
+
+Font selection is a chain, not a single face. `family="..."` (or the C++
+`FontManager::setFontPath`) picks the requested face; a code point that face
+does not carry is baked from the first family in the fallback chain that does
+— `sans, serif, mono` by default, extensible with
+`FontManager::addFallback("cjk")`. A code point no chain member has draws one
+shared `.notdef` box at the font's em width, so missing text is visible rather
+than blank. Combining marks advance zero and are centred on the base glyph,
+which keeps an accent from pushing the next word along; caret movement and
+backspace in `textinput`/`textarea` treat base-plus-marks as one cluster.
+Line breaking follows spaces, ideographic full stop, and — the part ASCII never
+needed — a break opportunity between any two CJK/Hangul/kana characters, with
+closing punctuation pulled up onto the line it belongs to. See
+[`docs/unicode.md`](docs/unicode.md) for the atlas model and what shaping is
+deliberately left out.
+
 ## Common attributes (all widgets)
 
 | Attribute | Effect |

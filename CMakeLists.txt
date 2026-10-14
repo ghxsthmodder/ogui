@@ -174,6 +174,10 @@ if(OGUI_BUILD_TESTS)
     add_executable(ogui_drawlist_test debug/tests/drawlist_test.cpp)
     target_link_libraries(ogui_drawlist_test PRIVATE ogui)
 
+    # Unicode: on-demand glyph baking, font fallback, marks and CJK breaking.
+    add_executable(ogui_unicode_test debug/tests/unicode_test.cpp)
+    target_link_libraries(ogui_unicode_test PRIVATE ogui)
+
     add_executable(ogui_kernel_test debug/tests/kernel_test.cpp)
     target_link_libraries(ogui_kernel_test PRIVATE ogui)
     target_compile_definitions(ogui_kernel_test PRIVATE
@@ -231,6 +235,7 @@ if(OGUI_BUILD_TESTS)
         add_test(NAME custom-widget COMMAND ogui_custom_widget)
     endif()
     add_test(NAME kernel COMMAND ogui_kernel_test)
+    add_test(NAME unicode COMMAND ogui_unicode_test)
     add_test(NAME screens COMMAND ogui_screens_test)
     add_test(NAME scrollbar COMMAND ogui_scrollbar_test)
     add_test(NAME script COMMAND ogui_script_test)
@@ -261,7 +266,7 @@ endif()
 
 # Examples and tests are only installed when explicitly built, and the
 # targets may not exist in a partial build configuration.
-foreach(t ogui_demo ogui_demo_win32 ogui_screenshot ogui_parser_test ogui_drawlist_test ogui_kernel_test ogui_screens_test ogui_scrollbar_test ogui_script_test ogui_golden_test)
+foreach(t ogui_demo ogui_demo_win32 ogui_screenshot ogui_parser_test ogui_drawlist_test ogui_kernel_test ogui_screens_test ogui_unicode_test ogui_scrollbar_test ogui_script_test ogui_golden_test)
     if(TARGET ${t})
         install(TARGETS ${t} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
     endif()

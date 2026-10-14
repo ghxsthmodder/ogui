@@ -41,6 +41,11 @@ creates for you (`ogui::Host`, a built-in Win32/WGL window and event loop).
   receives the authored attributes, so a custom `Widget` subclass becomes a
   first-class element; unknown elements are reported with line:col instead of
   throwing.
+* **Unicode text** — UTF-8 everywhere, glyphs rasterized on demand into
+  reserved atlas cells, a fallback chain across faces for scripts the
+  requested family does not carry, a visible `.notdef` box for the ones
+  nothing has, cluster-wise caret and line breaking that handles CJK
+  (see [`docs/unicode.md`](docs/unicode.md)).
 * **Documented and tested** — [`docs/xml-reference.md`](docs/xml-reference.md)
   catalogues every element, attribute and default; [`docs/examples.md`](docs/examples.md)
   walks through minimal XML, Lua behaviour and custom widgets, and `ctest`
@@ -93,8 +98,8 @@ Win32 + WGL demo directly (the project compiles the library sources itself).
 
 ```sh
 cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-bad,
-                                        # custom-widget, kernel, screens, scrollbar,
-                                        # script, examples, golden
+                                        # custom-widget, kernel, unicode, screens,
+                                        # scrollbar, script, examples, golden
 ```
 
 * `parser` — XML tokenizer, attributes, styles, error reporting.
@@ -106,6 +111,10 @@ cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-b
 * `custom-widget` — registers a `<led>` element through `widgetRegistry()` and
   drives it through a real `Kernel` frame (tick, draw, dump, tab order, click).
 * `kernel` — input dispatch, focus/capture, text editing, tabs, tooltip.
+* `unicode` — on-demand glyph baking (a late glyph never moves an early one),
+  the fallback chain between faces, the `.notdef` placeholder, zero-advance
+  combining marks, CJK line breaking with no stranded closing punctuation, and
+  real Cyrillic ink reaching the framebuffer.
 * `screens` — every manifest screen parses in both themes and keeps the ids the gallery binds to.
 * `scrollbar` — presses on the listbox/treeview/table/scrollview/window/textarea bars scroll instead of selecting or hitting children; dropdown popups fit the screen and scroll.
 * `script` — `<script>` collection, screen-bound Lua loading on screen
@@ -483,6 +492,34 @@ in the `DrawList` (`0` = white 1×1 fallback, `>0` = image slot handed
 out by `ImageManager::load()` — or a texture id the host created with
 `createTexture()`).
 
+### Unicode
+
+Text is UTF-8 end to end — XML attributes, Lua strings, `Widget::text()`.
+The ranges above are baked when a face loads; anything else is rasterized
+into reserved atlas cells the first time it is drawn (`Font::resolve()`), so
+Cyrillic, Greek, Hebrew, Arabic, Thai and CJK reach real glyphs without
+shipping a font per script.
+
+A code point the requested family does not carry walks a fallback chain and
+is baked into the first face that has it:
+
+```cpp
+auto& fm = ogui::FontManager::instance();
+fm.setFontPath("noto cjk", "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc");
+fm.addFallback("noto cjk");      // default chain: sans, serif, mono
+```
+
+Cells never move, so a glyph baked late keeps the UV it had at start-up and
+the CPU rasterizer can hold the atlas pointer it recorded once. When no face
+carries a code point, one shared `.notdef` box is drawn at an em width —
+missing text stays visible and keeps its measure instead of collapsing into
+the space glyph. Combining marks advance nothing and are drawn over their
+base, and the text widgets move the caret by cluster, so one Backspace
+removes `e` + U+0301 as a single character.
+
+`docs/unicode.md` documents the model, the line-breaking rules and the
+HarfBuzz evaluation (no GSUB/GPOS shaping, no bidi: see Known limitations).
+
 ## Input details
 
 `InputState` is a flat struct the host fills once per frame:
@@ -661,8 +698,12 @@ thirdparty/lua    vendored Lua 5.4 interpreter sources (scripting)
 
 * `row` tiles its children horizontally using their authored widths; it does
   not shrink or wrap overflowing rows.
-* No complex text shaping (no HarfBuzz): Latin scripts and single-code-point
-  advance only; combining marks are not positioned.
+* No complex text shaping (no HarfBuzz): no GSUB/GPOS, so Arabic and Indic
+  scripts render in isolated forms and `fi`-style ligatures never appear.
+  Marks are centred over their base rather than attached from anchor tables,
+  and there is no bidirectional reordering — a mixed Latin/RTL line keeps
+  logical order. `docs/unicode.md` records the evaluation and the trigger for
+  adding it.
 * One screen size per `Screen`; window resizing and dpi reporting are the
   host's job (`screen->width/height/scale`). `ogui::Host` does both on Win32,
   and there is no per-monitor *on the fly* re-layout guarantee beyond the

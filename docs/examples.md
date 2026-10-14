@@ -100,6 +100,31 @@ why the handler switches on `"inc"` / `"dec"`. `ogui.log` writes to
 `Kernel::addLog`, so a `<console>` widget on the same screen shows the trail
 without extra plumbing.
 
+## Text in other scripts
+
+Text is UTF-8 from the parser through the rasterizer, so a layout can carry
+more than one script and the host does not have to know about fonts:
+
+```xml
+<screen id="i18n">
+  <label id="ru" text="Европа Привет" x="20" y="20" width="240" height="24"/>
+  <label id="he" text="שלום עולם" x="20" y="52" width="240" height="24" family="sans"/>
+  <label id="th" text="สวัสดี" x="20" y="84" width="240" height="24"/>
+  <label id="de" text="Grüße, Straße" x="20" y="116" width="240" height="24" wrap="true"/>
+</screen>
+```
+
+`ru` and `he` are baked on demand: the first frame that needs a Cyrillic or
+Hebrew code point rasterizes it into its own reserved atlas cell. `he` asks for
+`sans`, and a code point the requested family lacks is baked from the first
+family in the fallback chain that carries it — that is how a `serif` label gets
+the dingbats DejaVu Serif does not draw. `th` is whatever the box has for it,
+and if that is nothing you get one hollow `.notdef` box per character rather
+than a blank row. `de` uses `wrap`, and a `Grüße`-style word breaks at the
+space, never mid-cluster — backspace in a `textinput` deletes the base plus its
+marks as one unit too. `docs/unicode.md` explains the atlas and the fallback
+chain; `docs/xml-reference.md` has the attribute-level summary.
+
 ## Loading order and scopes
 
 One Lua state per `Kernel`, rebuilt whenever the foreground screen changes:

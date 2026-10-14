@@ -337,6 +337,24 @@ static void testTextInputSelection() {
     tapKey(k, st, Key_Delete);
     CHECK(inp->text() == "gatinhoo");
 
+    // A combining mark belongs to the base in front of it, so the pair is
+    // one editing unit: Left steps over both, and one Backspace erases both.
+    st.lastChar = 'e';
+    k.frame(st);
+    st.lastChar = 0x301;   // combining acute accent
+    k.frame(st);
+    st.lastChar = 0;
+    k.frame(st);
+    CHECK(inp->text() == "gatinhoo\x65\xCC\x81");
+    CHECK(inp->caret() == 11);
+    tapKey(k, st, Key_Left);
+    CHECK(inp->caret() == 8);
+    tapKey(k, st, Key_Right);
+    CHECK(inp->caret() == 11);
+    tapKey(k, st, Key_Backspace);
+    CHECK(inp->text() == "gatinhoo");
+    CHECK(inp->caret() == 8);
+
     tapKey(k, st, Key_Home);
     CHECK(inp->caret() == 0);
     tapKey(k, st, Key_End);
