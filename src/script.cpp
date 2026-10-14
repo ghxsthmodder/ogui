@@ -12,6 +12,7 @@
 #include <fstream>
 #include <sstream>
 #include <cstring>
+#include <iterator>
 
 #ifdef OGUI_HAS_LUA
 extern "C" {
@@ -110,6 +111,70 @@ bool geomSet(Widget* w, const char* attr, double v, Kernel* k) {
     return true;
 }
 
+// "selected": the current index of the choice widgets (list-like and
+// option-cycling ones share the concept, not a base class).
+bool selGet(Widget* w, int& out) {
+    if (auto* c = dynamic_cast<ComboBox*>(w))    { out = c->selectedIndex(); return true; }
+    if (auto* l = dynamic_cast<ListBox*>(w))     { out = l->selectedIndex(); return true; }
+    if (auto* t = dynamic_cast<Table*>(w))       { out = t->selectedIndex(); return true; }
+    if (auto* v = dynamic_cast<TreeView*>(w))    { out = v->selectedIndex(); return true; }
+    if (auto* o = dynamic_cast<OptionSpin*>(w))  { out = o->index(); return true; }
+    return false;
+}
+
+bool selSet(Widget* w, int v) {
+    if (auto* c = dynamic_cast<ComboBox*>(w))    { c->setSelectedIndex(v); return true; }
+    if (auto* l = dynamic_cast<ListBox*>(w))     { l->setSelectedIndex(v); return true; }
+    if (auto* t = dynamic_cast<Table*>(w))       { t->setSelectedIndex(v); return true; }
+    if (auto* tv = dynamic_cast<TreeView*>(w))   { tv->setSelectedIndex(v); return true; }
+    if (auto* o = dynamic_cast<OptionSpin*>(w))  { o->setIndex(v); return true; }
+    return false;
+}
+
+// Numeric attributes the tween engine can drive.
+bool attrGetNum(Widget* w, const std::string& attr, double& out) {
+    if (attr == "value") return numValueGet(w, out);
+    return geomGet(w, attr.c_str(), out);
+}
+
+bool attrSetNum(Widget* w, const std::string& attr, double v, Kernel* k) {
+    if (attr == "value") {
+        if (!numValueSet(w, v)) return false;
+        k->invalidate();
+        return true;
+    }
+    return geomSet(w, attr.c_str(), v, k);
+}
+
+// Key names for ogui.key(): single letters/digits are handled directly.
+int keyFromName(const char* s) {
+    static const std::pair<const char*, int> kNames[] = {
+        {"space", Key_Space},       {"enter", Key_Enter},
+        {"escape", Key_Escape},     {"tab", Key_Tab},
+        {"backspace", Key_Backspace}, {"delete", Key_Delete},
+        {"insert", Key_Insert},     {"home", Key_Home},
+        {"end", Key_End},           {"pageup", Key_PageUp},
+        {"pagedown", Key_PageDown}, {"left", Key_Left},
+        {"right", Key_Right},       {"up", Key_Up},
+        {"down", Key_Down},         {"lshift", Key_LSHIFT},
+        {"rshift", Key_RSHIFT},     {"lctrl", Key_LCTRL},
+        {"rctrl", Key_RCTRL},       {"lalt", Key_LALT},
+        {"ralt", Key_RALT},         {"lgui", Key_LGUI},
+        {"rgui", Key_RGUI},         {"f1", Key_F1},   {"f2", Key_F2},
+        {"f3", Key_F3},             {"f4", Key_F4},   {"f5", Key_F5},
+        {"f6", Key_F6},             {"f7", Key_F7},   {"f8", Key_F8},
+        {"f9", Key_F9},             {"f10", Key_F10}, {"f11", Key_F11},
+        {"f12", Key_F12},
+    };
+    if (s[0] && !s[1]) {
+        if (s[0] >= 'a' && s[0] <= 'z') return Key_A + (s[0] - 'a');
+        if (s[0] >= '0' && s[0] <= '9') return Key_0 + (s[0] - '0');
+    }
+    for (const auto& [name, code] : kNames)
+        if (!std::strcmp(s, name)) return code;
+    return -1;
+}
+
 int l_get(lua_State* L) {
     const char* id = luaL_checkstring(L, 1);
     const char* attr = luaL_checkstring(L, 2);
@@ -128,6 +193,12 @@ int l_get(lua_State* L) {
     } else if (!std::strcmp(attr, "value")) {
         if (numValueGet(w, num)) lua_pushnumber(L, num);
         else lua_pushnil(L);
+    } else if (!std::strcmp(attr, "selected")) {
+        int idx = 0;
+        if (selGet(w, idx)) lua_pushnumber(L, idx);
+        else lua_pushnil(L);
+    } else if (!std::strcmp(attr, "tooltip")) {
+        lua_pushstring(L, w->tooltip().c_str());
     } else if (geomGet(w, attr, num)) {
         lua_pushnumber(L, num);
     } else {
@@ -158,6 +229,14 @@ int l_set(lua_State* L) {
     } else if (!std::strcmp(attr, "value")) {
         ok = numValueSet(w, luaL_checknumber(L, 3));
         if (ok) k->invalidate();
+    } else if (!std::strcmp(attr, "selected")) {
+        ok = selSet(w, static_cast<int>(luaL_checkinteger(L, 3)));
+        if (ok) k->invalidate();
+    } else if (!std::strcmp(attr, "tooltip")) {
+        size_t len = 0;
+        const char* s = luaL_checklstring(L, 3, &len);
+        w->setTooltip(std::string(s, len));
+        ok = true;
     } else {
         ok = geomSet(w, attr, luaL_checknumber(L, 3), k);
     }
@@ -205,14 +284,159 @@ int l_toast(lua_State* L) {
     return 0;
 }
 
+// ---- input / context queries ----------------------------------------------
+
+int l_mouse(lua_State* L) {
+    Kernel* k = kernelOf(L);
+    const Offset2D p = k ? k->mousePos() : Offset2D{};
+    lua_pushnumber(L, p.x);
+    lua_pushnumber(L, p.y);
+    return 2;
+}
+
+int l_mousedown(lua_State* L) {
+    Kernel* k = kernelOf(L);
+    if (!k) { lua_pushboolean(L, 0); return 1; }
+    const InputState& in = k->input();
+    int btn = -1;
+    if (lua_isnumber(L, 1)) btn = static_cast<int>(lua_tointeger(L, 1));
+    else if (lua_isstring(L, 1)) {
+        const char* s = lua_tostring(L, 1);
+        if (!std::strcmp(s, "left")) btn = Mouse_Left;
+        else if (!std::strcmp(s, "right")) btn = Mouse_Right;
+        else if (!std::strcmp(s, "middle")) btn = Mouse_Middle;
+        else return luaL_error(L, "ogui.mouseDown: unknown button \"%s\"", s);
+    }
+    bool down = false;
+    if (btn >= 0) down = btn < 4 && in.mouseDown[btn];
+    else down = in.mouseDown[0] || in.mouseDown[1] ||
+                in.mouseDown[2] || in.mouseDown[3];
+    lua_pushboolean(L, down);
+    return 1;
+}
+
+int l_key(lua_State* L) {
+    Kernel* k = kernelOf(L);
+    if (!k) { lua_pushboolean(L, 0); return 1; }
+    int code = -1;
+    if (lua_isnumber(L, 1)) code = static_cast<int>(lua_tointeger(L, 1));
+    else code = keyFromName(luaL_checkstring(L, 1));
+    if (code < 0 || code >= 256)
+        return luaL_error(L, "ogui.key: unknown key");
+    lua_pushboolean(L, k->input().keyDown[code]);
+    return 1;
+}
+
+int l_mods(lua_State* L) {
+    Kernel* k = kernelOf(L);
+    lua_pushinteger(L, k ? static_cast<lua_Integer>(k->mods()) : 0);
+    return 1;
+}
+
+// Push the id of `w`, or nil when there is no widget / no id.
+void pushWidgetId(lua_State* L, Widget* w) {
+    if (!w || w->id().empty()) lua_pushnil(L);
+    else lua_pushstring(L, w->id().c_str());
+}
+
+int l_focus(lua_State* L) {
+    Kernel* k = kernelOf(L);
+    pushWidgetId(L, k ? k->focusedWidget() : nullptr);
+    return 1;
+}
+
+int l_hovered(lua_State* L) {
+    Kernel* k = kernelOf(L);
+    pushWidgetId(L, k ? k->hoveredWidget() : nullptr);
+    return 1;
+}
+
+int l_clickcount(lua_State* L) {
+    Kernel* k = kernelOf(L);
+    lua_pushinteger(L, k ? k->clickCount() : 0);
+    return 1;
+}
+
+// ---- list content ----------------------------------------------------------
+
+int l_items(lua_State* L) {
+    const char* id = luaL_checkstring(L, 1);
+    luaL_checktype(L, 2, LUA_TTABLE);
+    Kernel* k = kernelOf(L);
+    Widget* w = k ? k->findWidget(id) : nullptr;
+    if (!w) { lua_pushboolean(L, 0); return 1; }
+    auto* lb = dynamic_cast<ListBox*>(w);
+    auto* os = dynamic_cast<OptionSpin*>(w);
+    if (!lb && !os)
+        return luaL_error(L, "ogui.items: widget \"%s\" has no item list", id);
+    std::vector<std::string> items;
+    const lua_Integer n = luaL_len(L, 2);
+    items.reserve(static_cast<size_t>(n));
+    for (lua_Integer i = 1; i <= n; ++i) {
+        lua_rawgeti(L, 2, i);
+        items.push_back(luaL_tolstring(L, -1, nullptr));  // also stringifies
+        lua_pop(L, 2);   // the tolstring pushes its own copy
+    }
+    if (lb) lb->setItems(std::move(items));
+    else os->setOptions(std::move(items));
+    if (k) k->invalidate();
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+// ---- tweens ----------------------------------------------------------------
+
+int l_tween(lua_State* L) {
+    const char* id = luaL_checkstring(L, 1);
+    const char* attr = luaL_checkstring(L, 2);
+    const float to = static_cast<float>(luaL_checknumber(L, 3));
+    const float dur = static_cast<float>(luaL_optnumber(L, 4, 1.0));
+    const char* ease = luaL_optstring(L, 5, "linear");
+    const float delay = static_cast<float>(luaL_optnumber(L, 6, 0.0));
+    auto* h = hostOf(L);
+    TweenEase e = TweenEase::Linear;
+    if (!std::strcmp(ease, "out")) e = TweenEase::EaseOutCubic;
+    else if (!std::strcmp(ease, "inout")) e = TweenEase::EaseInOutCubic;
+    else if (!std::strcmp(ease, "back")) e = TweenEase::EaseOutBack;
+    else if (std::strcmp(ease, "linear"))
+        return luaL_error(L, "ogui.tween: unknown ease \"%s\" "
+                             "(linear|out|inout|back)", ease);
+    lua_pushboolean(L, h && h->startTween(id, attr, to, dur, e, delay));
+    return 1;
+}
+
+int l_tweenstop(lua_State* L) {
+    const char* id = luaL_optstring(L, 1, "");
+    const char* attr = luaL_optstring(L, 2, "");
+    auto* h = hostOf(L);
+    lua_pushinteger(L, h ? h->stopTween(id, attr) : 0);
+    return 1;
+}
+
+int l_quit(lua_State* L) {
+    if (Kernel* k = kernelOf(L)) k->requestQuit();
+    return 0;
+}
+
 const luaL_Reg oguiLib[] = {
-    {"set",    l_set},
-    {"get",    l_get},
-    {"exists", l_exists},
-    {"click",  l_click},
-    {"time",   l_time},
-    {"log",    l_log},
-    {"toast",  l_toast},
+    {"set",        l_set},
+    {"get",        l_get},
+    {"exists",     l_exists},
+    {"click",      l_click},
+    {"time",       l_time},
+    {"log",        l_log},
+    {"toast",      l_toast},
+    {"mouse",      l_mouse},
+    {"mouseDown",  l_mousedown},
+    {"key",        l_key},
+    {"mods",       l_mods},
+    {"focus",      l_focus},
+    {"hovered",    l_hovered},
+    {"clickCount", l_clickcount},
+    {"items",      l_items},
+    {"tween",      l_tween},
+    {"tweenStop",  l_tweenstop},
+    {"quit",       l_quit},
     {nullptr, nullptr},
 };
 
@@ -313,6 +537,52 @@ void ScriptHost::clear() {
     if (m_L) { lua_close(m_L); m_L = nullptr; }
 #endif
     m_errors.clear();
+    m_tweens.clear();
+}
+
+bool ScriptHost::startTween(const std::string& id, const std::string& attr,
+                            float to, float dur, TweenEase ease, float delay) {
+#ifdef OGUI_HAS_LUA
+    if (!m_kernel) return false;
+    Widget* w = m_kernel->findWidget(id);
+    if (!w) return false;
+    double from = 0.0;
+    if (!attrGetNum(w, attr, from)) return false;
+    for (auto it = m_tweens.begin(); it != m_tweens.end(); ++it)
+        if (it->id == id && it->attr == attr) { m_tweens.erase(it); break; }
+    TweenJob job;
+    job.id = id;
+    job.attr = attr;
+    job.tw.start(static_cast<float>(from), to, dur, ease, delay);
+    m_tweens.push_back(std::move(job));
+    return true;
+#else
+    (void)id; (void)attr; (void)to; (void)dur; (void)ease; (void)delay;
+    return false;
+#endif
+}
+
+int ScriptHost::stopTween(const std::string& id, const std::string& attr) {
+    const size_t before = m_tweens.size();
+    for (auto it = m_tweens.begin(); it != m_tweens.end(); )
+        it = (id.empty() || it->id == id) && (attr.empty() || it->attr == attr)
+                 ? m_tweens.erase(it) : std::next(it);
+    return static_cast<int>(before - m_tweens.size());
+}
+
+void ScriptHost::advanceTweens(float dt) {
+#ifdef OGUI_HAS_LUA
+    if (m_tweens.empty()) return;
+    for (auto it = m_tweens.begin(); it != m_tweens.end(); ) {
+        it->tw.update(dt);
+        Widget* w = m_kernel ? m_kernel->findWidget(it->id) : nullptr;
+        const bool alive = w && attrSetNum(w, it->attr, it->tw.value(), m_kernel);
+        if (!alive || !it->tw.running()) it = m_tweens.erase(it);
+        else ++it;
+    }
+#else
+    (void)dt;
+#endif
 }
 
 template <typename Push>
@@ -340,6 +610,7 @@ void ScriptHost::notifyLoad() {
 }
 
 void ScriptHost::notifyUpdate(float t, float dt) {
+    advanceTweens(dt);   // engine-side: runs even with no ogui_on_update hook
     callHook("ogui_on_update", [t, dt](lua_State* L) {
         lua_pushnumber(L, t);
         lua_pushnumber(L, dt);

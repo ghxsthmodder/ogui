@@ -1,4 +1,5 @@
 #pragma once
+#include "ogui/tween.hpp"
 #include <string>
 #include <vector>
 
@@ -32,13 +33,40 @@ class Widget;
 //
 // API table `ogui` (all calls return nil/false when the id is unknown):
 //   ogui.set(id, attr, v)    attr: text | visible | checked | value |
+//                                    selected | tooltip |
 //                                    x | y | width | height
-//   ogui.get(id, attr)       same attrs; text -> string, value -> number
+//   ogui.get(id, attr)       same attrs; text/tooltip -> string, value/
+//                            selected/geometry -> number, visible/checked
+//                            -> boolean; unknown -> nil
 //   ogui.exists(id)          -> bool
 //   ogui.click(id)           fire the widget's binding/handler -> bool
 //   ogui.time()              seconds since Kernel start
 //   ogui.toast(msg[, kind])  kind: "info" (default) | "warn" | "error"
 //   ogui.log(msg)            push to Kernel::addLog
+//   ogui.mouse()             -> x, y          (last pointer position)
+//   ogui.mouseDown([btn])    btn: 0|1|2 or "left"|"right"|"middle";
+//                            no arg -> any button
+//   ogui.key(name|code)      key down; name: "a".."z", "0".."9", "space",
+//                            "enter", "escape", "tab", "backspace", "home",
+//                            "end", "pageup", "pagedown", "insert",
+//                            "delete", "left/right/up/down", "f1".."f12",
+//                            "lshift/rshift/lctrl/rctrl/lalt/ralt/lgui/rgui"
+//   ogui.mods()              modifier bitmask (Shift=1 Ctrl=2 Alt=4 Super=8)
+//   ogui.focus()             focused widget id, or nil
+//   ogui.hovered()           hovered widget id, or nil
+//   ogui.clickCount()        presses at this spot in the double-click
+//                            window (1 single, 2 double, ...)
+//   ogui.items(id, table)    replace ListBox/OptionSpin entries with the
+//                            Lua array of strings -> bool
+//   ogui.tween(id, attr, to, dur[, ease[, delay]])
+//                            animate a numeric attr (value | x | y |
+//                            width | height) from its current value;
+//                            ease: "linear" (default) | "out" | "inout" |
+//                            "back". Engine-driven: runs even without
+//                            ogui_on_update. A new tween on the same
+//                            id+attr replaces the old one.
+//   ogui.tweenStop([id[, attr]])  cancel matching tweens -> count
+//   ogui.quit()              Kernel::requestQuit
 //
 // Runtime errors are captured (never thrown): recorded in errors() and
 // logged to the kernel. The last 32 messages are kept.
@@ -79,13 +107,28 @@ public:
     // Captured load/runtime errors, oldest first (capped at 32).
     const std::vector<std::string>& errors() const { return m_errors; }
 
+    // ---- script-driven tweens (ogui.tween/ogui.tweenStop) ----
+    // Animate one numeric attribute of one widget; started from Lua,
+    // advanced every frame by notifyUpdate (independent of hooks).
+    bool startTween(const std::string& id, const std::string& attr,
+                    float to, float dur, TweenEase ease, float delay);
+    int stopTween(const std::string& id = "", const std::string& attr = "");
+    size_t tweenCount() const { return m_tweens.size(); }
+
     // Raw state for hosts extending the bindings (nullptr before any
     // load or without a Lua build). The ogui table lives in its globals.
     lua_State* state() { return m_L; }
 
 private:
+    struct TweenJob {
+        std::string id;
+        std::string attr;
+        Tween tw;
+    };
+
     void ensureState();
     void recordError(const std::string& msg);
+    void advanceTweens(float dt);
     // Calls the global function `name` if it is a function; push() adds
     // the arguments. Errors are recorded, never thrown.
     template <typename Push>
@@ -94,6 +137,7 @@ private:
     lua_State* m_L = nullptr;
     Kernel* m_kernel = nullptr;
     std::vector<std::string> m_errors;
+    std::vector<TweenJob> m_tweens;
 };
 
 } // namespace ogui

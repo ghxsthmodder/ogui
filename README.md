@@ -19,7 +19,9 @@ creates for you (`ogui::Host`, a built-in Win32/WGL window and event loop).
   and `SoftwareRenderer` (pure CPU, for headless tests and screenshots).
 * **Scripting** — screens embed Lua 5.4 chunks (`<script>`); the engine
   owns the loop and calls the script's `ogui_on_load`/`ogui_on_update`/`ogui_on_click`/
-  `ogui_on_event` hooks through the `ogui` API table.
+  `ogui_on_event` hooks through the `ogui` API table: widget attributes,
+  input queries (`mouse`/`key`/`mods`), focus/hover, list content and
+  engine-driven `tween` animations.
 * **Static library, few dependencies** — stb and Lua are vendored; the
   parser is a hand-rolled tokenizer with no third-party code.
 

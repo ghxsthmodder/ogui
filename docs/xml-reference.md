@@ -321,13 +321,24 @@ API table `ogui` (all calls are safe on unknown ids):
 
 | Call | Effect |
 |---|---|
-| `ogui.set(id, attr, v)` | `attr`: `text`, `visible`, `checked`, `value`, `x`, `y`, `width`, `height` (geometry pins the spec to absolute so layout keeps the new values) |
-| `ogui.get(id, attr)` | same attrs; `text` → string, `value`/geometry → number, `visible`/`checked` → boolean; unknown → `nil` |
+| `ogui.set(id, attr, v)` | `attr`: `text`, `visible`, `checked`, `value`, `selected`, `tooltip`, `x`, `y`, `width`, `height` (geometry pins the spec to absolute so layout keeps the new values) |
+| `ogui.get(id, attr)` | same attrs; `text`/`tooltip` → string, `value`/`selected`/geometry → number, `visible`/`checked` → boolean; unknown → `nil` |
 | `ogui.exists(id)` | widget lookup |
 | `ogui.click(id)` | fire the widget's C++ binding/handler |
 | `ogui.time()` | seconds since kernel start |
 | `ogui.toast(msg[, kind])` | `kind`: `"info"` (default) / `"warn"` / `"error"` |
 | `ogui.log(msg)` | push to `Kernel::addLog` |
+| `ogui.mouse()` | last pointer position → `x, y` |
+| `ogui.mouseDown([btn])` | `btn`: `0/1/2` or `"left"/"right"/"middle"`; no arg = any button |
+| `ogui.key(name\|code)` | key down; `"a".."z"`, `"0".."9"`, `"space"`, `"enter"`, `"escape"`, `"tab"`, `"backspace"`, `"delete"`, `"insert"`, `"home"`, `"end"`, `"pageup"`, `"pagedown"`, `"left/right/up/down"`, `"f1".."f12"`, `"lshift/rshift/lctrl/rctrl/lalt/ralt/lgui/rgui"` — or the raw `KeyCode` number |
+| `ogui.mods()` | modifier bitmask: Shift=1, Ctrl=2, Alt=4, Super=8 |
+| `ogui.focus()` | focused widget id, or `nil` |
+| `ogui.hovered()` | hovered widget id, or `nil` |
+| `ogui.clickCount()` | presses at this spot inside the double-click window |
+| `ogui.items(id, tbl)` | replace `listbox`/`optionspin` entries with a Lua array of strings |
+| `ogui.tween(id, attr, to, dur[, ease[, delay]])` | animate `value`/`x`/`y`/`width`/`height` from the current value; `ease`: `"linear"` (default) / `"out"` / `"inout"` / `"back"`. Engine-driven — runs even without `ogui_on_update`; a new tween on the same `id+attr` replaces the old one |
+| `ogui.tweenStop([id[, attr]])` | cancel matching tweens → count stopped |
+| `ogui.quit()` | `Kernel::requestQuit` |
 
 Example:
 

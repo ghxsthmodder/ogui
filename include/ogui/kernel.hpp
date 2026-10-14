@@ -179,6 +179,10 @@ public:
     // Seconds since the first frame (InputState::time mirror).
     float time() const { return m_input.time; }
 
+    // Snapshot of the raw input the last frame was fed (mouse position,
+    // button/key arrays). Used by the Lua ogui.* input queries.
+    const InputState& input() const { return m_input; }
+
     // ---- lookup ----
     Widget* findWidget(const std::string& id);
     Widget* focusedWidget() const { return m_focus; }

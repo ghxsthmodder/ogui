@@ -17,7 +17,7 @@
     <toggleswitch id="f_terms" text="Aceito os termos" checked="false"
                    x="16" y="156" width="220" height="28"/>
 
-    <button id="f_send" style="btnPrimary" text="Cadastrar" x="16" y="198" width="140" height="38"/>
+    <button id="f_send" style="btnPrimary" text="Cadastrar" x="16" y="198" width="140" height="38" tooltip="valida e envia o cadastro"/>
     <label id="f_status" style="muted" text="..." x="172" y="204" width="232" height="26"/>
   </panel>
 

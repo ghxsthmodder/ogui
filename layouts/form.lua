@@ -1,10 +1,11 @@
 -- layouts/form.lua : behaviour for layout_form.xml.
--- The engine owns the loop; this script only reacts to the four hooks and
+-- The engine owns the loop; this script only reacts to the hooks and
 -- talks to the widgets through the ogui API.
 
-local target = 0   -- progress the send button queues for ogui_on_update
+local sent = false
 
 function ogui_on_load()
+  sent = false
   ogui.set("f_status", "text", "Preencha o formulario.")
   ogui.set("f_prog", "value", 0)
 end
@@ -26,20 +27,17 @@ function ogui_on_click(key)
     ogui.set("f_status", "text", "Aceite os termos para enviar.")
     ogui.toast("Aceite os termos", "warn")
   else
-    target = 1
+    sent = true
     ogui.set("f_status", "text", "Enviando " .. nome .. " ...")
     ogui.set("f_send", "visible", false)
+    ogui.tween("f_prog", "value", 1, 1.2, "out")
   end
 end
 
-function ogui_on_update(t, dt)
-  local p = ogui.get("f_prog", "value")
-  if p < target then
-    p = math.min(target, p + dt * 0.8)
-    ogui.set("f_prog", "value", p)
-    if p >= target then
-      ogui.set("f_status", "text", "Cadastro concluido!")
-      ogui.toast("Cadastro concluido", "info")
-    end
+function ogui_on_update()
+  if sent and ogui.get("f_prog", "value") >= 1 then
+    sent = false
+    ogui.set("f_status", "text", "Cadastro concluido!")
+    ogui.toast("Cadastro concluido", "info")
   end
 end

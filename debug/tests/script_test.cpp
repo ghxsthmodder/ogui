@@ -224,6 +224,161 @@ int main() {
         k.frame(st3);
     }
 
+    // ---- input queries: mouse / mouseDown / key / mods ---------------------
+    // (errors() accumulates on purpose in the block above; compare counts.)
+    const size_t errBase = k.script().errors().size();
+    auto newErrors = [&](const char* where) {
+        for (size_t i = errBase; i < k.script().errors().size(); ++i)
+            std::cerr << "new script error @" << where << ": "
+                      << k.script().errors()[i] << "\n";
+        return k.script().errors().size() == errBase;
+    };
+    {
+        InputState st = makeInput();
+        st.time = 6.0f;
+        st.mouseX = 123.0f;
+        st.mouseY = 45.0f;
+        st.mouseDown[Mouse_Right] = true;
+        st.keyDown[Key_Space] = true;
+        st.keyDown[Key_LCTRL] = true;
+        k.frame(st);
+        k.script().loadString(R"(
+            local x, y = ogui.mouse()
+            assert(x == 123 and y == 45, "mouse")
+            assert(ogui.mouseDown())
+            assert(ogui.mouseDown("right"))
+            assert(ogui.mouseDown(1))
+            assert(ogui.mouseDown("left") == false)
+            assert(ogui.mouseDown(0) == false)
+            assert(ogui.key("space"))
+            assert(ogui.key("k") == false)
+            assert(ogui.key(1))                 -- Key_Space == 1
+            assert(ogui.mods() == 2)            -- Mod_Ctrl
+        )", "input");
+        CHECK(newErrors("input"));
+    }
+
+    // ---- focus / hovered / clickCount ---------------------------------------
+    {
+        InputState st = makeInput();
+        st.time = 6.5f;
+        pressAt(k, st, 70.0f, 70.0f);   // btn was moved to x=12 (10+2) but is
+        release(k, st);                 // 120 wide: 70,70 still inside
+        st.time = 6.6f;
+        pressAt(k, st, 70.0f, 70.0f);   // second click at the same spot
+        release(k, st);
+        k.script().loadString(R"(
+            assert(ogui.focus() == "btn")
+            assert(ogui.hovered() == "btn")
+            assert(ogui.clickCount() >= 1)
+        )", "context");
+        CHECK(newErrors("context"));
+    }
+
+    // ---- tooltip + selected attributes, ogui.items ---------------------------
+    {
+        XmlParser p;
+        auto res = p.parse(R"(<screen id="lists">
+  <listbox id="lb" x="10" y="10" width="150" height="200">
+    <item text="one"/>
+  </listbox>
+  <optionspin id="os" x="10" y="230" width="150" height="24">
+    <option text="a"/>
+    <option text="b"/>
+  </optionspin>
+  <combobox id="combo" x="10" y="270" width="150" height="24">
+    <option text="x"/>
+    <option text="y"/>
+  </combobox>
+  <label id="tip" text="t" x="10" y="310" width="100" height="20"/>
+</screen>)");
+        assert(res.root);
+        auto s = std::make_shared<Screen>("lists");
+        s->widgets.push_back(res.root);
+        s->width = 800; s->height = 600;
+        k.pushScreen(s);   // screen has no <script>: the host is cleared
+        CHECK(k.script().errors().empty());
+        InputState stl = makeInput();
+        stl.time = 6.65f;
+        k.frame(stl);      // one layout pass resolves ComboBox items
+        k.script().loadString(R"(
+            assert(ogui.items("lb", {"alpha", "beta", "gamma"}))
+            ogui.set("lb", "selected", 1)
+            assert(ogui.get("lb", "selected") == 1)
+            assert(ogui.items("os", {"low", "mid", "high"}))
+            ogui.set("os", "selected", 2)
+            assert(ogui.get("os", "selected") == 2)
+            assert(ogui.items("os", {}) == true)
+            assert(not pcall(ogui.items, "tip", {"no"}))   -- label: no items
+            ogui.set("tip", "tooltip", "say hi")
+            assert(ogui.get("tip", "tooltip") == "say hi")
+            assert(ogui.set("combo", "selected", 1))
+            assert(ogui.get("combo", "selected") == 1)
+        )", "lists");
+        CHECK(k.script().errors().empty());
+        auto* lb = dynamic_cast<ListBox*>(k.findWidget("lb"));
+        CHECK(lb && lb->count() == 3 && lb->selectedIndex() == 1);
+        k.popScreen();   // back to "s": its inline script reloads
+        CHECK(k.getText("out") == "loaded");
+    }
+
+    // ---- tweens: engine-driven, replaced, stopped ----------------------------
+    {
+        auto& sh = k.script();
+        InputState st = makeInput();
+        st.time = 6.7f;
+        k.frame(st);   // screen s's on_update hook (reloaded on popScreen)
+                       // has pb at 0.5 again
+        sh.loadString(R"(
+            function ogui_on_update() end   -- silence screen s's pb hook
+            assert(ogui.tween("pb", "value", 1.0, 1.0, "linear"))
+        )", "tw");
+        CHECK(sh.errors().empty());
+        CHECK(sh.tweenCount() == 1);
+
+        for (int i = 0; i < 5; ++i) { st.time += 0.1f; k.frame(st); }
+        auto* pb = dynamic_cast<ProgressBar*>(k.findWidget("pb"));
+        CHECK(pb && std::fabs(pb->value() - 0.75f) < 0.02f);   // half done
+
+        // A second tween on the same id+attr replaces the first.
+        sh.loadString(R"(assert(ogui.tween("pb", "value", 0.0, 1.0)))", "tw2");
+        CHECK(sh.tweenCount() == 1);
+        CHECK(sh.errors().empty());
+
+        for (int i = 0; i < 11; ++i) { st.time += 0.1f; k.frame(st); }
+        CHECK(pb && pb->value() == 0.0f);   // finished and dropped
+        CHECK(sh.tweenCount() == 0);
+
+        // tweenStop cancels without touching the value further.
+        const float slBefore = static_cast<Slider*>(k.findWidget("sl"))->value();
+        sh.loadString(R"(
+            assert(ogui.tween("sl", "value", 1.0, 1.0, "out"))
+            assert(ogui.tweenStop("sl") == 1)
+            assert(ogui.tweenStop("nothing") == 0)
+        )", "twstop");
+        CHECK(sh.errors().empty());
+        CHECK(sh.tweenCount() == 0);
+        st.time += 0.1f;
+        k.frame(st);
+        CHECK(static_cast<Slider*>(k.findWidget("sl"))->value() == slBefore);
+
+        // Geometry attrs tween too (and stay pinned after layout).
+        sh.loadString(R"(assert(ogui.tween("btn", "x", 300, 1.0, "linear")))", "geom");
+        st.time += 0.1f;
+        k.frame(st);
+        auto* btn = k.findWidget("btn");
+        CHECK(btn && btn->bounds().x > 12.0f && btn->bounds().x < 300.0f);
+        sh.stopTween("btn");
+    }
+
+    // ---- ogui.quit ------------------------------------------------------------
+    {
+        CHECK(!k.quitRequested());
+        k.script().loadString("ogui.quit()", "bye");
+        CHECK(k.script().errors().empty());
+        CHECK(k.quitRequested());
+    }
+
     if (g_failures) {
         std::cerr << g_failures << " script test(s) FAILED\n";
         return 1;
