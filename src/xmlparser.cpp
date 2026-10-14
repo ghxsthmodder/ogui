@@ -728,6 +728,12 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         if (const std::string* v = get("maxheight")) { toFloat(*v, maxH); hasLimits = true; }
         if (hasLimits) w->setSizeLimits(minW, minH, maxW, maxH);
     }
+    // weight="N" makes the widget share a column's leftover height or a
+    // row's leftover width proportionally (see Column/Row::layout).
+    if (const std::string* v = get("weight")) {
+        float wt = 0.0f;
+        if (toFloat(*v, wt) && wt > 0.0f) w->setWeight(wt);
+    }
     // Seed the bounds with the numeric values; relative components are
     // corrected by the first layout pass.
     if (hasW || hasH) {

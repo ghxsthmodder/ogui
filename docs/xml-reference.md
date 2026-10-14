@@ -141,6 +141,7 @@ are clamped at parse time too.
 | `shadowColor` | shadow tint |
 | `gradient` | fill gradient; `gradientDirection="horizontal"` runs the ramp left→right (radius ignored) |
 | `minWidth` / `minHeight` / `maxWidth` / `maxHeight` | pixel clamp on the resolved size, re-applied on every layout pass (see Geometry) |
+| `weight` | flex share inside `column`/`row`: weighted children split the leftover height/width proportionally; `0` keeps the authored size |
 
 ## Named styles
 
@@ -261,7 +262,7 @@ no room below).
 | `group` | `name` (box caption) | any widget |
 | `window` | `title`, `titleVisible` | any widget |
 | `scrollview` | `scrollStep`, `scrollX`, `scrollY` | any widget |
-| `column` / `row` | `gap` (child spacing px, falls back to `margin` then 4), `align` on `column` (`center`/`right` child placement), `valign` on `row` (`middle`/`bottom` against the tallest child) | any widget (stacked) |
+| `column` / `row` | `gap` (child spacing px, falls back to `margin` then 4), `align` on `column` (`center`/`right` child placement), `valign` on `row` (`middle`/`bottom` against the tallest child) | any widget (stacked; children may set `weight` to split leftover height/width) |
 | `grid` | `columns`, `gap`, `rowHeight` | any widget |
 | `splitter` | `orientation`/`vertical`, `split` (0..1), `handleSize`, `handleColor` | two panels |
 | `tabs` | `active`, `tabHeight`, `headerColor`, `tabColor`, `activeColor`, `accent`, `scrolling` (`true`: the header is a drag/wheel-scrollable strip instead of a `...` overflow) | `tab` |

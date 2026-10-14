@@ -173,18 +173,42 @@ void Column::layout(float parentWidth, float parentHeight) {
     float pad = m_style.padding;
     float gap = m_style.gap > 0.0f ? m_style.gap
                   : (m_style.margin > 0.0f ? m_style.margin : 4.0f);
+    const float contentW = parentWidth - pad * 2.0f;
     float y = pad;
     float maxW = 0.0f;
+
+    // Weight pass: measure the fixed children, then weighted children
+    // split whatever height the parent grants beyond them.
+    float sumW = 0.0f, fixedH = 0.0f;
+    int nKids = 0;
+    for (const auto& c : children()) {
+        if (!c) continue;
+        ++nKids;
+        c->resolveGeometry(contentW, parentHeight);
+        const Rect cb = c->bounds();
+        if (c->weight() > 0.0f) { sumW += c->weight(); continue; }
+        float fh = cb.h > 0.0f ? cb.h : 24.0f;
+        if (cb.h <= 0.0f) {
+            if (auto* lab = dynamic_cast<Label*>(c.get()); lab && lab->wrap()) {
+                const float need = lab->measureHeight(cb.w > 0.0f ? cb.w : contentW);
+                if (need > 0.0f) fh = need;
+            }
+        }
+        fixedH += fh;
+    }
+    const float gapTotal = nKids > 1 ? static_cast<float>(nKids - 1) * gap : 0.0f;
+    float avail = parentHeight - pad * 2.0f - fixedH - gapTotal;
+    if (avail < 0.0f) avail = 0.0f;
 
     for (const auto& c : children()) {
         if (!c) continue;
         // Percent/fill children resolve against the column's content width.
-        c->resolveGeometry(parentWidth - pad * 2.0f, parentHeight);
+        c->resolveGeometry(contentW, parentHeight);
         Rect cb = c->bounds();
         // Stack vertically; keep an explicitly authored x (indentation) and
         // give zero-width children the full available width.
         float cx = cb.x;
-        float cw = cb.w > 0.0f ? cb.w : (parentWidth - pad * 2.0f);
+        float cw = cb.w > 0.0f ? cb.w : contentW;
         float ch = cb.h > 0.0f ? cb.h : 24.0f;
         if (cb.h <= 0.0f) {
             // A wrapped label with no authored height sizes to its text.
@@ -193,6 +217,8 @@ void Column::layout(float parentWidth, float parentHeight) {
                 if (need > 0.0f) ch = need;
             }
         }
+        if (sumW > 0.0f && c->weight() > 0.0f && avail > 0.0f)
+            ch = avail * c->weight() / sumW;
         c->setBounds(Rect{cx, y, cw, ch});
         c->layout(cw, ch);
 
@@ -200,7 +226,6 @@ void Column::layout(float parentWidth, float parentHeight) {
         if (m_align != Align::Left) {
             // Cross-axis alignment ignores the authored x: the child is
             // centred or flush-right within the column's content width.
-            const float contentW = parentWidth - pad * 2.0f;
             const float nx = m_align == Align::Center
                 ? pad + (contentW - after.w) * 0.5f
                 : pad + contentW - after.w;
@@ -233,6 +258,25 @@ void Row::layout(float parentWidth, float parentHeight) {
     float x = pad;
     float maxH = 0.0f;
 
+    // Weight pass: measure the fixed children, then weighted children
+    // split whatever width remains beyond them.
+    float sumW = 0.0f, fixedW = 0.0f;
+    int nKids = 0;
+    for (const auto& c : children()) {
+        if (!c) continue;
+        ++nKids;
+        c->resolveGeometry(parentWidth, parentHeight);
+        if (c->weight() > 0.0f) { sumW += c->weight(); continue; }
+        const Rect cb = c->bounds();
+        fixedW += cb.w > 0.0f ? cb.w : 100.0f;
+    }
+    const float gapTotal = nKids > 1 ? static_cast<float>(nKids - 1) * gap : 0.0f;
+    // An authored row width bounds the flex split; otherwise the width the
+    // parent allots is used.
+    const float refW = m_bounds.w > 0.0f ? m_bounds.w : parentWidth;
+    float avail = refW - pad * 2.0f - fixedW - gapTotal;
+    if (avail < 0.0f) avail = 0.0f;
+
     if (m_valign != VertAlign::Top) {
         // First pass: the tallest child defines the band shorter children
         // are centred or bottom-aligned inside.
@@ -249,7 +293,9 @@ void Row::layout(float parentWidth, float parentHeight) {
         // Percent/fill children resolve against the row's content area.
         c->resolveGeometry(parentWidth, parentHeight);
         Rect cb = c->bounds();
-        const float cw = cb.w > 0.0f ? cb.w : 100.0f;
+        const float cbw = cb.w > 0.0f ? cb.w : 100.0f;
+        const float cw = sumW > 0.0f && c->weight() > 0.0f && avail > 0.0f
+            ? avail * c->weight() / sumW : cbw;
         const float ch = cb.h > 0.0f ? cb.h : parentHeight;
         float cy = cb.y;
         if (m_valign == VertAlign::Middle) cy = (maxH - ch) * 0.5f;

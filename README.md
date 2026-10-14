@@ -254,6 +254,7 @@ Conventional names that are not abbreviations stay as-is: `x`, `y`, `id`,
 | `x` `y` `width` `height` | bounds, **relative to the parent**; each accepts pixels (`20`), percent (`"50%"`) or — for `width`/`height` — `"fill"` (see below) |
 | `anchor` | pin edges across parent resizes: `anchor="right"`, `"l,r"`, `"top,bottom"` etc. (`left/right/top/bottom`, short forms `l/r/t/b`, space/comma-separated) |
 | `minWidth` `minHeight` `maxWidth` `maxHeight` | pixel clamp on the resolved size, applied on every layout pass whatever unit `width`/`height` used (`"50%"` + `maxWidth="500"` grows up to 500 px; `"10%"` + `minWidth="200"` never shrinks below) |
+| `weight` | flex share inside a `column` (leftover height) or `row` (leftover width), proportionally to the other weighted children; 0 keeps the authored size |
 | `visible` | `true/false` — an invisible widget (and its subtree) is skipped by drawing *and* input |
 | `style` | named style(s) applied to the element; a comma/space list stacks (`"a,b"`, later wins) |
 | `background` `color` `border` `borderColor` `borderWidth` `radius` | colors/metrics |
@@ -355,8 +356,8 @@ theme default.
 | `script` | Lua chunk for the screen — `<script src="file.lua"/>` or inline `<script>code</script>`; hooks `ogui_on_load`/`ogui_on_update`/`ogui_on_click`/`ogui_on_event` + `ogui` API (see [xml-reference](docs/xml-reference.md)) | `src` |
 | `panel` | plain rectangle container | — |
 | `window` | bordered panel with a title bar (children are offset by it) | `title`, `titleVisible` |
-| `column` | stacks children vertically (gap 4 or `gap`, honours `padding`/`margin`); stretches to the parent's width | `gap`, `align` (`center`/`right` place children horizontally, `left` keeps the authored x) |
-| `row` | lays children out horizontally, tiling authored widths with a gap | `gap`, `valign` (`middle`/`bottom` place shorter children against the tallest) |
+| `column` | stacks children vertically (gap 4 or `gap`, honours `padding`/`margin`); stretches to the parent's width | `gap`, `align` (`center`/`right` place children horizontally, `left` keeps the authored x), `weight` on children (split leftover height) |
+| `row` | lays children out horizontally, tiling authored widths with a gap | `gap`, `valign` (`middle`/`bottom` place shorter children against the tallest), `weight` on children (split leftover width when the row has an authored width or room from its parent) |
 | `grid` | row-major tiling over column tracks; children fill each cell origin (child `x`/`y` are ignored, percent/fill resolve against the cell) | `columns` (`"3"` = 3 equal tracks, or a list like `"120 1fr 25%"`: px, fractional, percent), `gap` (px, default 4), `rowHeight` (px; default is auto = tallest child of the row) |
 | `label` | text | `text`, `wrap`, `align="left\|center\|right"` |
 | `button` | clickable button, press/release feedback | `text`, `align="left\|center\|right"`, `textPadding` (inset for left/right) |

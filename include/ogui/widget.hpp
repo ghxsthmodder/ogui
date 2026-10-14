@@ -146,6 +146,12 @@ public:
     // Clamp m_bounds to the size limits; called on every geometry resolve.
     void clampToBounds();
 
+    // Flex weight: inside a `column` it shares the leftover HEIGHT, inside
+    // a `row` the leftover WIDTH, proportionally to the weights of the
+    // other weighted children. 0 (default) keeps the authored size.
+    void setWeight(float w) { m_weight = w < 0.0f ? 0.0f : w; }
+    float weight() const { return m_weight; }
+
     virtual void layout(float parentWidth, float parentHeight);
 
     // Per-frame tick (dt in seconds). The Kernel advances every widget once
@@ -259,6 +265,7 @@ protected:
     bool m_anchorCaptured = false;
     float m_anchorMargins[4]{};  // left, right, top, bottom (px)
     float m_minW = 0.0f, m_minH = 0.0f, m_maxW = 0.0f, m_maxH = 0.0f;
+    float m_weight = 0.0f;        // flex share inside column/row (0 = fixed)
     Matrix4x4 m_transform{};    // parent-space transform
     Style m_style;
     std::string m_tooltip;

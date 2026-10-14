@@ -2518,6 +2518,42 @@ static void testSizeLimits() {
     CHECK(std::fabs(n2->bounds().x - 740.0f) < 0.01f);      // 800-60
     CHECK(t1->bounds().y == 0.0f);                          // tallest stays
     CHECK(std::fabs(t2->bounds().y - 10.0f) < 0.01f);       // (40-20)/2
+
+    // weight="N": children split the leftover height (column) or width
+    // (row) proportionally; fixed children keep their authored size.
+    Kernel k4;
+    k4.init();
+    auto res4 = p.parse(R"XML(<screen id="s">
+  <column id="fc" x="0" y="0" width="200" height="0" gap="10" padding="5">
+    <panel id="f1" width="200" height="100" background="#111"/>
+    <panel id="f2" width="200" height="0" weight="1" background="#222"/>
+    <panel id="f3" width="200" height="0" weight="3" background="#333"/>
+  </column>
+  <row id="fr" x="0" y="500" width="400" height="40" padding="0">
+    <panel id="r1" width="92" height="40" background="#444"/>
+    <panel id="r2" width="0" height="40" weight="1" background="#555"/>
+    <panel id="r3" width="0" height="40" weight="2" background="#666"/>
+  </row>
+</screen>)XML");
+    assert(res4.root);
+    auto s4 = std::make_shared<Screen>("s");
+    s4->widgets.push_back(res4.root);
+    s4->width = 800;
+    s4->height = 600;
+    k4.pushScreen(s4);
+    InputState st4 = makeInput();
+    k4.frame(st4);
+    auto* f2 = dynamic_cast<Panel*>(k4.findWidget("f2"));
+    auto* f3 = dynamic_cast<Panel*>(k4.findWidget("f3"));
+    auto* r2 = dynamic_cast<Panel*>(k4.findWidget("r2"));
+    auto* r3 = dynamic_cast<Panel*>(k4.findWidget("r3"));
+    CHECK(f2 && f3 && r2 && r3);
+    // Column: avail = 600 - 10(pad) - 100 - 20(two gaps) = 470; split 1:3.
+    CHECK(std::fabs(f2->bounds().h - 117.5f) < 0.01f);
+    CHECK(std::fabs(f3->bounds().h - 352.5f) < 0.01f);
+    // Row: default gap 4; avail = 400 - 92 - 8 = 300; split 1:2.
+    CHECK(std::fabs(r2->bounds().w - 100.0f) < 0.01f);
+    CHECK(std::fabs(r3->bounds().w - 200.0f) < 0.01f);
 }
 
 static void testTabsScrolling() {
