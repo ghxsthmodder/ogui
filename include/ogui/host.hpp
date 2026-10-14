@@ -47,10 +47,21 @@ public:
     bool isOpen() const { return m_native != nullptr; }
     const std::string& lastError() const { return m_error; }
 
+    // ---- dpi ----
+    // Device pixels per logical unit (96 dpi == 1.0). dpiScale() is the
+    // per-monitor value of the open window and falls back to the system dpi
+    // while closed; run() copies it into Screen::scale every frame, so a
+    // layout authored in logical units stays the same physical size on a
+    // HiDPI display. Hosts that own their window read their own dpi and set
+    // Screen::scale themselves.
+    static float systemDpiScale();
+    float dpiScale() const;
+
     // Runs the loop until the window is closed or kernel.requestQuit() is
     // called. Each frame:
     //   1. pump OS messages into an InputState
-    //   2. apply window resizes to the current Screen's width/height
+    //   2. apply window resizes to the current Screen's width/height and its
+    //      dpi to Screen::scale
     //   3. deliver one pending text character to InputState::lastChar
     //   4. call beforeFrame(kernel, input) if set
     //   5. kernel.frame(input) (input + layout + draw list)

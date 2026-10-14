@@ -10,6 +10,10 @@ namespace ogui {
 
 namespace {
 
+// 0/NaN/negative scale values are treated as "no scaling" rather than
+// dividing the whole UI by zero.
+float saneScale(float s) { return s > 0.0f ? s : 1.0f; }
+
 // Depth-first traversal in draw order (parents before children).
 template <typename Fn>
 void forEachWidget(const std::vector<Widget::Ptr>& roots, Fn&& fn) {
@@ -189,6 +193,7 @@ void Kernel::init() {
     m_dirty = true;
     m_prevInput = InputState{};
     m_builtW = m_builtH = -1.0f;
+    m_builtScale = -1.0f;
 }
 
 void Kernel::run(const InputSource& input, const std::function<void()>& draw) {
@@ -271,6 +276,7 @@ void Kernel::switchScreen(std::shared_ptr<Screen> screen) {
         if (auto cur = m_screenStack.back()) {
             screen->width = cur->width;
             screen->height = cur->height;
+            screen->scale = cur->scale;
         }
         m_screenStack.back() = screen;
         setFocus(*this, m_focus, nullptr);
@@ -280,6 +286,30 @@ void Kernel::switchScreen(std::shared_ptr<Screen> screen) {
 }
 
 void Kernel::setTheme(const Theme* theme) { m_theme = theme; invalidate(); }
+
+float Kernel::scale() const {
+    auto screen = currentScreen();
+    return screen ? saneScale(screen->scale) : 1.0f;
+}
+
+void Kernel::setScale(float s) {
+    auto screen = currentScreen();
+    if (!screen) return;
+    const float v = saneScale(s);
+    if (screen->scale == v) return;
+    screen->scale = v;
+    invalidate();
+}
+
+float Kernel::logicalWidth() const {
+    auto screen = currentScreen();
+    return screen ? screen->width / scale() : 0.0f;
+}
+
+float Kernel::logicalHeight() const {
+    auto screen = currentScreen();
+    return screen ? screen->height / scale() : 0.0f;
+}
 
 void Kernel::processInput(const InputState& st) { m_input = st; }
 
@@ -426,13 +456,19 @@ void Kernel::update() {
     // tree out; laying out here keeps hit-testing honest from the start.
     // Every layout implementation is idempotent, so the second pass in
     // buildDrawList is harmless.
+    // The tree is laid out in logical units; screen->width/height are device
+    // pixels, so the scale divides them here and nowhere else.
+    const float sc = scale();
+    const float lw = screen->width / sc;
+    const float lh = screen->height / sc;
     for (const auto& w : screen->widgets) {
         if (!w) continue;
-        w->resolveGeometry(screen->width, screen->height);
-        w->layout(screen->width, screen->height);
+        w->resolveGeometry(lw, lh);
+        w->layout(lw, lh);
     }
 
-    const Offset2D p{m_input.mouseX, m_input.mouseY};
+    // The host reports the pointer in device pixels; widgets see logical.
+    const Offset2D p{m_input.mouseX / sc, m_input.mouseY / sc};
     const int btn = (m_input.mouseButton >= 0 && m_input.mouseButton < 4)
                         ? m_input.mouseButton : 0;
     const bool down = m_input.mouseDown[btn];
@@ -583,19 +619,28 @@ const DrawList& Kernel::buildDrawList() {
         m_drawList.clear();
         return m_drawList;
     }
-    if (screen->width != m_builtW || screen->height != m_builtH) {
-        m_dirty = true;   // host resized the viewport
+    const float sc = scale();
+    const float logicalW = screen->width / sc;
+    const float logicalH = screen->height / sc;
+    if (screen->width != m_builtW || screen->height != m_builtH ||
+        sc != m_builtScale) {
+        m_dirty = true;   // host resized the viewport or changed the dpi scale
     }
     if (!m_dirty) return m_drawList;   // nothing changed: reuse last frame
 
     Rasterizer& r = m_raster;
+    // The one scale hand-off: the rasterizer multiplies logical geometry into
+    // device pixels as it emits, and the font atlases are baked at that same
+    // factor so text stays crisp instead of being stretched.
+    r.setScale(sc);
+    FontManager::instance().setScale(sc);
     r.reset();
-    r.beginFrame(Rect{0, 0, screen->width, screen->height});
+    r.beginFrame(Rect{0, 0, logicalW, logicalH});
     for (const auto& w : screen->widgets) {
         if (!w) continue;
         // Containers (Column/Row/ScrollView) position their children first.
-        w->resolveGeometry(screen->width, screen->height);
-        w->layout(screen->width, screen->height);
+        w->resolveGeometry(logicalW, logicalH);
+        w->layout(logicalW, logicalH);
         drawTree(r, w.get(), 0.0f, 0.0f);
     }
 
@@ -613,13 +658,17 @@ const DrawList& Kernel::buildDrawList() {
         const std::string& tip = m_tipTarget->tooltip();
         const Font* f = r.resolveFont("sans", kTipFontSize);
         const float tw = f ? r.textWidth(tip.c_str(), *f) : 0.0f;
-        const float lh = std::max(textLineHeight(kTipFontSize, "sans"), 1.0f);
+        const float lineH = std::max(textLineHeight(kTipFontSize, "sans"), 1.0f);
         const float bw = tw + kPad * 2.0f;
-        const float bh = lh + kPad * 2.0f;
-        float tx = m_input.mouseX + 14.0f;
-        float ty = m_input.mouseY + 18.0f;
-        if (tx + bw > screen->width) tx = m_input.mouseX - bw - 6.0f;
-        if (ty + bh > screen->height) ty = m_input.mouseY - bh - 6.0f;
+        const float bh = lineH + kPad * 2.0f;
+        // Pointer and canvas are both logical here; the rasterizer scales the
+        // box into device pixels when it emits it.
+        const float mx = m_input.mouseX / sc;
+        const float my = m_input.mouseY / sc;
+        float tx = mx + 14.0f;
+        float ty = my + 18.0f;
+        if (tx + bw > logicalW) tx = mx - bw - 6.0f;
+        if (ty + bh > logicalH) ty = my - bh - 6.0f;
         if (tx < 0.0f) tx = 0.0f;
         if (ty < 0.0f) ty = 0.0f;
         const Rect box{tx, ty, bw, bh};
@@ -641,7 +690,7 @@ const DrawList& Kernel::buildDrawList() {
     // Toast banners: bottom-right stack, fading out over the last 0.5 s.
     {
         constexpr float kPad = 8.0f;
-        float y = screen->height - 8.0f;
+        float y = logicalH - 8.0f;
         for (size_t i = m_toasts.size(); i-- > 0;) {
             const ToastItem& t = m_toasts[i];
             const float fade = t.age > 3.0f ? (3.5f - t.age) * 2.0f : 1.0f;
@@ -652,7 +701,7 @@ const DrawList& Kernel::buildDrawList() {
             const float tw = f ? r.textWidth(t.text.c_str(), *f) : 120.0f;
             const float bw = tw + kPad * 2.0f + 4.0f;
             const float bh = 28.0f;
-            const Rect box{screen->width - bw - 8.0f, y - bh, bw, bh};
+            const Rect box{logicalW - bw - 8.0f, y - bh, bw, bh};
             auto tint = [&](const Color& base) {
                 Color c = base;
                 c.a = static_cast<uint8_t>(static_cast<float>(c.a) * a);
@@ -680,6 +729,7 @@ const DrawList& Kernel::buildDrawList() {
     m_dirty = false;
     m_builtW = screen->width;
     m_builtH = screen->height;
+    m_builtScale = sc;
     return m_drawList;
 }
 

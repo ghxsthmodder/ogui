@@ -91,8 +91,11 @@ public:
                           Align halign = Align::Left);
 
     const Rect& clip() const { return m_clip; }
+    // Device pixels per logical unit. Everything the widgets draw is in
+    // logical units; this is the ONE place those units become device pixels,
+    // so no caller has to scale anything itself.
     float scale() const { return m_scale; }
-    void setScale(float s) { m_scale = s; }
+    void setScale(float s) { m_scale = s > 0.0f ? s : 1.0f; }
 
     // Style knobs used by the primitives.
     int curveSegments = 12;            // corner segments for rounded rects
@@ -101,6 +104,10 @@ private:
     Rect currentClip(const Rect& r) const;
     void addQuad(const Vertex& v0, const Vertex& v1, const Vertex& v2,
                  const Vertex& v3, const Rect& clip, int texId);
+    // Same conversion for the raw triangle dumps (corner fans, borders).
+    // `v` is scratch the caller is done with, so it is scaled in place.
+    void emitTriangles(Vertex* v, size_t count, const uint32_t* idx,
+                       size_t idxCount, const Rect& clip, int texId);
     void fillRoundedRect(const Rect& r, float radius, const Color& col,
                          const Rect& clip);
     void strokeRoundedRect(const Rect& r, float outerRadius, float thickness,

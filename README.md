@@ -133,6 +133,8 @@ if (!backend.init(/*getProc=*/nullptr)) { /* backend.lastError() */ }
 ogui::InputState in;              // fill from your window proc
 in.mouseX = ...; in.mouseY = ...;  in.mouseDown[0] = ...;
 in.keyDown[...] = ...; in.lastChar = ...;  in.time = ...;  // seconds
+                                   // mouse coords are device pixels; the
+                                   // kernel divides by screen->scale
 kernel.frame(in);                 // events -> layout -> DrawList
 backend.render(kernel.drawList(), fbWidth, fbHeight, /*flipY=*/false);
 // swap your buffers
@@ -257,7 +259,7 @@ Conventional names that are not abbreviations stay as-is: `x`, `y`, `id`,
 | `id` | lookup key for `Kernel::findWidget/setText/getText` and `bind()` |
 | `onClick` / `bind` | binding name resolved on click against `Kernel::bind` |
 | `tooltip` | text shown by the hover tooltip after ~0.5 s |
-| `x` `y` `width` `height` | bounds, **relative to the parent**; each accepts pixels (`20`), percent (`"50%"`) or — for `width`/`height` — `"fill"` (see below) |
+| `x` `y` `width` `height` | bounds, **relative to the parent**, in logical units (see [DPI](#dpi-scale-and-logical-units)); each accepts a plain number (`20`), percent (`"50%"`) or — for `width`/`height` — `"fill"` (see below) |
 | `anchor` | pin edges across parent resizes: `anchor="right"`, `"l,r"`, `"top,bottom"` etc. (`left/right/top/bottom`, short forms `l/r/t/b`, space/comma-separated) |
 | `minWidth` `minHeight` `maxWidth` `maxHeight` | pixel clamp on the resolved size, applied on every layout pass whatever unit `width`/`height` used (`"50%"` + `maxWidth="500"` grows up to 500 px; `"10%"` + `minWidth="200"` never shrinks below) |
 | `weight` | flex share inside a `column` (leftover height) or `row` (leftover width), proportionally to the other weighted children; 0 keeps the authored size |
@@ -467,8 +469,10 @@ out by `ImageManager::load()` — or a texture id the host created with
 
 `Kernel::frame()` recomputes hover, delivers press/release with capture
 (dragging keeps working outside the widget), routes characters to the focus
-widget and key edges with `Mod_Shift/Ctrl/Alt/Super`. Pointer events arrive
-in screen coordinates; `Widget::absoluteOrigin()` converts bounds.
+widget and key edges with `Mod_Shift/Ctrl/Alt/Super`. The host fills
+`mouseX/mouseY` with **device pixels** (what the OS reports); the kernel
+divides by the screen scale before anything reaches a widget, so widgets only
+ever see logical units. `Widget::absoluteOrigin()` converts bounds.
 
 `Tab`/`Shift+Tab` walk the focusable widgets of the current screen in
 document order and wrap; `Kernel::focusNext(backwards)` exposes the same
@@ -477,6 +481,38 @@ movement and `Kernel::setFocusWidget()` / `Widget::isFocusable()` /
 set with `focusable` and `accessible`. `Enter`/`Space` activate a focused
 `button` through `Kernel::clickWidget()` — the same path a mouse release
 takes — while a `keybind` mid-capture keeps the keys for itself.
+
+## DPI, scale and logical units
+
+Every number a widget sees is in **logical units**: XML attributes,
+`bounds()`, the pointer coordinates delivered to `onPointer*`, font sizes,
+`Font::measure()` and the caret hit-testing built on it. `Screen::width` and
+`Screen::height` stay **device pixels** — that is the host's truth, the
+framebuffer it hands to `GlBackend::render()` — and `Screen::scale` says how
+many device pixels one logical unit covers:
+
+```cpp
+screen->width  = 1600.0f;   // device px
+screen->height = 900.0f;
+screen->scale  = 2.0f;      // -> an 800x450 logical canvas
+```
+
+The logical→device multiply happens exactly once, where the `Rasterizer`
+emits vertices and clip rects. Nothing else scales, so a value can never be
+scaled twice, and a layout authored for 800x600 renders identically at scale
+1. `Kernel` drives both sides per frame and exposes the result: `scale()`,
+`setScale()`, `logicalWidth()`, `logicalHeight()`.
+
+Text follows the same rule from the other end: `FontManager::setScale()`
+bakes each atlas at `size * scale` device pixels while the `Font` accessors
+keep reporting logical units, so glyphs stay crisp at any dpi and the numbers
+used to hit-test a caret are the ones the widget drew with. Changing the
+scale re-bakes the font cache.
+
+A `scale` of 0, negative or NaN degrades to 1, so a host that never sets it
+behaves exactly as before. `ogui::Host` (Win32) reads the window dpi every
+frame and writes it into `Screen::scale`; a custom host does the same with
+whatever its toolkit calls the content scale factor.
 
 ## Clipboard
 
@@ -535,8 +571,10 @@ thirdparty/lua    vendored Lua 5.4 interpreter sources (scripting)
   not shrink or wrap overflowing rows.
 * No complex text shaping (no HarfBuzz): Latin scripts and single-code-point
   advance only; combining marks are not positioned.
-* One screen size per `Screen`; window resizing is the host's job
-  (`screen->width/height`).
+* One screen size per `Screen`; window resizing and dpi reporting are the
+  host's job (`screen->width/height/scale`). `ogui::Host` does both on Win32,
+  and there is no per-monitor *on the fly* re-layout guarantee beyond the
+  per-frame size poll.
 * Accessibility is in-process only: tab order and `accessible`/`aria-label`
   names are readable through the API, but there is no platform bridge
   (no UIA/ATK/NSAccessibility), so screen readers cannot see the tree. The

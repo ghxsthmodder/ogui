@@ -724,7 +724,13 @@ configuração, ferramentas e aplicações com dados extensos.
     visuais `focus:`, Enter/Espaço ativando botão pelo mesmo caminho do
     clique, `ogui.focus("next"/"prev"/id)`. Limitação de plataforma
     (sem UIA/ATK) documentada no README.
--   [ ] DPI e unidades lógicas.
+-   [x] DPI e unidades lógicas: tudo o que o widget vê (XML, `bounds()`,
+    ponteiro, fontes) é unidade lógica; `Screen::width/height` ficam em pixels
+    de dispositivo e `Screen::scale` converte. A multiplicação acontece uma
+    única vez na emissão do `Rasterizer`, e `FontManager::setScale()` grava o
+    atlas em `size * scale` mantendo métricas lógicas. `Kernel::scale()`,
+    `setScale()`, `logicalWidth()`, `logicalHeight()`, `Host` lendo o dpi da
+    janela, testes em 1×/1.5×/2× e `ogui_screenshot --scale`.
 -   [ ] Unicode, shaping e fallback de fontes.
 -   [ ] Markdown/RichText/Canvas e GraphEditor conforme a necessidade.
 -   [ ] Documentação completa, exemplos e benchmarks.

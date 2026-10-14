@@ -103,6 +103,14 @@ Tag-level `<style>` definitions may use tokens too.
 | percent | `width="50%"` | fraction of the **parent's content size** |
 | fill | `width="fill"` | the whole parent content size |
 
+"Pixels" here means **logical units**: one unit is `Screen::scale` device
+pixels, so the same file comes out physically bigger on a HiDPI display
+without reflowing. Percent and `fill` resolve against the parent's *logical*
+content size, and every other number in a layout (`radius`, `padding`,
+`borderWidth`, `fontSize`, ...) is in the same units. There is no `scale`
+attribute — dpi is a property of the monitor the window sits on, so the host
+sets `screen->scale` (see [DPI and scaling](#dpi-and-scaling)).
+
 Percent and `fill` components are re-resolved on **every layout pass**, so
 resizing the window reflows the tree. Mixed px+% rows only stay coherent
 above roughly 520 px of height; the demo gallery therefore clamps each screen
@@ -119,6 +127,27 @@ resolved size on every layout pass, whatever unit `x/y/width/height` used —
 e.g. `width="50%" maxwidth="500"` grows with the parent up to 500 px, and
 `width="10%" minwidth="200"` never shrinks below it. Authored absolute sizes
 are clamped at parse time too.
+
+## DPI and scaling
+
+A `Screen` carries two sizes that answer to different masters:
+
+| Field | Unit | Who owns it |
+|---|---|---|
+| `width` / `height` | device pixels | the host (window / framebuffer size) |
+| `scale` | device pixels per logical unit | the host, from the display dpi (1.0 = 96 dpi) |
+
+The canvas the tree is laid out in is `width / scale`. No widget and no layout
+pass multiplies by the scale — the single conversion lives where the
+rasterizer emits vertices and clip rects, and font atlases are baked at
+`fontSize * scale` while `Font::measure()` and the rest keep reporting logical
+units. Drawing, hit-testing, text metrics and input therefore all agree, and
+applying the scale twice is impossible by construction.
+
+From C++ the derived numbers are `Kernel::scale()`, `Kernel::setScale(s)`,
+`Kernel::logicalWidth()` and `Kernel::logicalHeight()`. `ogui::Host` reads the
+window dpi every frame and writes `Screen::scale`; a custom host does the same
+from its toolkit's content scale factor. A `scale` of 0 or less degrades to 1.
 
 ## Common attributes (all widgets)
 

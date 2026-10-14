@@ -56,8 +56,13 @@ int main() {
     }
 
     // ---- window (library-owned) ------------------------------------------
+    // The window is sized in device pixels so the 800x600 logical layout the
+    // gallery was parsed for keeps its physical size on a HiDPI display;
+    // run() feeds Screen::scale from the same dpi.
+    const float ui = ogui::Host::systemDpiScale();
     ogui::Host host({.title = "ogui - GUI para OpenGL via XML",
-                     .width = 800, .height = 600});
+                     .width = static_cast<int>(W * ui),
+                     .height = static_cast<int>(H * ui)});
     const ogui::Color win = ogui::palette().window;
     host.setClearColor(win.r / 255.0f, win.g / 255.0f, win.b / 255.0f);
 

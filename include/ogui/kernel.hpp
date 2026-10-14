@@ -98,6 +98,19 @@ public:
         return m_screenStack.empty() ? nullptr : m_screenStack.back();
     }
 
+    // ---- dpi / scale ----
+    // `Screen::scale` is device pixels per logical unit. Everything a screen
+    // authors (x/y/w/h, padding, font sizes), every widget bound, every
+    // pointer position delivered to a widget and every text measurement lives
+    // in those logical units; the draw list handed to the backends is in
+    // device pixels. `Screen::width/height` keep the device size the host got
+    // from the window, so logicalWidth()/logicalHeight() is the canvas the
+    // tree actually lays out on. A non-positive scale is treated as 1.
+    float scale() const;
+    void setScale(float s);
+    float logicalWidth() const;
+    float logicalHeight() const;
+
     // ---- theme ----
     void setTheme(const Theme* theme);
     const Theme* theme() const { return m_theme; }
@@ -210,9 +223,12 @@ public:
         if (m_pressed == w) m_pressed = nullptr;
         if (m_clickTarget == w) m_clickTarget = nullptr;
     }
-    // Last pointer position in screen coordinates (for per-region hover
-    // effects inside one widget, e.g. SpinBox buttons).
-    Offset2D mousePos() const { return {m_input.mouseX, m_input.mouseY}; }
+    // Last pointer position in logical screen coordinates (for per-region
+    // hover effects inside one widget, e.g. SpinBox buttons).
+    Offset2D mousePos() const {
+        const float sc = scale();
+        return {m_input.mouseX / sc, m_input.mouseY / sc};
+    }
 
     // ---- pointer context (read inside onPointerDown) ----
     // Presses at the same spot within the double-click window count up:
@@ -285,6 +301,7 @@ private:
     bool m_dirty = true;
     InputState m_prevInput{};
     float m_builtW = -1.0f, m_builtH = -1.0f;   // screen size at last build
+    float m_builtScale = -1.0f;                 // dpi scale at last build
 
     // popup layer
     std::shared_ptr<Widget> m_popup;

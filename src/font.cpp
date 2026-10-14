@@ -80,7 +80,8 @@ namespace {
 // ---- Font (movement) ------------------------------------------------------
 Font::Font(Font&& other) noexcept
     : m_path(std::move(other.m_path)),
-      m_pixelHeight(other.m_pixelHeight),
+      m_logicalHeight(other.m_logicalHeight),
+      m_pxPerUnit(other.m_pxPerUnit),
       m_ascent(other.m_ascent),
       m_descent(other.m_descent),
       m_atlasTex(other.m_atlasTex),
@@ -90,7 +91,7 @@ Font::Font(Font&& other) noexcept
       m_w(other.m_w), m_h(other.m_h),
       m_rowBytes(other.m_rowBytes),
       m_buffer(std::move(other.m_buffer)) {
-    other.m_pixelHeight = 0;
+    other.m_logicalHeight = 0;
     other.m_w = 0; other.m_h = 0;
     other.m_rowBytes = 0;
     other.m_atlasTex = 0;
@@ -99,7 +100,8 @@ Font::Font(Font&& other) noexcept
 Font& Font::operator=(Font&& other) noexcept {
     if (this != &other) {
         m_path = std::move(other.m_path);
-        m_pixelHeight = other.m_pixelHeight;
+        m_logicalHeight = other.m_logicalHeight;
+        m_pxPerUnit = other.m_pxPerUnit;
         m_ascent = other.m_ascent;
         m_descent = other.m_descent;
         m_atlasTex = other.m_atlasTex;
@@ -109,7 +111,7 @@ Font& Font::operator=(Font&& other) noexcept {
         m_w = other.m_w; m_h = other.m_h;
         m_rowBytes = other.m_rowBytes;
         m_buffer = std::move(other.m_buffer);
-        other.m_pixelHeight = 0;
+        other.m_logicalHeight = 0;
         other.m_w = 0; other.m_h = 0;
         other.m_rowBytes = 0;
         other.m_atlasTex = 0;
@@ -120,7 +122,13 @@ Font& Font::operator=(Font&& other) noexcept {
 Font::~Font() = default;
 
 // ---- loading --------------------------------------------------------------
-bool Font::load(const std::string& path, int pixelHeight, int /*dpi*/) {
+bool Font::load(const std::string& path, int logicalHeight, int /*dpi*/,
+                float pxPerUnit) {
+    if (pxPerUnit <= 0.0f) pxPerUnit = 1.0f;
+    // The atlas is baked at device resolution; every metric handed back out
+    // is divided by that factor again, so widgets only ever see logical units.
+    const int bakeHeight =
+        std::max(1, static_cast<int>(std::lround(logicalHeight * pxPerUnit)));
     m_pixels.clear();
     m_glyphs.clear();
     m_w = 0; m_h = 0; m_rowBytes = 0;
@@ -143,9 +151,10 @@ bool Font::load(const std::string& path, int pixelHeight, int /*dpi*/) {
     if (!stbtt_InitFont(&fi, m_buffer.data(), 0)) return false;
 
     m_path = path;
-    m_pixelHeight = pixelHeight;
+    m_logicalHeight = logicalHeight;
+    m_pxPerUnit = pxPerUnit;
 
-    float scale = stbtt_ScaleForPixelHeight(&fi, pixelHeight);
+    float scale = stbtt_ScaleForPixelHeight(&fi, bakeHeight);
     int asc = 0, desc = 0, gap = 0;
     stbtt_GetFontVMetrics(&fi, &asc, &desc, &gap);
     m_ascent = static_cast<int>(std::lround(asc * scale));
@@ -264,7 +273,8 @@ bool Font::unload() {
     m_w = 0; m_h = 0; m_rowBytes = 0;
     m_atlasTex = 0;
     m_buffer.clear();
-    m_pixelHeight = 0;
+    m_logicalHeight = 0;
+    m_pxPerUnit = 1.0f;
     return true;
 }
 
@@ -290,10 +300,11 @@ Rect Font::glyphUV(uint32_t ch) const {
     };
 }
 
-int Font::kern(uint32_t prev, uint32_t cur) const {
-    if (m_kern.empty() || prev > 126 || cur > 126) return 0;
+float Font::kern(uint32_t prev, uint32_t cur) const {
+    if (m_kern.empty() || prev > 126 || cur > 126) return 0.0f;
     auto it = m_kern.find(prev * 128u + cur);
-    return it == m_kern.end() ? 0 : static_cast<int>(it->second);
+    if (it == m_kern.end()) return 0.0f;
+    return static_cast<float>(it->second) / pxPerUnit();
 }
 
 float Font::measure(const char* text) const {
@@ -310,25 +321,27 @@ float Font::measureRange(const char* text, size_t bytes) const {
     while (p < end) {
         uint32_t ch = utf8Next(p);
         if (p > end) break;   // code point cut in half by the range
-        if (prev) w += static_cast<float>(kern(prev, ch));
+        if (prev) w += kern(prev, ch);
         w += static_cast<float>(glyph(ch).advanceX);
         prev = ch;
     }
-    return w;
+    return w / pxPerUnit();
 }
 
 size_t Font::indexFromX(const char* text, float x) const {
     if (!text || x <= 0.0f) return 0;
     const unsigned char* p = reinterpret_cast<const unsigned char*>(text);
     const unsigned char* base = p;
+    // Advances live in atlas pixels; the click offset arrives in logical ones.
+    const float target = x * pxPerUnit();
     float acc = 0.0f;
     uint32_t prev = 0;
     while (*p) {
         size_t idx = static_cast<size_t>(p - base);
         uint32_t ch = utf8Next(p);
-        if (prev) acc += static_cast<float>(kern(prev, ch));
+        if (prev) acc += kern(prev, ch) * pxPerUnit();
         const float adv = static_cast<float>(glyph(ch).advanceX);
-        if (x < acc + adv * 0.5f) return idx;   // closer to this boundary
+        if (target < acc + adv * 0.5f) return idx;   // closer to this boundary
         acc += adv;
         prev = ch;
     }
@@ -402,11 +415,19 @@ const Font* FontManager::get(const std::string& family, int size) {
     if (path.empty()) return nullptr;
 
     auto font = std::make_unique<Font>();
-    if (!font->load(path, size)) return nullptr;
+    if (!font->load(path, size, 96, m_scale)) return nullptr;
 
     Font* raw = font.get();
     m_cache[key] = std::move(font);
     return raw;
+}
+
+void FontManager::setScale(float s) {
+    if (s <= 0.0f) s = 1.0f;
+    if (s == m_scale) return;
+    // Every cached atlas was baked for the old factor, so nothing survives.
+    m_scale = s;
+    m_cache.clear();
 }
 
 } // namespace ogui

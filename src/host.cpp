@@ -136,6 +136,24 @@ std::wstring toWide(const std::string& s) {
     return std::wstring(tmp.data());
 }
 
+// Device pixels per logical unit (96 dpi == 1.0). GetDpiForWindow is Win10
+// 1607+, so it is looked up instead of linked; without a window -- or on an
+// older system -- the DC reports the system dpi.
+float dpiScaleFor(HWND hwnd) {
+    using GetDpiFn = UINT(WINAPI*)(HWND);
+    static auto getDpiForWindow = reinterpret_cast<GetDpiFn>(
+        GetProcAddress(GetModuleHandleA("user32.dll"), "GetDpiForWindow"));
+    UINT dpi = (getDpiForWindow && hwnd) ? getDpiForWindow(hwnd) : 0;
+    if (!dpi) {
+        if (HDC dc = GetDC(hwnd)) {
+            dpi = static_cast<UINT>(GetDeviceCaps(dc, LOGPIXELSX));
+            ReleaseDC(hwnd, dc);
+        }
+    }
+    if (!dpi) dpi = 96;
+    return static_cast<float>(dpi) / 96.0f;
+}
+
 LRESULT CALLBACK wndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     Host::Native* self = g_windowProcSelf;
     if (!self) return DefWindowProc(hwnd, msg, wp, lp);
@@ -420,6 +438,10 @@ void Host::close() {
     m_native = nullptr;
 }
 
+float Host::systemDpiScale() { return dpiScaleFor(nullptr); }
+
+float Host::dpiScale() const { return dpiScaleFor(m_native ? m_native->hwnd : nullptr); }
+
 void Host::setClearColor(float r, float g, float b) {
     m_clearR = r; m_clearG = g; m_clearB = b;
 }
@@ -511,10 +533,13 @@ void Host::run(Kernel& kernel) {
                 const int cw = rc.right - rc.left;
                 const int ch = rc.bottom - rc.top;
                 if (auto screen = kernel.currentScreen()) {
+                    const float sc = dpiScaleFor(n.hwnd);
                     if (screen->width != static_cast<float>(cw) ||
-                        screen->height != static_cast<float>(ch)) {
+                        screen->height != static_cast<float>(ch) ||
+                        screen->scale != sc) {
                         screen->width = static_cast<float>(cw);
                         screen->height = static_cast<float>(ch);
+                        screen->scale = sc;
                     }
                 }
                 if (n.glViewport) n.glViewport(0, 0, cw, ch);
@@ -588,6 +613,10 @@ bool Host::open() {
               "use Kernel + GlBackend with your own host instead.";
     return false;
 }
+
+float Host::systemDpiScale() { return 1.0f; }
+
+float Host::dpiScale() const { return 1.0f; }
 
 void Host::close() {
     delete m_native;

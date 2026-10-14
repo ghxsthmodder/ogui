@@ -66,7 +66,38 @@ Rect Rasterizer::currentClip(const Rect& r) const {
 void Rasterizer::addQuad(const Vertex& v0, const Vertex& v1, const Vertex& v2,
                          const Vertex& v3, const Rect& clip, int texId) {
     if (clip.w <= 0.0f || clip.h <= 0.0f) return;
-    m_list.addQuad(v0, v1, v2, v3, clip, texId);
+    // The single logical -> device conversion of the whole library: widgets
+    // and the clip stack stay in logical units, the draw list is in device
+    // pixels, so no caller ever multiplies by the scale itself.
+    const float s = m_scale;
+    if (s == 1.0f) {
+        m_list.addQuad(v0, v1, v2, v3, clip, texId);
+        return;
+    }
+    auto sc = [s](const Vertex& v) {
+        Vertex o = v;
+        o.x *= s;
+        o.y *= s;
+        return o;
+    };
+    m_list.addQuad(sc(v0), sc(v1), sc(v2), sc(v3),
+                   Rect{clip.x * s, clip.y * s, clip.w * s, clip.h * s}, texId);
+}
+
+void Rasterizer::emitTriangles(Vertex* v, size_t count, const uint32_t* idx,
+                               size_t idxCount, const Rect& clip, int texId) {
+    if (clip.w <= 0.0f || clip.h <= 0.0f) return;
+    const float s = m_scale;
+    // The tessellation buffers are scratch that dies with this call, so the
+    // logical -> device conversion happens in place.
+    if (s != 1.0f) {
+        for (size_t i = 0; i < count; ++i) { v[i].x *= s; v[i].y *= s; }
+        m_list.addTriangles(v, count, idx, idxCount,
+                            Rect{clip.x * s, clip.y * s, clip.w * s, clip.h * s},
+                            texId);
+        return;
+    }
+    m_list.addTriangles(v, count, idx, idxCount, clip, texId);
 }
 
 void Rasterizer::drawRect(const Rect& r, const Color& col) {
@@ -172,7 +203,7 @@ void Rasterizer::drawRoundedGradient(const Rect& r, const Color& top,
     quad(x1 - rad, y0 + rad, x1, y0 + rad,   x1, y1 - rad,       x1 - rad, y1 - rad);
     quad(x0 + rad, y0 + rad, x1 - rad, y0 + rad, x1 - rad, y1 - rad, x0 + rad, y1 - rad);
 
-    m_list.addTriangles(fan.data(), fan.size(), idx.data(), idx.size(),
+    emitTriangles(fan.data(), fan.size(), idx.data(), idx.size(),
                         clip, m_texId);
 }
 
@@ -275,7 +306,7 @@ void Rasterizer::fillRoundedRect(const Rect& r, float radius, const Color& col,
             mk(x1 - rad, y1 - rad, 0, 0, col), mk(x0 + rad, y1 - rad, 0, 0, col),
             clip, m_texId);
 
-    m_list.addTriangles(fan.data(), fan.size(), idx.data(), idx.size(),
+    emitTriangles(fan.data(), fan.size(), idx.data(), idx.size(),
                         clip, m_texId);
 }
 
@@ -340,7 +371,7 @@ void Rasterizer::strokeRoundedRect(const Rect& r, float outerRadius,
     emitCorner(x0 + ro, y1 - ro, PI * 0.5f, PI);
     emitCorner(x0 + ro, y0 + ro, PI, PI * 1.5f);
 
-    m_list.addTriangles(verts.data(), verts.size(), idx.data(), idx.size(),
+    emitTriangles(verts.data(), verts.size(), idx.data(), idx.size(),
                         clip, m_texId);
 }
 
@@ -395,7 +426,7 @@ void Rasterizer::drawTriangle(const Offset2D& a, const Offset2D& b,
         mk(c.x, c.y, 0, 0, col),
     };
     uint32_t idx[3] = {0, 1, 2};
-    m_list.addTriangles(v, 3, idx, 3, clip, m_texId);
+    emitTriangles(v, 3, idx, 3, clip, m_texId);
 }
 
 // ---- text -----------------------------------------------------------------
@@ -421,17 +452,21 @@ bool Rasterizer::drawTextShifted(const char* text, float x, float y, int /*size*
     if (!font.loaded() || !text || !*text) return false;
     if (!font.atlas()) return false;
 
+    // Glyph boxes live in atlas pixels (the bake resolution); the pen and the
+    // destination rect are logical units like everything else on this side.
+    const float k = 1.0f / font.pxPerUnit();
+
     float totalW = font.measure(text);
-    float lineH = static_cast<float>(font.ascent() + font.descent());
+    float lineH = font.ascent() + font.descent();
 
     float drawX = x;
     if (halign == Align::Center) drawX = x - totalW * 0.5f;
     else if (halign == Align::Right) drawX = x - totalW;
 
     float baseline = y;
-    if (valign == VertAlign::Middle) baseline = y - lineH * 0.5f + static_cast<float>(font.ascent());
-    else if (valign == VertAlign::Bottom) baseline = y - lineH + static_cast<float>(font.ascent());
-    else baseline = y + static_cast<float>(font.ascent());
+    if (valign == VertAlign::Middle) baseline = y - lineH * 0.5f + font.ascent();
+    else if (valign == VertAlign::Bottom) baseline = y - lineH + font.ascent();
+    else baseline = y + font.ascent();
 
     const int texId = font.atlasTexture();
     float penX = drawX;
@@ -441,22 +476,22 @@ bool Rasterizer::drawTextShifted(const char* text, float x, float y, int /*size*
     while (*p) {
         uint32_t ch = utf8Next(p);
         const GlyphInfo& gi = font.glyph(ch);
-        if (prev) penX += static_cast<float>(font.kern(prev, ch));
+        if (prev) penX += font.kern(prev, ch);
 
         if (gi.width > 0 && gi.height > 0) {
             Rect uv = font.glyphUV(ch);
             Rect dst{
-                penX + static_cast<float>(gi.xoff),
-                baseline + static_cast<float>(gi.yoff),
-                static_cast<float>(gi.width),
-                static_cast<float>(gi.height),
+                penX + static_cast<float>(gi.xoff) * k,
+                baseline + static_cast<float>(gi.yoff) * k,
+                static_cast<float>(gi.width) * k,
+                static_cast<float>(gi.height) * k,
             };
             Rect clip = currentClip(dst);
             if (clip.w > 0.0f && clip.h > 0.0f && texId != 0) {
                 drawRectUV(dst, uv, col, texId);
             }
         }
-        penX += static_cast<float>(gi.advanceX);
+        penX += static_cast<float>(gi.advanceX) * k;
         prev = ch;
     }
     return true;

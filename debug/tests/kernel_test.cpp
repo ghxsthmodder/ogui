@@ -3172,6 +3172,84 @@ static void testRowWrap() {
     CHECK(rw->bounds().h == 54.0f);   // 30 + gap 4 + 20 (trailing gap dropped)
 }
 
+static void testDpiScale() {
+    Kernel k;
+    k.init();
+    XmlParser p;
+    auto res = p.parse(R"XML(<screen id="s">
+  <button id="b" x="10" y="10" width="100" height="24" text="Ok"/>
+  <label id="half" x="0" y="300" width="50%" height="20" text="h"/>
+  <panel id="full" x="0" y="0" width="fill" height="10" background="#111"/>
+</screen>)XML");
+    CHECK(res.root != nullptr);
+    if (!res.root) return;
+    auto s = std::make_shared<Screen>("s");
+    s->widgets.push_back(res.root);
+    s->width = 1600;      // device pixels, what the host knows
+    s->height = 900;
+    s->scale = 2.0f;      // -> an 800x450 logical canvas
+    k.pushScreen(s);
+    CHECK(k.scale() == 2.0f);
+    CHECK(k.logicalWidth() == 800.0f);
+    CHECK(k.logicalHeight() == 450.0f);
+
+    InputState st = makeInput();
+    idle(k, st);
+    auto* b = k.findWidget("b");
+    auto* half = k.findWidget("half");
+    auto* full = k.findWidget("full");
+    CHECK(b && half && full);
+    if (!b || !half || !full) return;
+
+    // Layout happens in logical units: authored px stay px, percentages
+    // resolve against the logical canvas.
+    CHECK(b->bounds().x == 10.0f && b->bounds().w == 100.0f);
+    CHECK(half->bounds().w == 400.0f);
+    CHECK(full->bounds().w == 800.0f);
+
+    // The pointer arrives in device pixels and is divided once, so a press at
+    // device (40,40) lands on the logical (20,20) inside the button.
+    pressAt(k, st, 40.0f, 40.0f);
+    CHECK(k.hoveredWidget() == b);
+    CHECK(k.focusedWidget() == b);
+    releaseAt(k, st);
+    CHECK(k.mousePos().x == 20.0f && k.mousePos().y == 20.0f);
+    pressAt(k, st, 300.0f, 300.0f);    // logical (150,150): outside
+    CHECK(k.hoveredWidget() != b);
+    releaseAt(k, st);
+
+    // The draw list leaves in device pixels: nothing is drawn beyond the
+    // logical canvas times the scale.
+    idle(k, st);
+    float maxX = 0.0f, maxY = 0.0f;
+    for (const auto& v : k.drawList().vertices) {
+        maxX = std::max(maxX, v.x);
+        maxY = std::max(maxY, v.y);
+    }
+    CHECK(maxX <= 1600.0f + 0.01f);
+    CHECK(maxY <= 900.0f + 0.01f);
+    CHECK(maxX > 800.0f);   // the fill panel spans the whole device width
+    CHECK(FontManager::instance().scale() == 2.0f);
+
+    // A scale change re-lays out and re-flags the frame as dirty.
+    k.setScale(1.0f);
+    idle(k, st);
+    CHECK(k.scale() == 1.0f);
+    CHECK(half->bounds().w == 800.0f);   // 50% of the device-width canvas
+    CHECK(b->bounds().w == 100.0f);
+    CHECK(FontManager::instance().scale() == 1.0f);
+    pressAt(k, st, 20.0f, 20.0f);        // now logical == device
+    CHECK(k.hoveredWidget() == b);
+    releaseAt(k, st);
+
+    // A bogus scale value degrades to 1 instead of dividing by zero.
+    s->scale = 0.0f;
+    k.invalidate();
+    idle(k, st);
+    CHECK(k.scale() == 1.0f);
+    CHECK(k.logicalWidth() == 1600.0f);
+}
+
 static void testKeyboardNavigation() {
     Kernel k;
     k.init();
@@ -3534,6 +3612,7 @@ int main() {
     testOnDemandWidgets();
     testCommandPalette();
     testKeyboardNavigation();
+    testDpiScale();
     testHost();
 
     if (g_failures) {

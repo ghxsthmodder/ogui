@@ -1,8 +1,10 @@
 // ogui_drawlist_test.cpp : validates the Rasterizer -> DrawList pipeline.
-// Covers geometry emission, clipping, batch merging and font atlas text.
+// Covers geometry emission, clipping, batch merging, dpi scaling and font
+// atlas text.
 #include "ogui/rasterizer.hpp"
 #include "ogui/font.hpp"
 #include "ogui/xmlparser.hpp"
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <iostream>
@@ -278,6 +280,93 @@ static void testLayoutDraw() {
     }
 }
 
+static void testScaleEmission() {
+    // Widgets author in logical units; the draw list the backends consume is
+    // in device pixels. One multiply, applied to every emit path.
+    Rasterizer r;
+    r.setScale(2.0f);
+    CHECK(r.scale() == 2.0f);
+    r.reset();
+    r.beginFrame(Rect{0, 0, 100, 50});
+
+    r.drawRect({10, 10, 20, 10}, Color{1, 2, 3, 255});
+    const auto& list = r.drawList();
+    CHECK(list.vertices.size() == 4);
+    CHECK(list.vertices[0].x == 20.0f && list.vertices[0].y == 20.0f);
+    CHECK(list.vertices[2].x == 60.0f && list.vertices[2].y == 40.0f);
+    CHECK(list.cmds[0].clip.x == 0.0f && list.cmds[0].clip.w == 200.0f);
+    CHECK(list.cmds[0].clip.h == 100.0f);
+
+    // Corner fans and borders go through the triangle path; their device
+    // extents must match the same rect * 2.
+    r.reset();
+    r.beginFrame(Rect{0, 0, 100, 50});
+    r.drawRoundedRect({0, 0, 10, 10}, Color{1, 1, 1, 255}, 4);
+    r.drawRectBorder({0, 0, 20, 10}, Color{1, 1, 1, 255}, 1, 0);
+    float maxX = 0.0f, maxY = 0.0f;
+    for (const auto& v : r.drawList().vertices) {
+        maxX = std::max(maxX, v.x);
+        maxY = std::max(maxY, v.y);
+    }
+    CHECK(maxX == 40.0f);      // 20 logical * 2
+    CHECK(maxY == 20.0f);      // 10 logical * 2
+    r.endFrame();
+
+    // A zero/negative scale falls back to 1 instead of collapsing the frame.
+    r.setScale(0.0f);
+    CHECK(r.scale() == 1.0f);
+
+    // Text: the pen advances in logical units, so the two glyph quads of
+    // "a a" keep the same distance whether or not the frame is scaled.
+    const Font* f = FontManager::instance().get("sans", 16);
+    if (!f) return;
+    const float adv = f->measure("a ") ;
+    r.setScale(2.0f);
+    r.reset();
+    r.beginFrame(Rect{0, 0, 400, 200});
+    CHECK(r.drawText("a a", 10.0f, 20.0f, 16, "sans", Color{255, 255, 255, 255}));
+    const auto& tv = r.drawList().vertices;
+    CHECK(tv.size() >= 8);
+    // First glyph box starts at logical 10 -> device 20 (plus the side bearing,
+    // which the atlas carries in device pixels of its own bake).
+    CHECK(tv[0].x >= 20.0f - 2.0f && tv[0].x <= 20.0f + 8.0f);
+    const float gap = tv[4].x - tv[0].x;
+    CHECK(std::fabs(gap - adv * 2.0f) < 4.0f);   // one advance, in device px
+    r.endFrame();
+    r.setScale(1.0f);
+    FontManager::instance().setScale(1.0f);
+}
+
+static void testScaledFontMetrics() {
+    FontManager& fm = FontManager::instance();
+    fm.setScale(1.0f);
+    const Font* one = fm.get("sans", 16);
+    if (!one) {
+        std::cout << "  (no system font found; skipping scale metric checks)\n";
+        return;
+    }
+    const float logicalWidth = one->measure("hello world");
+    const float ascent = one->ascent();
+    const int atlasW = one->atlasWidth();
+    const int atlasH = one->atlasHeight();
+    CHECK(one->pxPerUnit() == 1.0f);
+
+    // The same request at 2x bakes a bigger atlas but reports the same
+    // logical metrics, so layout code is scale-blind.
+    fm.setScale(2.0f);
+    const Font* two = fm.get("sans", 16);
+    if (!two) { fm.setScale(1.0f); return; }
+    CHECK(two->pxPerUnit() > 1.9f && two->pxPerUnit() < 2.1f);
+    CHECK(two->size() == 16);                       // logical size unchanged
+    CHECK(two->atlasWidth() > atlasW);
+    CHECK(two->atlasHeight() > atlasH);
+    CHECK(std::fabs(two->measure("hello world") - logicalWidth) < 1.0f);
+    CHECK(std::fabs(two->ascent() - ascent) < 1.0f);
+    // A click 40 logical px into the string maps to the same caret index.
+    CHECK(two->indexFromX("hello world", 40.0f) == one->indexFromX("hello world", 40.0f));
+    fm.setScale(1.0f);
+}
+
 static void testIndexFromXAndMeasureRange() {
     FontManager& fm = FontManager::instance();
     const Font* f = fm.get("sans", 16);
@@ -386,6 +475,8 @@ int main() {
     testDegenerate();
     testFontAndText();
     testTextMetrics();
+    testScaleEmission();
+    testScaledFontMetrics();
     testIndexFromXAndMeasureRange();
     testTextWrapLayout();
     testLayoutDraw();

@@ -46,6 +46,12 @@ struct GlyphInfo {
 // A8 glyph atlas (single texture, grid packed). Texels carry coverage only;
 // the GL backend maps them to (1,1,1,r) through a texture swizzle, and the
 // CPU rasterizer does the same when sampling.
+//
+// Units: `size()`, ascent()/descent(), measure*(), indexFromX() and kern()
+// speak LOGICAL pixels (the units XML geometry and widget bounds use); the
+// atlas itself is baked at size()*pxPerUnit() device pixels so text stays
+// crisp on a HiDPI framebuffer. GlyphInfo keeps raw atlas pixels — multiply
+// or divide by pxPerUnit() when turning one into a logical rect.
 class Font {
 public:
     Font() = default;
@@ -57,16 +63,19 @@ public:
     Font(Font&& other) noexcept;
     Font& operator=(Font&& other) noexcept;
 
-    // Load a .ttf/.otf and build the atlas.
-    bool load(const std::string& path, int pixelHeight, int dpi = 96);
+    // Load a .ttf/.otf and build the atlas. `logicalHeight` is the text size
+    // in logical pixels; `pxPerUnit` is the device pixels per logical unit
+    // the atlas is baked for (1.0 = one device pixel per logical pixel).
+    bool load(const std::string& path, int logicalHeight, int dpi = 96,
+              float pxPerUnit = 1.0f);
     bool unload();
 
     const GlyphInfo& glyph(uint32_t ch) const;
 
-    // Kerning adjustment (atlas pixels) applied between two adjacent code
+    // Kerning adjustment in LOGICAL pixels applied between two adjacent code
     // points; 0 when the pair has none. Baked from the font's kern table at
     // load time for the printable-ASCII grid.
-    int kern(uint32_t prev, uint32_t cur) const;
+    float kern(uint32_t prev, uint32_t cur) const;
 
     // Normalized UV rect of a glyph inside the atlas.
     Rect glyphUV(uint32_t ch) const;
@@ -85,31 +94,36 @@ public:
     void setAtlasTexture(int id) { m_atlasTex = id; }
 
     const std::string& path() const { return m_path; }
-    int size() const { return m_pixelHeight; }
+    int size() const { return m_logicalHeight; }
     bool loaded() const { return !m_pixels.empty(); }
+    // Device pixels per logical pixel this atlas was baked for.
+    float pxPerUnit() const { return m_pxPerUnit > 0.0f ? m_pxPerUnit : 1.0f; }
 
-    // Baseline metrics in atlas pixels for this pixel height.
-    int ascent() const { return m_ascent; }
-    int descent() const { return m_descent; }
+    // Baseline metrics in logical pixels for this size.
+    float ascent() const { return static_cast<float>(m_ascent) / pxPerUnit(); }
+    float descent() const { return static_cast<float>(m_descent) / pxPerUnit(); }
 
-    // Pixel width of a UTF-8/ASCII string at this size.
+    // Width of a UTF-8/ASCII string in logical pixels at this size.
     float measure(const char* text) const;
-    // Width of the first `bytes` bytes of `text`; `text` need not be
-    // NUL-terminated. A truncated code point at the cut is ignored.
+    // Width of the first `bytes` bytes of `text` in logical pixels; `text`
+    // need not be NUL-terminated. A truncated code point at the cut is
+    // ignored.
     float measureRange(const char* text, size_t bytes) const;
 
-    // Byte offset of the code point boundary nearest to `x` pixels from the
-    // string start (0 .. strlen). Used to place the caret from a click.
+    // Byte offset of the code point boundary nearest to `x` LOGICAL pixels
+    // from the string start (0 .. strlen). Used to place the caret from a
+    // click.
     size_t indexFromX(const char* text, float x) const;
 
 private:
     std::string m_path;
-    int m_pixelHeight = 0;
-    int m_ascent = 0;
-    int m_descent = 0;
+    int m_logicalHeight = 0;         // requested size in logical pixels
+    float m_pxPerUnit = 1.0f;        // atlas bake factor
+    int m_ascent = 0;                // atlas pixels
+    int m_descent = 0;               // atlas pixels
     int m_atlasTex = 0;
     std::map<uint32_t, GlyphInfo> m_glyphs;
-    std::unordered_map<uint32_t, int8_t> m_kern;  // prev*128+cur -> px
+    std::unordered_map<uint32_t, int8_t> m_kern;  // prev*128+cur -> atlas px
 
     std::vector<uint8_t> m_pixels;   // A8 flat: w*h
     int m_w = 0, m_h = 0;
@@ -127,8 +141,16 @@ class FontManager {
 public:
     static FontManager& instance();
 
-    // Returns a loaded font, or nullptr when none could be found.
+    // Returns a loaded font, or nullptr when none could be found. `size` is
+    // in LOGICAL pixels; with a scale set, the atlas is baked at size*scale
+    // device pixels while every metric still comes back in logical pixels.
     const Font* get(const std::string& family, int size);
+
+    // Device pixels per logical pixel for newly built atlases. Changing it
+    // drops the cache, since every bake depends on the value. The Kernel
+    // keeps this in sync with the screen scale on every draw list rebuild.
+    void setScale(float s);
+    float scale() const { return m_scale; }
 
     // Explicit family -> file mapping (takes priority over probing).
     void setFontPath(const std::string& family, const std::string& path);
@@ -153,6 +175,7 @@ private:
     std::map<std::pair<std::string, int>, std::unique_ptr<Font>> m_cache;
     std::map<std::string, std::string> m_paths;
     std::vector<std::string> m_dirs;
+    float m_scale = 1.0f;
 };
 
 } // namespace ogui

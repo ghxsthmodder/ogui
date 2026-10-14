@@ -9,7 +9,10 @@
 // This is a debugging aid: it shows exactly what GlBackend::render() would
 // draw, without needing a window, a GL context or a display.
 //
-//   ./ogui_screenshot [out.png] [width] [height]
+//   ./ogui_screenshot [out.png] [width] [height] [--scale <f>]
+//
+// width/height are the LOGICAL design size; --scale renders the same layout
+// into a device framebuffer of width*scale x height*scale.
 #include "ogui/kernel.hpp"
 #include "ogui/xmlparser.hpp"
 #include "ogui/widgets.hpp"
@@ -63,9 +66,14 @@ bool absBounds(const std::vector<ogui::Widget::Ptr>& kids, float ox, float oy,
 struct SimInput {
     ogui::InputState st;
     ogui::Kernel& k;
+    // Widgets are aimed at in logical units; the host delivers device pixels.
+    float scale = 1.0f;
 
     void frame() { k.frame(st); }
-    void hover(float x, float y) { st.mouseX = x; st.mouseY = y; }
+    void hover(float x, float y) {
+        st.mouseX = x * scale;
+        st.mouseY = y * scale;
+    }
     void click(float x, float y) {
         hover(x, y);
         st.mouseDown[0] = true;
@@ -96,6 +104,10 @@ int main(int argc, char** argv) {
     const int outW = argc > 2 ? std::atoi(argv[2]) : 800;
     const int outH = argc > 3 ? std::atoi(argv[3]) : 600;
     const int ssaa = 2;
+    float uiScale = 1.0f;
+    for (int i = 1; i + 1 < argc; ++i)
+        if (std::string(argv[i]) == "--scale") uiScale = std::atof(argv[i + 1]);
+    if (!(uiScale > 0.0f)) uiScale = 1.0f;
 
     // Manifest theme first, so an explicit "light" arg below overrides it.
     gallery::applyManifestTheme();
@@ -121,6 +133,18 @@ int main(int argc, char** argv) {
     gallery::install(kernel, g, navIndex, screenIndex,
                      static_cast<float>(outW), static_cast<float>(outH));
 
+    // The gallery lays out at its design minimum; that size is the logical
+    // canvas here, so the screen's device pixels are logical * scale.
+    const float logicalW = std::max(static_cast<float>(outW), 800.0f);
+    const float logicalH = std::max(static_cast<float>(outH), 600.0f);
+    if (auto scr = kernel.currentScreen()) {
+        scr->width = logicalW * uiScale;
+        scr->height = logicalH * uiScale;
+        scr->scale = uiScale;
+    }
+    const int devW = static_cast<int>(std::lround(logicalW * uiScale));
+    const int devH = static_cast<int>(std::lround(logicalH * uiScale));
+
     kernel.bind("onStart", [&] {
         kernel.setText("lbl_status", "Iniciar pressionado!");
         kernel.addLog("onStart");
@@ -141,7 +165,7 @@ int main(int argc, char** argv) {
     }
     const bool isBasics = (navIndex == 0);
 
-    SimInput sim{ {}, kernel };
+    SimInput sim{ {}, kernel, uiScale };
 
     // ---- 2. drive some interaction so the shot has state -----------------
     // The layout sits directly on the 800x600 screen now (ogui::Host owns
@@ -275,7 +299,7 @@ int main(int argc, char** argv) {
     // Clear first, like the GL host does: blending then lands on an opaque
     // backdrop and the PNG needs no alpha flattening.
     ogui::Framebuffer big, out;
-    big.resize(outW * ssaa, outH * ssaa);
+    big.resize(devW * ssaa, devH * ssaa);
     sr.clear(big, ogui::Color{16, 16, 16, 255});
     std::vector<int> missing;
     sr.render(dl, big, ssaa, &missing);
@@ -308,8 +332,8 @@ int main(int argc, char** argv) {
     const bool bgOk = near(corner[0], bgWant.r) && near(corner[1], bgWant.g) &&
                       near(corner[2], bgWant.b);
 
-    std::printf("screenshot: %s (%dx%d, ssaa %dx)\n", outPath.c_str(), out.w,
-                out.h, ssaa);
+    std::printf("screenshot: %s (%dx%d device, scale %.2f, ssaa %dx)\n",
+                outPath.c_str(), out.w, out.h, uiScale, ssaa);
     std::printf("drawlist: %zu vertices, %zu indices, %zu cmds, textures %zu\n",
                 dl.vertices.size(), dl.indices.size(), dl.cmds.size(),
                 sr.textures().size());
