@@ -135,6 +135,7 @@ are clamped at parse time too.
 | `borderWidth` | stroke thickness in px |
 | `radius` | corner radius |
 | `padding` / `margin` | inner / outer spacing |
+| `gap` | child spacing for `column`/`row` stacks; `0` falls back to `margin`, then the default 4 px (`grid`/`accordion` keep their own `gap` attribute) |
 | `font` / `fontSize` | family and size (`fontSize` overrides; legacy `font sans 20 color "#66ee66"` pseudo-syntax also works) |
 | `shadow` | drop shadow as `"blur[,dy[,dx]]"` |
 | `shadowColor` | shadow tint |

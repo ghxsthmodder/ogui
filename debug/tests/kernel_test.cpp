@@ -2452,6 +2452,37 @@ static void testSizeLimits() {
     // Absolute seed sizes clamp at parse time, before the first layout.
     CHECK(std::fabs(seed->bounds().w - 300.0f) < 0.01f);    // 600 -> max 300
     CHECK(std::fabs(seed->bounds().h - 60.0f) < 0.01f);     // 40 -> min 60
+
+    // gap="..." on column/row overrides the default 4px child spacing.
+    Kernel k2;
+    k2.init();
+    auto res2 = p.parse(R"XML(<screen id="s">
+  <column id="col" x="0" y="0" width="200" height="0" gap="20">
+    <panel id="p1" width="200" height="30" background="#111"/>
+    <panel id="p2" width="200" height="30" background="#222"/>
+  </column>
+  <row id="rw" x="0" y="400" width="0" height="40" gap="10" padding="5">
+    <panel id="q1" width="50" height="40" background="#333"/>
+    <panel id="q2" width="50" height="40" background="#444"/>
+  </row>
+</screen>)XML");
+    assert(res2.root);
+    auto s2 = std::make_shared<Screen>("s");
+    s2->widgets.push_back(res2.root);
+    s2->width = 800;
+    s2->height = 600;
+    k2.pushScreen(s2);
+    InputState st2 = makeInput();
+    k2.frame(st2);
+    auto* p1 = dynamic_cast<Panel*>(k2.findWidget("p1"));
+    auto* p2 = dynamic_cast<Panel*>(k2.findWidget("p2"));
+    auto* q1 = dynamic_cast<Panel*>(k2.findWidget("q1"));
+    auto* q2 = dynamic_cast<Panel*>(k2.findWidget("q2"));
+    CHECK(p1 && p2 && q1 && q2);
+    CHECK(p1->bounds().y == 0.0f);
+    CHECK(p2->bounds().y == 50.0f);          // 30 + gap 20
+    CHECK(q1->bounds().x == 5.0f);           // padding 5
+    CHECK(q2->bounds().x == 65.0f);          // 5 + 50 + gap 10
 }
 
 int main() {

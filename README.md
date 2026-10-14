@@ -261,6 +261,7 @@ Conventional names that are not abbreviations stay as-is: `x`, `y`, `id`,
 | `shadowColor` | shadow color (default `#000000`), e.g. `shadowColor="#000000"` |
 | `gradient` | vertical background gradient end color: `background` stays the top color; `gradientDirection="horizontal"` ramps left→right instead |
 | `padding` `margin` | layout knobs (`<column>` uses both) |
+| `gap` | `column`/`row` child spacing in px (falls back to `margin`, then the default 4) |
 | `font` `fontSize` | `font="sans 20"` or the legacy `font sans 20 color "#66ee66"` |
 
 ### Theme & palette
@@ -354,8 +355,8 @@ theme default.
 | `script` | Lua chunk for the screen — `<script src="file.lua"/>` or inline `<script>code</script>`; hooks `ogui_on_load`/`ogui_on_update`/`ogui_on_click`/`ogui_on_event` + `ogui` API (see [xml-reference](docs/xml-reference.md)) | `src` |
 | `panel` | plain rectangle container | — |
 | `window` | bordered panel with a title bar (children are offset by it) | `title`, `titleVisible` |
-| `column` | stacks children vertically (gap 4, honours `padding`/`margin`) | — |
-| `row` | lays children out horizontally, tiling authored widths with a gap | — |
+| `column` | stacks children vertically (gap 4 or `gap`, honours `padding`/`margin`) | `gap` |
+| `row` | lays children out horizontally, tiling authored widths with a gap | `gap` |
 | `grid` | row-major tiling over column tracks; children fill each cell origin (child `x`/`y` are ignored, percent/fill resolve against the cell) | `columns` (`"3"` = 3 equal tracks, or a list like `"120 1fr 25%"`: px, fractional, percent), `gap` (px, default 4), `rowHeight` (px; default is auto = tallest child of the row) |
 | `label` | text | `text`, `wrap`, `align="left\|center\|right"` |
 | `button` | clickable button, press/release feedback | `text`, `align="left\|center\|right"`, `textPadding` (inset for left/right) |

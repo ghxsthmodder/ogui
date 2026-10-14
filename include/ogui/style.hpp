@@ -65,6 +65,7 @@ struct Style {
     // geometry
     float padding = 0.0f;
     float margin = 0.0f;
+    float gap = 0.0f;   // column/row child spacing; 0 falls back to margin/4
     // z-order / flags
     uint32_t zOrder = 0;
     bool isVisible = true;

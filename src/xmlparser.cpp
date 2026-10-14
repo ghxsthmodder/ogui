@@ -752,6 +752,7 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
     if (const std::string* v = get("radius"))  { toFloat(*v, st.radius); hasStyle = true; }
     if (const std::string* v = get("padding")) { toFloat(*v, st.padding); hasStyle = true; }
     if (const std::string* v = get("margin"))  { toFloat(*v, st.margin); hasStyle = true; }
+    if (const std::string* v = get("gap"))     { toFloat(*v, st.gap); hasStyle = true; }
     if (const std::string* v = get("font")) {
         parseFontAttr(*v, st.fontFamily, st.fontSize);
         hasStyle = true;

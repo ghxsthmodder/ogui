@@ -171,7 +171,8 @@ Column::~Column() = default;
 
 void Column::layout(float parentWidth, float parentHeight) {
     float pad = m_style.padding;
-    float gap = m_style.margin > 0.0f ? m_style.margin : 4.0f;
+    float gap = m_style.gap > 0.0f ? m_style.gap
+                  : (m_style.margin > 0.0f ? m_style.margin : 4.0f);
     float y = pad;
     float maxW = 0.0f;
 
@@ -217,7 +218,8 @@ void Row::layout(float parentWidth, float parentHeight) {
     // Horizontal analogue of Column: keep each child's authored size and
     // tile them left to right with the style gap.
     float pad = m_style.padding;
-    float gap = m_style.margin > 0.0f ? m_style.margin : 4.0f;
+    float gap = m_style.gap > 0.0f ? m_style.gap
+                  : (m_style.margin > 0.0f ? m_style.margin : 4.0f);
     float x = pad;
     float maxH = 0.0f;
     for (const auto& c : children()) {
