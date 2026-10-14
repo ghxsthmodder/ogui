@@ -18,8 +18,8 @@ creates for you (`ogui::Host`, a built-in Win32/WGL window and event loop).
   entry point resolved at runtime, so the library never links against GL)
   and `SoftwareRenderer` (pure CPU, for headless tests and screenshots).
 * **Scripting** — screens embed Lua 5.4 chunks (`<script>`); the engine
-  owns the loop and calls the script's `on_load`/`on_update`/`on_click`/
-  `on_event` hooks through the `ogui` API table.
+  owns the loop and calls the script's `ogui_on_load`/`ogui_on_update`/`ogui_on_click`/
+  `ogui_on_event` hooks through the `ogui` API table.
 * **Static library, few dependencies** — stb and Lua are vendored; the
   parser is a hand-rolled tokenizer with no third-party code.
 
@@ -333,7 +333,7 @@ theme default.
 | `theme` | stylesheet root: shared palette + named styles + fonts (`base="dark\|light"` preset it layers over) | `name`, `base` |
 | `palette` | inside `<theme>` only: re-colours tokens (`accent="#e8b33c" ...`); unknown tokens warn | token names |
 | `stylesheet` | merges an external `<theme>` file into the current document (named styles, fonts, palette) | `path` |
-| `script` | Lua chunk for the screen — `<script src="file.lua"/>` or inline `<script>code</script>`; hooks `on_load`/`on_update`/`on_click`/`on_event` + `ogui` API (see [xml-reference](docs/xml-reference.md)) | `src` |
+| `script` | Lua chunk for the screen — `<script src="file.lua"/>` or inline `<script>code</script>`; hooks `ogui_on_load`/`ogui_on_update`/`ogui_on_click`/`ogui_on_event` + `ogui` API (see [xml-reference](docs/xml-reference.md)) | `src` |
 | `panel` | plain rectangle container | — |
 | `window` | bordered panel with a title bar (children are offset by it) | `title`, `titleVisible` |
 | `column` | stacks children vertically (gap 4, honours `padding`/`margin`) | — |

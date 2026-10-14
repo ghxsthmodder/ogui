@@ -336,22 +336,22 @@ bool ScriptHost::callHook(const char* name, Push push) {
 }
 
 void ScriptHost::notifyLoad() {
-    callHook("on_load", [](lua_State*) {});
+    callHook("ogui_on_load", [](lua_State*) {});
 }
 
 void ScriptHost::notifyUpdate(float t, float dt) {
-    callHook("on_update", [t, dt](lua_State* L) {
+    callHook("ogui_on_update", [t, dt](lua_State* L) {
         lua_pushnumber(L, t);
         lua_pushnumber(L, dt);
     });
 }
 
 void ScriptHost::notifyClick(const std::string& key) {
-    callHook("on_click", [&key](lua_State* L) { lua_pushstring(L, key.c_str()); });
+    callHook("ogui_on_click", [&key](lua_State* L) { lua_pushstring(L, key.c_str()); });
 }
 
 void ScriptHost::notifyEvent(const std::string& name, const std::string& key) {
-    callHook("on_event", [&name, &key](lua_State* L) {
+    callHook("ogui_on_event", [&name, &key](lua_State* L) {
         lua_pushstring(L, name.c_str());
         lua_pushstring(L, key.c_str());
     });

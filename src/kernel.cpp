@@ -460,7 +460,7 @@ void Kernel::update() {
             else if (auto fn2 = lookup(m_pressed->id())) { fn2(); handled = true; }
             else if (const auto& h = m_pressed->clickHandler()) { h(); handled = true; }
             // Nothing C++-bound: route the click to the screen's Lua
-            // on_click hook with the widget id (onclick name if set).
+            // ogui_on_click hook with the widget id (onclick name if set).
             if (!handled && !m_pressed->id().empty())
                 m_script.notifyClick(m_pressed->binding().empty()
                                          ? m_pressed->id()

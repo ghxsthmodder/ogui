@@ -300,16 +300,22 @@ calls the script — never the other way around:
 - The `Kernel` clears its `ScriptHost` and runs the current screen's
   chunks on every `pushScreen`/`popScreen`/`switchScreen`, so hooks always
   belong to the visible screen. Each load runs the chunk and then its
-  `on_load`.
+  `ogui_on_load`.
 
 Hooks (plain global functions, all optional):
 
 | Hook | Fired |
 |---|---|
-| `on_load()` | right after the chunk runs |
-| `on_update(t, dt)` | every frame (`t` = seconds since kernel start) |
-| `on_click(key)` | left-click released on a widget with **no** C++ binding (onclick name, else id) |
-| `on_event(name, key)` | an `invokeBinding(name)` with no C++ binding (C++ wins; scripts see the leftovers) |
+| `ogui_on_load()` | right after the chunk runs |
+| `ogui_on_update(t, dt)` | every frame (`t` = seconds since kernel start) |
+| `ogui_on_click(key)` | left-click released on a widget with **no** C++ binding (onclick name, else id) |
+| `ogui_on_event(name, key)` | an `invokeBinding(name)` with no C++ binding (C++ wins; scripts see the leftovers) |
+
+All hooks carry the `ogui_on_` prefix (snake_case, matching the rest of the
+API): game code can live in the same Lua state, and bare names like
+`on_update` would collide with the game's own global functions. The engine
+only ever looks hooks up by their prefixed name; anything else in the
+globals is left alone.
 
 API table `ogui` (all calls are safe on unknown ids):
 
@@ -331,7 +337,7 @@ Example:
   <label  id="num" text="0"  x="120" y="20" width="80" height="36"/>
   <script>
 n = 0
-function on_click(key)
+function ogui_on_click(key)
   if key == "add" then n = n + 1 end
   ogui.set("num", "text", tostring(n))
 end

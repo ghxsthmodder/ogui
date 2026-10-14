@@ -18,15 +18,17 @@ class Widget;
 // behaviour with <script src="file.lua"/> (or inline <script>code
 // </script>); XmlParser forwards it through setScriptHandler(), which
 // hosts wire to Kernel::loadScriptFile()/loadScriptString(). Loading
-// immediately runs the chunk and calls its on_load() hook.
+// immediately runs the chunk and calls its ogui_on_load() hook.
 //
-// Lua hooks (global functions, all optional; later loads override):
-//   on_load()            once, right after the chunk runs
-//   on_update(t, dt)     every frame (t = seconds since kernel start)
-//   on_click(key)        left-click released on a widget whose C++
-//                        binding/handler did not fire (onclick name,
-//                        else id)
-//   on_event(name, key)  an invokeBinding() name with no C++ binding
+// Lua hooks (global functions, all optional; later loads override). The
+// ogui_on_ prefix is the naming convention: game code may share the Lua
+// state, so bare names like on_update could collide with game globals.
+//   ogui_on_load()            once, right after the chunk runs
+//   ogui_on_update(t, dt)     every frame (t = seconds since kernel start)
+//   ogui_on_click(key)        left-click released on a widget whose C++
+//                             binding/handler did not fire (onclick name,
+//                             else id)
+//   ogui_on_event(name, key)  an invokeBinding() name with no C++ binding
 //
 // API table `ogui` (all calls return nil/false when the id is unknown):
 //   ogui.set(id, attr, v)    attr: text | visible | checked | value |

@@ -2,14 +2,14 @@
 -- The engine owns the loop; this script only reacts to the four hooks and
 -- talks to the widgets through the ogui API.
 
-local target = 0   -- progress the send button queues for on_update
+local target = 0   -- progress the send button queues for ogui_on_update
 
-function on_load()
+function ogui_on_load()
   ogui.set("f_status", "text", "Preencha o formulario.")
   ogui.set("f_prog", "value", 0)
 end
 
-function on_click(key)
+function ogui_on_click(key)
   if key ~= "f_send" then return end
 
   local nome   = ogui.get("f_name", "text") or ""
@@ -32,7 +32,7 @@ function on_click(key)
   end
 end
 
-function on_update(t, dt)
+function ogui_on_update(t, dt)
   local p = ogui.get("f_prog", "value")
   if p < target then
     p = math.min(target, p + dt * 0.8)

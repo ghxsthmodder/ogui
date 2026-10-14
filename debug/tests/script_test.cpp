@@ -1,5 +1,5 @@
 // ogui_script_test.cpp : Lua scripting integration — <script> collection,
-// screen-bound loading, hooks (on_load/on_update/on_click/on_event) and the
+// screen-bound loading, hooks (ogui_on_load/ogui_on_update/ogui_on_click/ogui_on_event) and the
 // ogui.* widget API.
 #include "ogui/kernel.hpp"
 #include "ogui/script.hpp"
@@ -36,13 +36,13 @@ std::shared_ptr<Screen> makeScreen() {
   <checkbox id="cb" x="10" y="180" width="120" height="24"/>
   <script>
 count = 0
-function on_load()
+function ogui_on_load()
   ogui.set("out", "text", "loaded")
 end
-function on_update(t, dt)
+function ogui_on_update(t, dt)
   if dt > 0 then ogui.set("pb", "value", 0.5) end
 end
-function on_click(key)
+function ogui_on_click(key)
   if key == "btn" then
     count = count + 1
     ogui.set("out", "text", "clicks:" .. count)
@@ -52,7 +52,7 @@ function on_click(key)
     ogui.toast("clicked " .. key, "warn")
   end
 end
-function on_event(name, key)
+function ogui_on_event(name, key)
   ogui.set("out", "text", "event:" .. name)
 end
   </script>
@@ -102,11 +102,11 @@ int main() {
     auto screen = makeScreen();
     k.pushScreen(screen);
 
-    // ---- on_load fired by pushScreen ------------------------------------
+    // ---- ogui_on_load fired by pushScreen ------------------------------------
     CHECK(k.script().errors().empty());
     CHECK(k.getText("out") == "loaded");
 
-    // ---- on_update: dt > 0 frames drive the progress bar ----------------
+    // ---- ogui_on_update: dt > 0 frames drive the progress bar ----------------
     InputState st = makeInput();
     st.time = 0.0f;
     k.frame(st);            // first frame: dt = 0 (prevTime 0) — no move yet
@@ -118,7 +118,7 @@ int main() {
     else
         CHECK(false);
 
-    // ---- on_click: unreleased C++ binding falls through to Lua -----------
+    // ---- ogui_on_click: unreleased C++ binding falls through to Lua -----------
     pressAt(k, st, 70.0f, 70.0f);   // inside btn (10,50,120x40)
     release(k, st);
     CHECK(k.getText("out") == "clicks:1");
@@ -150,7 +150,7 @@ int main() {
     (void)sawToast;
     CHECK(k.script().errors().empty());
 
-    // ---- on_event: invokeBinding miss reaches the script hook ------------
+    // ---- ogui_on_event: invokeBinding miss reaches the script hook ------------
     CHECK(!k.invokeBinding("cmd_unknown"));
     CHECK(k.getText("out") == "event:cmd_unknown");
 
@@ -177,7 +177,7 @@ int main() {
     {
         const char* tmp = "ogui_script_test_tmp.lua";
         std::ofstream f(tmp);
-        f << "function on_click(key) ogui.set('out','text','file:'..key) end\n";
+        f << "function ogui_on_click(key) ogui.set('out','text','file:'..key) end\n";
         f.close();
         XmlParser p;
         auto res = p.parse(R"(<screen id="f">
@@ -199,7 +199,7 @@ int main() {
 
         // ---- popScreen: back to screen "s" reloads its inline script ----
         k.popScreen();
-        CHECK(k.getText("out") == "loaded");   // on_load ran again
+        CHECK(k.getText("out") == "loaded");   // ogui_on_load ran again
         std::remove(tmp);
     }
 
@@ -213,14 +213,14 @@ int main() {
         CHECK(sh.errors().size() == before + 2);
         // Defining a failing hook loads fine; the error surfaces on frame.
         CHECK(sh.loadString(
-            "function on_update() error('tick') end", "tickerr"));
+            "function ogui_on_update() error('tick') end", "tickerr"));
         InputState st3 = makeInput();
         st3.time = 5.0f;
-        k.frame(st3);   // on_update raises; frame must not crash
+        k.frame(st3);   // ogui_on_update raises; frame must not crash
         CHECK(sh.errors().size() == before + 3);
         CHECK(sh.errors().back().find("tick") != std::string::npos);
         // The failing script's hook is gone once a clean chunk redefines it.
-        CHECK(sh.loadString("function on_update() end", "fix"));
+        CHECK(sh.loadString("function ogui_on_update() end", "fix"));
         k.frame(st3);
     }
 

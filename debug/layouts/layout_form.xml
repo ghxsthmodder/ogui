@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <!-- layout_form.xml : scripting showcase — the whole behaviour lives in
      layouts/form.lua (validation on click + animated progress on update).
-     The widgets carry no onclick: unreleased clicks reach on_click. -->
+     The widgets carry no onclick: unreleased clicks reach ogui_on_click. -->
 <screen id="form">
   <stylesheet path="themes/design.xml"/>
 

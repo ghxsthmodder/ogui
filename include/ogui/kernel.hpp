@@ -109,7 +109,7 @@ public:
     // Bind a handler to a widget id; fired on click (press+release on it).
     void bind(const std::string& id, std::function<void()> fn);
     // Fire a bound handler by name (menu commands route through this).
-    // A name without a C++ binding also reaches the script's on_event
+    // A name without a C++ binding also reaches the script's ogui_on_event
     // hook; the return value only reports the C++ binding (compat).
     bool invokeBinding(const std::string& name) {
         auto it = m_bindings.find(name);
@@ -166,7 +166,7 @@ public:
     // ---- scripting (Lua) ----
     // The screen's script host: <script> elements parsed with the parser's
     // script handler route to loadScriptFile()/loadScriptString(). Hooks
-    // (on_load/on_update/on_click/on_event) fire from the frame loop; see
+    // (ogui_on_load/ogui_on_update/ogui_on_click/ogui_on_event) fire from the frame loop; see
     // ogui/script.hpp for the API surface.
     ScriptHost& script() { return m_script; }
     bool loadScriptFile(const std::string& path) {
