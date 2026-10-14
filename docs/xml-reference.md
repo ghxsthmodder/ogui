@@ -461,6 +461,10 @@ API table `ogui` (all calls are safe on unknown ids):
 | `ogui.children(id)` | ordered array of child ids (`""` for unnamed children), or `nil` for an unknown id |
 | `ogui.parent(id)` | parent's id, or `nil` at the screen root / unknown id |
 | `ogui.index(id)` | 1-based position among its siblings, or `nil` |
+| `ogui.dump()` | the whole widget tree as text — one line per widget: type, id, parent-relative bounds, absolute origin, then `hidden`/`disabled`/`focusable`/`focused`/`hovered`/`pressed`, `tab=`, `binding=`, `accessible=`, `tooltip=` |
+| `ogui.inspect(id)` | table for one widget: `type`, `id`, `binding`, `accessible`, `tooltip`, `x`, `y`, `width`, `height`, `visible`, `enabled`, `focusable`, `focused`, `hovered`, `tabindex` (`-1` when not in the Tab order), `children`; `nil` for an unknown id |
+| `ogui.debug()` / `ogui.debug(bits\|string)` | draw-list overlay: `1` bounds, `2` labels, `4` focus order, `8` hover. A string takes words `"bounds labels focus hover"` (`all`/`none` too). No argument reports the current bits; returns them |
+| `ogui.stats()` | last frame: `updateMs`, `drawMs`, `widgets`, `tabStops`, `vertices`, `indices`, `cmds` |
 | `ogui.on(id, event, fn)` | attach a per-widget listener → integer handle. Events fired: `"click"`, `"focus"`, `"blur"`, `"change"` (user edits a value/selection/text) and `"submit"` (Enter in a `TextInput`); the callback receives the widget id |
 | `ogui.off(handle)` | remove one listener → boolean |
 | `ogui.off(id)` | remove every listener on that widget → count dropped; listeners also die automatically when the widget is removed or the screen swaps |
@@ -509,6 +513,34 @@ function ogui_on_load()
   ogui.bind("name_label", "text",  "name_input",    "text", true)      -- two-way
 end
 ```
+
+## Debugging & inspection
+
+The debug tools are built on the kernel and the draw list, not on a parallel
+system: the tree dump walks the same `Screen::widgets` the parser filled, the
+focus overlay numbers the same Tab order `focusNext()` walks, and the event log
+goes through `Kernel::addLog()`, so any `console` widget mirrors it for free.
+
+```cpp
+kernel.setDebugOverlay(ogui::Kernel::DebugBounds |      // 1: boxes per depth
+                       ogui::Kernel::DebugLabels);      // 2: "Type#id WxH"
+kernel.toggleDebugOverlay(ogui::Kernel::DebugFocus);    // 4: Tab order
+                                                       // 8: hover highlight
+const auto& s = kernel.stats();     // updateMs, drawMs, widgets, tabStops, ...
+std::puts(kernel.dumpTree().c_str());
+std::puts(ogui::Kernel::describe(kernel.focusedWidget()).c_str());  // "Button ok"
+```
+
+`kernel.setDebugEvents(true)` logs every click, focus change and binding
+invocation (`event go`, `click Button ok -> go`, `focus Button ok`) into the
+kernel log; unbound names are marked `(unbound)`. Off by default, so a release
+build pays nothing.
+
+`examples/screenshot.cpp` renders the overlay headlessly:
+`./build/ogui_screenshot dbg.png 900 640 1 --debug` (optionally
+`--debug bounds,labels,focus,hover`). With any debug bits set the corner
+sanity check reports `skipped`, because the hover layer paints over the
+background on purpose.
 
 ## Error reporting
 

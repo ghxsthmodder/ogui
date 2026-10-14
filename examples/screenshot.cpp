@@ -108,6 +108,31 @@ int main(int argc, char** argv) {
     for (int i = 1; i + 1 < argc; ++i)
         if (std::string(argv[i]) == "--scale") uiScale = std::atof(argv[i + 1]);
     if (!(uiScale > 0.0f)) uiScale = 1.0f;
+    // --debug [bounds,labels,focus,hover,all] (default: all)
+    uint32_t debugBits = 0;
+    for (int i = 1; i < argc; ++i) {
+        if (std::string(argv[i]) != "--debug") continue;
+        const char* spec = (i + 1 < argc && argv[i + 1][0] != '-') ? argv[i + 1]
+                                                                   : "all";
+        std::string names(spec);
+        for (char& c : names)
+            if (c == ',' || c == ';' || c == '|' || c == ' ') c = ' ';
+        size_t p = 0;
+        while (p < names.size()) {
+            while (p < names.size() && names[p] == ' ') ++p;
+            size_t e = names.find(' ', p);
+            if (e == std::string::npos) e = names.size();
+            const std::string w = names.substr(p, e - p);
+            p = e;
+            if (w == "bounds") debugBits |= ogui::Kernel::DebugBounds;
+            else if (w == "labels") debugBits |= ogui::Kernel::DebugLabels;
+            else if (w == "focus") debugBits |= ogui::Kernel::DebugFocus;
+            else if (w == "hover") debugBits |= ogui::Kernel::DebugHover;
+            else if (w == "all")
+                debugBits = ogui::Kernel::DebugBounds | ogui::Kernel::DebugLabels |
+                            ogui::Kernel::DebugFocus | ogui::Kernel::DebugHover;
+        }
+    }
 
     // Manifest theme first, so an explicit "light" arg below overrides it.
     gallery::applyManifestTheme();
@@ -144,6 +169,7 @@ int main(int argc, char** argv) {
     }
     const int devW = static_cast<int>(std::lround(logicalW * uiScale));
     const int devH = static_cast<int>(std::lround(logicalH * uiScale));
+    if (debugBits) kernel.setDebugOverlay(debugBits);
 
     kernel.bind("onStart", [&] {
         kernel.setText("lbl_status", "Iniciar pressionado!");
@@ -325,12 +351,14 @@ int main(int argc, char** argv) {
     }
 
     // Sanity: the bg panel must cover the whole frame; compare against the
-    // active theme so a light-theme render passes too.
+    // active theme so a light-theme render passes too. The debug overlay
+    // paints over that corner on purpose, so it is not a regression there.
     const uint8_t* corner = out.at(2, 2);
     const ogui::Color bgWant = ogui::palette().screen;
     const auto near = [](int a, int b) { return a > b - 12 && a < b + 12; };
-    const bool bgOk = near(corner[0], bgWant.r) && near(corner[1], bgWant.g) &&
-                      near(corner[2], bgWant.b);
+    const bool bgOk = !debugBits || (near(corner[0], bgWant.r) &&
+                                     near(corner[1], bgWant.g) &&
+                                     near(corner[2], bgWant.b));
 
     std::printf("screenshot: %s (%dx%d device, scale %.2f, ssaa %dx)\n",
                 outPath.c_str(), out.w, out.h, uiScale, ssaa);
@@ -338,6 +366,8 @@ int main(int argc, char** argv) {
                 dl.vertices.size(), dl.indices.size(), dl.cmds.size(),
                 sr.textures().size());
     std::printf("status: \"%s\"\n", kernel.getText("lbl_status").c_str());
-    std::printf("sanity: bg corner %s\n", bgOk ? "ok" : "WRONG");
+    std::printf("sanity: %s\n",
+                debugBits ? "skipped (debug overlay paints)"
+                          : (bgOk ? "bg corner ok" : "bg corner WRONG"));
     return bgOk ? 0 : 1;
 }

@@ -432,6 +432,62 @@ int main() {
         CHECK(k.getText("out") == "loaded");
     }
 
+    // ---- inspection: dump, inspect, debug overlay, stats ---------------------
+    {
+        XmlParser p;
+        auto res = p.parse(R"(<screen id="insp">
+  <button id="go" x="10" y="10" width="80" height="24" text="Go"/>
+  <label id="cap" text="caption" x="10" y="44" width="80" height="16"/>
+</screen>)");
+        CHECK(res.root != nullptr);
+        if (res.root) {
+        auto s = std::make_shared<Screen>("insp");
+        s->widgets.push_back(res.root);
+        s->width = 400;
+        s->height = 200;
+        k.pushScreen(s);
+        InputState st = makeInput();
+        st.time = 7.0f;
+        k.frame(st);
+        k.script().loadString(R"(
+            -- ogui.dump: the whole tree as text, one line per widget
+            local d = ogui.dump()
+            assert(type(d) == "string")
+            assert(d:find("Button go 10,10 80x24", 1, true))
+            assert(d:find("Label cap 10,44 80x16", 1, true))
+            assert(d:find("focusable", 1, true))
+            assert(not d:find("Label cap.-focusable"))
+            assert(d:find("tab=0", 1, true))
+            -- ogui.inspect: one widget as a table
+            local t = ogui.inspect("go")
+            assert(t.type == "Button" and t.id == "go")
+            assert(t.x == 10 and t.y == 10)
+            assert(t.width == 80 and t.height == 24)
+            assert(t.visible and t.enabled and t.focusable)
+            assert(not t.focused)
+            assert(t.tabindex == 0 and t.children == 0)
+            assert(ogui.inspect("cap").type == "Label")
+            assert(ogui.inspect("cap").tabindex == -1)
+            assert(ogui.inspect("nope") == nil)
+            -- ogui.debug: overlay bits, by number or by name
+            assert(ogui.debug() == 0)
+            assert(ogui.debug("bounds focus") == 5)
+            assert(ogui.debug() == 5)
+            assert(ogui.debug(2) == 2)
+            assert(ogui.debug("all") == 15)
+            assert(ogui.debug("none") == 0)
+            -- ogui.stats: what the last frame cost and drew
+            local st = ogui.stats()
+            assert(st.widgets == 3 and st.tabStops == 1)
+            assert(st.vertices > 0 and st.indices > 0 and st.cmds > 0)
+            assert(st.updateMs >= 0 and st.drawMs >= 0)
+        )", "inspect");
+        CHECK(k.script().errors().empty());
+        CHECK(k.debugOverlay() == 0u);
+        k.popScreen();
+        }
+    }
+
     // ---- tweens: engine-driven, replaced, stopped ----------------------------
     {
         auto& sh = k.script();

@@ -127,6 +127,7 @@ public:
     bool invokeBinding(const std::string& name) {
         auto it = m_bindings.find(name);
         const bool ok = (it != m_bindings.end() && it->second);
+        if (m_debugEvents) addLog("event " + name + (ok ? "" : " (unbound)"));
         if (ok) it->second();
         else m_script.notifyEvent(name, name);
         return ok;
@@ -247,6 +248,49 @@ public:
     void clearLogs() { m_logs.clear(); }
     const std::vector<std::string>& logs() const { return m_logs; }
 
+    // ---- inspection (P4 #27) ----
+    // The current screen's tree as one line per widget, in draw order:
+    //   Button btn_start 10,10 200x50  focusable binding=onStart
+    // Bounds are absolute (parent offsets folded in) and in logical units, so
+    // they can be read straight back into the XML. Empty with no screen.
+    std::string dumpTree() const;
+    // Position of a widget in the Tab order, -1 when it is not a tab stop.
+    int tabOrder(const Widget* w) const;
+    // Short "<Type> <id>" label for a widget ("none" for a null pointer);
+    // what the event log prints.
+    static std::string describe(const Widget* w);
+    // The widget's C++ class name without the namespace ("Button").
+    static std::string typeName(const Widget* w);
+
+    // Overlay bits drawn on top of the tree by buildDrawList().
+    enum DebugFlag : uint32_t {
+        DebugBounds = 1u << 0,   // outline every widget rect
+        DebugLabels = 1u << 1,   // type + id + size on each widget
+        DebugFocus  = 1u << 2,   // tab-order number, ring on the focused one
+        DebugHover  = 1u << 3,   // the widget that would take the next click
+    };
+    void setDebugOverlay(uint32_t flags) { m_debug = flags; invalidate(); }
+    uint32_t debugOverlay() const { return m_debug; }
+    void toggleDebugOverlay(uint32_t flag) {
+        setDebugOverlay(m_debug ^ flag);
+    }
+
+    // What the last frame cost and how much it drew.
+    struct FrameStats {
+        float updateMs = 0.0f;      // input + events + layout
+        float drawMs = 0.0f;        // draw list build (0 when reused)
+        size_t widgets = 0;         // widgets visited in the last build
+        size_t vertices = 0, indices = 0, cmds = 0;
+        size_t tabStops = 0;
+    };
+    const FrameStats& stats() const { return m_stats; }
+
+    // Route clicks, bindings and focus changes through addLog() so the
+    // Console widget shows the event flow. Off by default: logging every
+    // event would flood the history and the draw list.
+    void setDebugEvents(bool on) { m_debugEvents = on; }
+    bool debugEvents() const { return m_debugEvents; }
+
 private:
     void update();
     // Swap the ScriptHost to the current screen's scripts (clear + load).
@@ -257,6 +301,8 @@ private:
     void advanceAnimations(float dt);
     // Widget the popup layer hit at the pointer (nullptr when closed/no hit).
     Widget* popupHitTest(const Offset2D& p) const;
+    // Debug overlay: rects, labels, tab numbers and the hover target.
+    void drawDebugOverlay(Rasterizer& r) const;
 
     std::vector<std::shared_ptr<Screen>> m_screenStack;
     const Theme* m_theme = nullptr;
@@ -302,6 +348,9 @@ private:
     InputState m_prevInput{};
     float m_builtW = -1.0f, m_builtH = -1.0f;   // screen size at last build
     float m_builtScale = -1.0f;                 // dpi scale at last build
+    uint32_t m_debug = 0;                       // DebugFlag bits
+    bool m_debugEvents = false;                 // event flow into addLog()
+    FrameStats m_stats{};
 
     // popup layer
     std::shared_ptr<Widget> m_popup;

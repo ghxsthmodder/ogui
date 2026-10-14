@@ -718,7 +718,16 @@ configuração, ferramentas e aplicações com dados extensos.
 
 ### Fase 5 --- Ferramentas e refinamento
 
--   [ ] Inspeção visual da árvore e das propriedades.
+-   [x] Inspeção visual da árvore e das propriedades: `Kernel::dumpTree()`,
+    `tabOrder()`, `typeName()`/`describe()` (RTTI + demangler, sem overrides por
+    classe), `ogui.dump()`/`ogui.inspect(id)`; sobreposição desenhada no próprio
+    `DrawList` (`DebugBounds`, `DebugLabels`, `DebugFocus`, `DebugHover`,
+    `kernel.setDebugOverlay`, `ogui.debug`); `Kernel::FrameStats` com tempo de
+    update/desenho, widgets, paradas de Tab e tamanho do draw list via
+    `ogui.stats()`; `setDebugEvents()` registra clique, foco e binding no log
+    que o `console` já espelha; `ogui_screenshot --debug` renderiza tudo
+    headless. Faltam diagnóstico de layout/clipping (por que tais bounds, qual
+    clip cortou) e um validador XML de linha de comando.
 -   [x] Tab/Shift+Tab com ordem de foco previsível (document order, com
     wrap), `focusable`, `accessible`/`aria-label`, anel de foco via estados
     visuais `focus:`, Enter/Espaço ativando botão pelo mesmo caminho do

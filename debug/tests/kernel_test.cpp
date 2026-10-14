@@ -3343,6 +3343,116 @@ static void testKeyboardNavigation() {
     CHECK(k.focusedWidget() == kb);                 // focus did not move
 }
 
+static void testInspection() {
+    Kernel k;
+    k.init();
+    XmlParser p;
+    auto res = p.parse(R"XML(<screen id="s">
+  <panel id="root" x="10" y="10" width="200" height="120">
+    <button id="ok" x="4" y="4" width="80" height="24" text="OK" tooltip="apply"/>
+    <label id="hint" x="4" y="40" width="120" height="16" text="hint"/>
+  </panel>
+  <slider id="vol" x="230" y="10" width="100" height="20"/>
+</screen>)XML");
+    CHECK(res.root != nullptr);
+    if (!res.root) return;
+    auto s = std::make_shared<Screen>("s");
+    s->widgets.push_back(res.root);
+    s->width = 800;
+    s->height = 600;
+    k.pushScreen(s);
+
+    InputState st = makeInput();
+    idle(k, st);
+    Widget* ok = k.findWidget("ok");
+    Widget* hint = k.findWidget("hint");
+    Widget* vol = k.findWidget("vol");
+    CHECK(ok && hint && vol);
+    if (!ok || !hint || !vol) return;
+
+    // ---- dump ----
+    const std::string dump = k.dumpTree();
+    CHECK(std::count(dump.begin(), dump.end(), '\n') == 5);  // + 4 children
+    CHECK(dump.find("Panel root") != std::string::npos);
+    CHECK(dump.find("Button ok") != std::string::npos);
+    CHECK(dump.find("Slider vol") != std::string::npos);
+    // Nested bounds are reported twice: parent-relative and absolute.
+    CHECK(dump.find("4,4 80x24 (14,14)") != std::string::npos);
+    CHECK(dump.find("tooltip=apply") != std::string::npos);
+    CHECK(dump.find("tab=0") != std::string::npos);
+    CHECK(dump.find("tab=1") != std::string::npos);
+    CHECK(dump.find("focusable") != std::string::npos);
+    CHECK(k.tabOrder(ok) == 0);
+    CHECK(k.tabOrder(vol) == 1);
+    CHECK(k.tabOrder(hint) == -1);         // a label is not a tab stop
+    CHECK(Kernel::typeName(ok) == "Button");
+    CHECK(Kernel::describe(vol) == "Slider vol");
+    CHECK(Kernel::describe(nullptr) == "none");
+    // Focus shows up in the dump as soon as it moves.
+    k.setFocusWidget(vol);
+    CHECK(k.dumpTree().find("Slider vol 230,10 100x20") != std::string::npos);
+    CHECK(k.dumpTree().find("focused") != std::string::npos);
+    k.setFocusWidget(nullptr);
+
+    // ---- overlay + stats ----
+    const size_t plain = k.buildDrawList().vertices.size();
+    CHECK(k.stats().widgets == 5);
+    CHECK(k.stats().tabStops == 2);
+    CHECK(k.stats().vertices == plain);
+    CHECK(k.stats().cmds == k.drawList().cmds.size());
+    CHECK(k.stats().updateMs >= 0.0f);
+
+    k.setDebugOverlay(Kernel::DebugBounds | Kernel::DebugLabels |
+                      Kernel::DebugFocus | Kernel::DebugHover);
+    CHECK(k.debugOverlay() ==
+          static_cast<uint32_t>(Kernel::DebugBounds | Kernel::DebugLabels |
+                                Kernel::DebugFocus | Kernel::DebugHover));
+    const DrawList& on = k.buildDrawList();
+    CHECK(on.vertices.size() > plain);     // the overlay added geometry
+    for (const auto& c : on.cmds) {
+        CHECK(c.indexCount > 0);
+        CHECK(c.clip.w > 0 && c.clip.h > 0);
+    }
+    k.toggleDebugOverlay(Kernel::DebugLabels);
+    CHECK(k.debugOverlay() == static_cast<uint32_t>(Kernel::DebugBounds |
+                                                    Kernel::DebugFocus |
+                                                    Kernel::DebugHover));
+    k.setDebugOverlay(0);
+    CHECK(k.buildDrawList().vertices.size() == plain);
+
+    // The overlay is decoration: the pointer still reaches the widget under it.
+    pressAt(k, st, 240.0f, 20.0f);
+    releaseAt(k, st);
+    CHECK(k.hoveredWidget() == vol);
+
+    // ---- event log ----
+    k.setDebugEvents(true);
+    CHECK(k.debugEvents());
+    int fired = 0;
+    k.bind("go", [&fired] { ++fired; });
+    k.clearLogs();
+    k.invokeBinding("go");
+    k.invokeBinding("nope");
+    ok->setBinding("go");
+    k.clickWidget(ok);
+    k.setFocusWidget(ok);
+    CHECK(fired == 2);
+    const auto has = [&](const char* needle) {
+        for (const auto& l : k.logs())
+            if (l.find(needle) != std::string::npos) return true;
+        return false;
+    };
+    CHECK(has("event go"));
+    CHECK(has("event nope (unbound)"));
+    CHECK(has("click Button ok -> go"));
+    CHECK(has("focus Button ok"));
+    // Off again: the history stops growing.
+    k.setDebugEvents(false);
+    const size_t n = k.logs().size();
+    k.clickWidget(ok);
+    CHECK(k.logs().size() == n);
+}
+
 static void testCommandPalette() {
     Kernel k;
     k.init();
@@ -3613,6 +3723,7 @@ int main() {
     testCommandPalette();
     testKeyboardNavigation();
     testDpiScale();
+    testInspection();
     testHost();
 
     if (g_failures) {

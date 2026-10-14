@@ -2,9 +2,15 @@
 #include "ogui/rasterizer.hpp"
 #include "ogui/widgets.hpp"
 #include <algorithm>
-#include <cmath>
 #include <chrono>
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <typeinfo>
+#if defined(__GNUC__) || defined(__clang__)
+#include <cxxabi.h>
+#endif
 
 namespace ogui {
 
@@ -72,6 +78,7 @@ Widget* hitTestTree(const std::vector<Widget::Ptr>& roots, const Offset2D& p,
 
 void setFocus(Kernel& k, Widget*& focus, Widget* target) {
     if (focus == target) return;
+    if (k.debugEvents()) k.addLog("focus " + Kernel::describe(target));
     if (focus) {
         std::string id = focus->id();
         focus->onFocus(false);
@@ -128,12 +135,164 @@ void Kernel::setFocusWidget(Widget* w) {
     invalidate();
 }
 
+// ---- inspection (P4 #27) --------------------------------------------------
+
+// Human-readable class name for the dump and the overlay labels. GCC/Clang
+// mangle them, so the demangler is used where it exists; the raw id is a
+// perfectly readable fallback elsewhere.
+std::string Kernel::typeName(const Widget* w) {
+    if (!w) return "none";
+    const std::type_info& ti = typeid(*w);
+#if defined(__GNUC__) || defined(__clang__)
+    int status = 0;
+    char* dem = abi::__cxa_demangle(ti.name(), nullptr, nullptr, &status);
+    std::string out = dem ? dem : ti.name();
+    std::free(dem);
+    if (out.rfind("ogui::", 0) == 0) out.erase(0, 6);
+    return out;
+#else
+    return ti.name();
+#endif
+}
+
+std::string Kernel::describe(const Widget* w) {
+    if (!w) return "none";
+    std::string out = typeName(w);
+    if (!w->id().empty()) out += ' ' + w->id();
+    return out;
+}
+
+std::string Kernel::dumpTree() const {
+    auto screen = currentScreen();
+    if (!screen) return std::string();
+
+    std::vector<Widget*> order;
+    collectFocusable(screen->widgets, order);
+
+    std::string out;
+    std::function<void(const Widget::Ptr&, int)> walk =
+        [&](const Widget::Ptr& w, int depth) {
+            if (!w) return;
+            out.append(static_cast<size_t>(depth) * 2u, ' ');
+            const Rect b = w->bounds();
+            const Offset2D o = w->absoluteOrigin();
+            char head[160];
+            std::snprintf(head, sizeof head, "%s %s %.0f,%.0f %.0fx%.0f (%.0f,%.0f)",
+                          typeName(w.get()).c_str(),
+                          w->id().empty() ? "-" : w->id().c_str(), b.x, b.y, b.w,
+                          b.h, o.x, o.y);
+            out += head;
+            if (!w->isVisible()) out += " hidden";
+            if (!w->isEnabled()) out += " disabled";
+            if (w->isFocusable()) out += " focusable";
+            if (w.get() == m_focus) out += " focused";
+            if (w.get() == m_hovered) out += " hovered";
+            if (w.get() == m_pressed) out += " pressed";
+            for (size_t i = 0; i < order.size(); ++i) {
+                if (order[i] != w.get()) continue;
+                char tab[32];
+                std::snprintf(tab, sizeof tab, " tab=%zu", i);
+                out += tab;
+                break;
+            }
+            if (!w->binding().empty()) out += " binding=" + w->binding();
+            if (!w->accessibleName().empty())
+                out += " accessible=" + w->accessibleName();
+            if (!w->tooltip().empty()) out += " tooltip=" + w->tooltip();
+            out += '\n';
+            for (const auto& c : w->children()) walk(c, depth + 1);
+        };
+    for (const auto& w : screen->widgets) walk(w, 0);
+    return out;
+}
+
+int Kernel::tabOrder(const Widget* w) const {
+    auto screen = currentScreen();
+    if (!screen || !w) return -1;
+    std::vector<Widget*> order;
+    collectFocusable(screen->widgets, order);
+    for (size_t i = 0; i < order.size(); ++i)
+        if (order[i] == w) return static_cast<int>(i);
+    return -1;
+}
+
+// Authoring geometry on top of a finished frame. Everything here is debug
+// output: it is drawn in logical units like the widgets, sits above the toast
+// layer and never takes part in hit-testing.
+void Kernel::drawDebugOverlay(Rasterizer& r) const {
+    auto screen = currentScreen();
+    if (!screen || m_debug == 0) return;
+    const Palette& pal = palette();
+    constexpr int kFont = 10;
+    const Font* f = r.resolveFont("mono", kFont);
+    if (!f) f = r.resolveFont("sans", kFont);
+
+    // The widget a click would land on next. Hit areas are often whole
+    // containers, so the fill stays faint and the outline carries the signal.
+    if (m_debug & DebugHover) {
+        if (Widget* h = m_hovered) {
+            const Offset2D o = h->absoluteOrigin();
+            const Rect b = h->bounds();
+            const Rect box{o.x, o.y, b.w, b.h};
+            r.drawRect(box, withAlpha(pal.info, 38));
+            r.drawRectBorder(box, pal.info, 2.0f, 0.0f);
+        }
+    }
+
+    if (m_debug & (DebugBounds | DebugLabels)) {
+        const Color tints[4] = {pal.accent, pal.info, pal.focus, pal.warn};
+        std::function<void(const Widget::Ptr&, int)> walk =
+            [&](const Widget::Ptr& w, int depth) {
+                if (!w || !w->isVisible()) return;
+                const Offset2D o = w->absoluteOrigin();
+                const Rect b = w->bounds();
+                const Rect box{o.x, o.y, b.w, b.h};
+                const Color& col = tints[static_cast<size_t>(depth) % 4];
+                if (m_debug & DebugBounds)
+                    r.drawRectBorder(box, withAlpha(col, 200), 1.0f, 0.0f);
+                if ((m_debug & DebugLabels) && f && box.w > 24.0f &&
+                    box.h > kFont) {
+                    char label[96];
+                    std::snprintf(label, sizeof label, "%s%s %.0fx%.0f",
+                                  typeName(w.get()).c_str(),
+                                  w->id().empty() ? "" : ("#" + w->id()).c_str(),
+                                  b.w, b.h);
+                    r.drawTextShifted(label, box.x + 1.0f, box.y, kFont, *f,
+                                      withAlpha(pal.textBright, 235));
+                }
+                for (const auto& c : w->children()) walk(c, depth + 1);
+            };
+        for (const auto& w : screen->widgets) walk(w, 0);
+    }
+
+    if ((m_debug & DebugFocus) && f) {
+        std::vector<Widget*> order;
+        collectFocusable(screen->widgets, order);
+        for (size_t i = 0; i < order.size(); ++i) {
+            Widget* w = order[i];
+            const Offset2D o = w->absoluteOrigin();
+            const Rect b = w->bounds();
+            const bool focused = (w == m_focus);
+            const Rect box{o.x, o.y, b.w, b.h};
+            r.drawRectBorder(box, focused ? pal.focus : withAlpha(pal.focus, 130),
+                             focused ? 2.0f : 1.0f, 0.0f);
+            char tag[24];
+            std::snprintf(tag, sizeof tag, "%zu", i);
+            r.drawTextShifted(tag, box.x + 2.0f, box.y + 1.0f, kFont, *f,
+                              focused ? pal.white : pal.focus);
+        }
+    }
+}
+
 // The click path shared by mouse release and keyboard activation: a named
 // binding (onclick=) wins over the id binding, then a C++ handler, then the
 // screen's Lua ogui_on_click hook.
 void Kernel::clickWidget(Widget* w, const Offset2D& point) {
     if (!w) return;
     m_clickTarget = w;
+    if (m_debugEvents)
+        addLog("click " + describe(w) +
+               (w->binding().empty() ? "" : " -> " + w->binding()));
     auto lookup = [&](const std::string& key) -> std::function<void()> {
         auto it = m_bindings.find(key);
         return (it != m_bindings.end()) ? it->second : nullptr;
@@ -172,6 +331,9 @@ void Kernel::init() {
     m_prevChar = 0;
     for (bool& k : m_prevKeys) k = false;
     m_bindings.clear();
+    m_debug = 0;
+    m_debugEvents = false;
+    m_stats = FrameStats{};
     m_script.clear();
     m_script.bindKernel(this);
     m_drawList.clear();
@@ -226,7 +388,10 @@ void Kernel::run(const InputSource& input, const std::function<void()>& draw) {
 
 void Kernel::frame(const InputState& input) {
     m_input = input;
+    const auto t0 = std::chrono::steady_clock::now();
     update();
+    m_stats.updateMs = std::chrono::duration<float, std::milli>(
+                           std::chrono::steady_clock::now() - t0).count();
     buildDrawList();
 }
 
@@ -614,6 +779,7 @@ void Kernel::update() {
 
 // ---- drawing --------------------------------------------------------------
 const DrawList& Kernel::buildDrawList() {
+    const auto t0 = std::chrono::steady_clock::now();
     auto screen = currentScreen();
     if (!screen) {
         m_drawList.clear();
@@ -626,7 +792,11 @@ const DrawList& Kernel::buildDrawList() {
         sc != m_builtScale) {
         m_dirty = true;   // host resized the viewport or changed the dpi scale
     }
-    if (!m_dirty) return m_drawList;   // nothing changed: reuse last frame
+    if (!m_dirty) {
+        m_stats.drawMs = std::chrono::duration<float, std::milli>(
+                             std::chrono::steady_clock::now() - t0).count();
+        return m_drawList;   // nothing changed: reuse last frame
+    }
 
     Rasterizer& r = m_raster;
     // The one scale hand-off: the rasterizer multiplies logical geometry into
@@ -721,6 +891,8 @@ const DrawList& Kernel::buildDrawList() {
         }
     }
 
+    if (m_debug) drawDebugOverlay(r);
+
     r.endFrame();
     // Swap instead of move: the rasterizer keeps the previous frame's
     // reserved vectors and refills them without reallocating.
@@ -730,6 +902,19 @@ const DrawList& Kernel::buildDrawList() {
     m_builtW = screen->width;
     m_builtH = screen->height;
     m_builtScale = sc;
+    {
+        std::vector<Widget*> order;
+        collectFocusable(screen->widgets, order);
+        m_stats.tabStops = order.size();
+        m_stats.widgets = 0;
+        forEachWidget(screen->widgets,
+                      [&](const Widget::Ptr&) { ++m_stats.widgets; });
+    }
+    m_stats.vertices = m_drawList.vertices.size();
+    m_stats.indices = m_drawList.indices.size();
+    m_stats.cmds = m_drawList.cmds.size();
+    m_stats.drawMs = std::chrono::duration<float, std::milli>(
+                         std::chrono::steady_clock::now() - t0).count();
     return m_drawList;
 }
 

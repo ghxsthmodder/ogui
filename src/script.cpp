@@ -891,6 +891,122 @@ int l_off(lua_State* L) {
     return 1;
 }
 
+// ---- inspection & debug (P4 #27) ------------------------------------------
+
+// ogui.dump() -> the screen's widget tree, one line per widget.
+int l_dump(lua_State* L) {
+    Kernel* k = kernelOf(L);
+    const std::string out = k ? k->dumpTree() : std::string();
+    lua_pushlstring(L, out.data(), out.size());
+    return 1;
+}
+
+// ogui.inspect(id) -> table with the widget's type, geometry and state, or
+// nil when the id is unknown. Numbers are logical units, absolute origin
+// folded in for x/y.
+int l_inspect(lua_State* L) {
+    const char* id = luaL_checkstring(L, 1);
+    Kernel* k = kernelOf(L);
+    Widget* w = k ? k->findWidget(id) : nullptr;
+    if (!w) { lua_pushnil(L); return 1; }
+
+    lua_newtable(L);
+    const Offset2D o = w->absoluteOrigin();
+    const Rect b = w->bounds();
+    auto str = [&](const char* key, const std::string& v) {
+        lua_pushlstring(L, v.data(), v.size());
+        lua_setfield(L, -2, key);
+    };
+    auto num = [&](const char* key, double v) {
+        lua_pushnumber(L, v);
+        lua_setfield(L, -2, key);
+    };
+    auto flag = [&](const char* key, bool v) {
+        lua_pushboolean(L, v ? 1 : 0);
+        lua_setfield(L, -2, key);
+    };
+    str("type", Kernel::typeName(w));
+    str("id", w->id());
+    str("binding", w->binding());
+    str("accessible", w->accessibleName());
+    str("tooltip", w->tooltip());
+    num("x", o.x);
+    num("y", o.y);
+    num("width", b.w);
+    num("height", b.h);
+    flag("visible", w->isVisible());
+    flag("enabled", w->isEnabled());
+    flag("focusable", w->isFocusable());
+    flag("focused", k->focusedWidget() == w);
+    flag("hovered", k->hoveredWidget() == w);
+    num("tabindex", k->tabOrder(w));
+    num("children", static_cast<double>(w->children().size()));
+    return 1;
+}
+
+namespace {
+// "bounds labels focus hover" (also , ; | and none/all) -> overlay bits.
+uint32_t parseDebugFlags(lua_State* L, int idx) {
+    const char* s = lua_tostring(L, idx);
+    std::string spec = s ? s : "";
+    for (char& c : spec)
+        if (c == ',' || c == ';' || c == '|' || c == '+') c = ' ';
+    uint32_t bits = 0;
+    size_t p = 0;
+    while (p < spec.size()) {
+        while (p < spec.size() && spec[p] == ' ') ++p;
+        size_t e = spec.find(' ', p);
+        if (e == std::string::npos) e = spec.size();
+        const std::string word = spec.substr(p, e - p);
+        p = e;
+        if (word == "bounds") bits |= Kernel::DebugBounds;
+        else if (word == "labels") bits |= Kernel::DebugLabels;
+        else if (word == "focus") bits |= Kernel::DebugFocus;
+        else if (word == "hover") bits |= Kernel::DebugHover;
+        else if (word == "all")
+            bits = Kernel::DebugBounds | Kernel::DebugLabels |
+                   Kernel::DebugFocus | Kernel::DebugHover;
+    }
+    return bits;
+}
+} // namespace
+
+// ogui.debug() -> current overlay bits; ogui.debug(12) or
+// ogui.debug("bounds focus") sets them and returns the new bits.
+int l_debug(lua_State* L) {
+    Kernel* k = kernelOf(L);
+    if (!k) { lua_pushinteger(L, 0); return 1; }
+    if (!lua_isnoneornil(L, 1)) {
+        uint32_t bits = 0;
+        if (lua_type(L, 1) == LUA_TNUMBER)
+            bits = static_cast<uint32_t>(lua_tointeger(L, 1));
+        else
+            bits = parseDebugFlags(L, 1);
+        k->setDebugOverlay(bits);
+    }
+    lua_pushinteger(L, k->debugOverlay());
+    return 1;
+}
+
+// ogui.stats() -> last frame's timings and draw list sizes.
+int l_stats(lua_State* L) {
+    Kernel* k = kernelOf(L);
+    lua_newtable(L);
+    const Kernel::FrameStats s = k ? k->stats() : Kernel::FrameStats{};
+    auto num = [&](const char* key, double v) {
+        lua_pushnumber(L, v);
+        lua_setfield(L, -2, key);
+    };
+    num("updateMs", s.updateMs);
+    num("drawMs", s.drawMs);
+    num("widgets", static_cast<double>(s.widgets));
+    num("vertices", static_cast<double>(s.vertices));
+    num("indices", static_cast<double>(s.indices));
+    num("cmds", static_cast<double>(s.cmds));
+    num("tabStops", static_cast<double>(s.tabStops));
+    return 1;
+}
+
 const luaL_Reg oguiLib[] = {
     {"set",        l_set},
     {"get",        l_get},
@@ -922,6 +1038,10 @@ const luaL_Reg oguiLib[] = {
     {"children",   l_children},
     {"parent",     l_parent},
     {"index",      l_index},
+    {"dump",       l_dump},
+    {"inspect",    l_inspect},
+    {"debug",      l_debug},
+    {"stats",      l_stats},
     {"on",         l_on},
     {"off",        l_off},
     {nullptr, nullptr},

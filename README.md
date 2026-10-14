@@ -30,8 +30,13 @@ creates for you (`ogui::Host`, a built-in Win32/WGL window and event loop).
   engine-driven `tween` animations, `after`/`every` timers, dynamic
   widget creation (`add`/`remove`/`clear`), tree navigation
   (`children`/`parent`/`index`), per-widget event
-  listeners (`ogui.on`/`ogui.off`) and declarative data bindings
-  (`ogui.bind`/`ogui.unbind`).
+  listeners (`ogui.on`/`ogui.off`), declarative data bindings
+  (`ogui.bind`/`ogui.unbind`) and inspection
+  (`ogui.dump`/`inspect`/`debug`/`stats`).
+* **Debug tools** — a text dump of the widget tree, per-widget inspection and
+  a draw-list overlay (bounds, labels, focus order, hover) plus frame timing
+  and an opt-in event log; the same hooks from C++ and Lua, and
+  `ogui_screenshot --debug` renders them headlessly.
 * **Static library, few dependencies** — stb and Lua are vendored; the
   parser is a hand-rolled tokenizer with no third-party code.
 
@@ -513,6 +518,47 @@ A `scale` of 0, negative or NaN degrades to 1, so a host that never sets it
 behaves exactly as before. `ogui::Host` (Win32) reads the window dpi every
 frame and writes it into `Screen::scale`; a custom host does the same with
 whatever its toolkit calls the content scale factor.
+
+## Debugging and inspection
+
+Development tools ride on the machinery that is already there: the widget tree
+the parser built, the Tab order `focusNext()` walks, the draw list
+`buildDrawList()` produces and the log `Console` mirrors. Nothing needs a live
+GPU or a window — `examples/screenshot.cpp` renders every layer headlessly.
+
+```cpp
+kernel.setDebugOverlay(ogui::Kernel::DebugBounds | ogui::Kernel::DebugLabels |
+                       ogui::Kernel::DebugFocus  | ogui::Kernel::DebugHover);
+std::puts(kernel.dumpTree().c_str());   // whole tree, one line per widget
+std::puts(ogui::Kernel::describe(kernel.focusedWidget()).c_str());  // "Button ok"
+int stop = kernel.tabOrder(kernel.focusedWidget());   // -1 when not in the order
+
+const auto& s = kernel.stats();   // updateMs, drawMs, widgets, tabStops,
+                                  // vertices, indices, cmds
+kernel.setDebugEvents(true);      // click / focus / binding -> Kernel::addLog
+```
+
+`dumpTree()` prints type, id, parent-relative bounds and absolute origin, then
+the state flags (`hidden`, `disabled`, `focusable`, `focused`, `hovered`,
+`pressed`), the `tab=` index and the `binding=`/`accessible=`/`tooltip=`
+attributes. Types come from RTTI demangled once in `Kernel::typeName()`, so no
+widget class has to carry a name. The overlay draws into the same `DrawList`,
+so it is captured by screenshots and by the software renderer exactly like any
+other quad.
+
+From Lua the same four knobs are `ogui.dump()`, `ogui.inspect(id)`,
+`ogui.debug(bits|"bounds labels focus hover all none")` and `ogui.stats()`.
+The headless render is:
+
+```sh
+./build/ogui_screenshot dbg.png 900 640 1 --debug          # all layers
+./build/ogui_screenshot dbg.png 900 640 1 --debug focus    # pick layers
+```
+
+What is not built yet: layout/clipping diagnostics (why a widget ended up at
+those bounds, which clip culled it) and an XML validator wired into the editor
+flow — `XmlParser` already reports `errors`/`warnings`, there is just no
+standalone driver for them.
 
 ## Clipboard
 
