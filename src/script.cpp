@@ -698,6 +698,18 @@ void ScriptHost::notifyLoad() {
     callHook("ogui_on_load", [](lua_State*) {});
 }
 
+void ScriptHost::notifyShow() {
+    callHook("ogui_on_show", [](lua_State*) {});
+}
+
+void ScriptHost::notifyHide() {
+    callHook("ogui_on_hide", [](lua_State*) {});
+}
+
+void ScriptHost::notifyUnload() {
+    callHook("ogui_on_unload", [](lua_State*) {});
+}
+
 void ScriptHost::notifyUpdate(float t, float dt) {
     advanceTweens(dt);   // engine-side: run even with no ogui_on_update hook
     advanceTimers(dt);

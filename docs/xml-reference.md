@@ -299,14 +299,18 @@ calls the script — never the other way around:
   isFile}`); hosts move them onto `Screen::scripts`.
 - The `Kernel` clears its `ScriptHost` and runs the current screen's
   chunks on every `pushScreen`/`popScreen`/`switchScreen`, so hooks always
-  belong to the visible screen. Each load runs the chunk and then its
-  `ogui_on_load`.
+  belong to the visible screen. A switch fires the outgoing script's
+  `ogui_on_hide` → `ogui_on_unload`, then the incoming chunks run (each
+  followed by its `ogui_on_load`) and finish with `ogui_on_show`.
 
 Hooks (plain global functions, all optional):
 
 | Hook | Fired |
 |---|---|
 | `ogui_on_load()` | right after the chunk runs |
+| `ogui_on_show()` | after the screen's chunks loaded, when it becomes the foreground screen |
+| `ogui_on_hide()` | when the screen loses the foreground |
+| `ogui_on_unload()` | right before its script state is destroyed (always after `ogui_on_hide`: screen script state is rebuilt on every switch, not persisted) |
 | `ogui_on_update(t, dt)` | every frame (`t` = seconds since kernel start) |
 | `ogui_on_click(key)` | left-click released on a widget with **no** C++ binding (onclick name, else id) |
 | `ogui_on_event(name, key)` | an `invokeBinding(name)` with no C++ binding (C++ wins; scripts see the leftovers) |

@@ -25,6 +25,12 @@ class Widget;
 // ogui_on_ prefix is the naming convention: game code may share the Lua
 // state, so bare names like on_update could collide with game globals.
 //   ogui_on_load()            once, right after the chunk runs
+//   ogui_on_show()            after the screen's chunks loaded, when it
+//                             becomes the foreground screen
+//   ogui_on_hide()            when the screen loses the foreground
+//   ogui_on_unload()          right before its script state is destroyed
+//                             (always after ogui_on_hide: screen state is
+//                             not persisted across switches)
 //   ogui_on_update(t, dt)     every frame (t = seconds since kernel start)
 //   ogui_on_click(key)        left-click released on a widget whose C++
 //                             binding/handler did not fire (onclick name,
@@ -104,6 +110,9 @@ public:
 
     // ---- engine -> script (no-ops when the hook is not a function) ----
     void notifyLoad();
+    void notifyShow();
+    void notifyHide();
+    void notifyUnload();
     void notifyUpdate(float t, float dt);
     void notifyClick(const std::string& key);
     void notifyEvent(const std::string& name, const std::string& key);

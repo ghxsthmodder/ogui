@@ -150,6 +150,13 @@ void Kernel::frame(const InputState& input) {
 }
 
 void Kernel::reloadScreenScripts() {
+    // The visible screen's script state is destroyed on every switch (it is
+    // rebuilt from the Screen's chunks), so hide is always followed by
+    // unload; ogui_on_show closes the loop on the incoming side.
+    if (m_script.state()) {
+        m_script.notifyHide();
+        m_script.notifyUnload();
+    }
     m_script.clear();
     m_script.bindKernel(this);
     auto screen = currentScreen();
@@ -158,6 +165,7 @@ void Kernel::reloadScreenScripts() {
         if (isFile) m_script.loadFile(payload);
         else m_script.loadString(payload, screen->id);
     }
+    m_script.notifyShow();
     invalidate();
 }
 

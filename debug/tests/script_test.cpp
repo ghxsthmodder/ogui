@@ -422,6 +422,51 @@ int main() {
         k.popScreen();
     }
 
+    // ---- screen lifecycle hooks: show / hide / unload -------------------------
+    {
+        XmlParser p;
+        auto mkScreen = [&](const char* id, const char* tag) {
+            auto res = p.parse(std::string("<screen id=\"") + id + "\">" +
+              "<label id=\"l\" text=\"x\" x=\"0\" y=\"0\" width=\"50\" height=\"20\"/>" +
+              "<script>" +
+              "function ogui_on_load() ogui.log('" + tag + ":load') end " +
+              "function ogui_on_show() ogui.log('" + tag + ":show') end " +
+              "function ogui_on_hide() ogui.log('" + tag + ":hide') end " +
+              "function ogui_on_unload() ogui.log('" + tag + ":unload') end" +
+              "</script></screen>");
+            assert(res.root);
+            auto s = std::make_shared<Screen>(id);
+            s->widgets.push_back(res.root);
+            s->scripts = std::move(res.scripts);
+            s->width = 800; s->height = 600;
+            return s;
+        };
+        auto lastLog = [&](const std::string& msg) {
+            const auto& logs = k.logs();   // addLog prepends: newest first
+            for (size_t i = 0; i < logs.size(); ++i)
+                if (logs[i] == msg) return static_cast<int>(i);
+            return -1;
+        };
+        auto after = [](int a, int b) { return a >= 0 && b >= 0 && a < b; };
+        auto sa = mkScreen("lifeA", "A");
+        auto sb = mkScreen("lifeB", "B");
+        k.pushScreen(sa);
+        CHECK(k.script().errors().empty());
+        CHECK(lastLog("A:load") >= 0);
+        CHECK(after(lastLog("A:show"), lastLog("A:load")));
+        k.pushScreen(sb);
+        CHECK(after(lastLog("A:hide"), lastLog("A:show")));
+        CHECK(after(lastLog("A:unload"), lastLog("A:hide")));
+        CHECK(after(lastLog("B:load"), lastLog("A:unload")));
+        CHECK(after(lastLog("B:show"), lastLog("B:load")));
+        k.popScreen();   // B is dropped, A is rebuilt from its chunks
+        CHECK(after(lastLog("B:hide"), lastLog("B:show")));
+        CHECK(after(lastLog("B:unload"), lastLog("B:hide")));
+        CHECK(after(lastLog("A:load"), lastLog("B:unload")));
+        CHECK(after(lastLog("A:show"), lastLog("A:load")));
+        k.popScreen();
+    }
+
     // ---- ogui.quit ------------------------------------------------------------
     {
         CHECK(!k.quitRequested());
