@@ -226,8 +226,9 @@ static void testForgetDescendants() {
     k.buildDrawList();
 }
 
-// A press held on a descendant, then the ancestor goes: the release frame
-// calls onPointerUp on the widget the removal freed.
+// The same removal under a finger that keeps moving: updatePan walks the
+// pressed widget and then every ancestor looking for the one that scrolls, and
+// the release hands onPointerUp to whatever the capture still caches.
 static void testForgetPressedDescendant() {
     Kernel k;
     k.init();
@@ -240,8 +241,10 @@ static void testForgetPressedDescendant() {
     idle(k, st);
     pressAt(k, st, 120.0f, 102.0f);   // hold the slider down
     runLua(k, "assert(ogui.remove(\"box\"))");
-    releaseAt(k, st);
     CHECK(k.focusedWidget() == nullptr);
+    st.mouseX = 160.0f;               // past the pan slop, still held
+    k.frame(st);
+    releaseAt(k, st);
     idle(k, st);
     k.buildDrawList();
 }
