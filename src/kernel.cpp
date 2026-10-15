@@ -392,6 +392,13 @@ void Kernel::init() {
     m_input.mouseButton = -1;
     m_input.lastChar = 0;
 
+    m_touchPrimary = -1;
+    m_touchDown = false;
+    m_touchParked = false;
+    m_touchCancelled = false;
+    m_touchX = m_touchY = 0.0f;
+    m_rawMouseKnown = false;
+
     m_popup.reset();
     m_tipFade = 0.0f;
     m_prevTime = 0.0f;
@@ -644,7 +651,81 @@ void Kernel::eachWidget(const std::function<void(Widget*)>& fn) const {
 }
 
 // ---- input ----------------------------------------------------------------
+// Widgets speak one pointer: a position, a button, press and release edges.
+// A touch host speaks a list of fingers, so the list is folded into that
+// pointer here and nowhere else: hit-testing, capture, click chaining and the
+// Lua input queries then work under a finger without any widget having to know
+// what a finger is, and a second finger cannot steal the drag the first one
+// owns.
+void Kernel::applyTouchStream() {
+    const float rawX = m_input.mouseX;
+    const float rawY = m_input.mouseY;
+    const bool rawDown = m_input.mouseDown[0];
+    const int rawBtn = m_input.mouseButton;
+    // Anything new from the host about the mouse since the previous frame. A
+    // touch-only host never moves these fields, which is how the bridge learns
+    // that a machine with both has handed the pointer back to the mouse.
+    const bool mouseSpoke = !m_rawMouseKnown || rawX != m_rawMouseX ||
+                            rawY != m_rawMouseY || rawDown != m_rawMouseDown ||
+                            rawBtn != m_rawMouseButton;
+    m_rawMouseX = rawX; m_rawMouseY = rawY; m_rawMouseDown = rawDown;
+    m_rawMouseButton = rawBtn; m_rawMouseKnown = true;
+
+    if (m_input.touchCount > 0) {
+        const int n = std::clamp(m_input.touchCount, 1,
+                                 InputState::kMaxTouchPoints);
+        int pick = -1;
+        for (int i = 0; i < n; ++i) {
+            if (m_touchDown && m_input.touches[i].id == m_touchPrimary) pick = i;
+        }
+        // Either the first finger of a sequence, or the one that owns the
+        // pointer lifted and a finger that stayed down carries on with the
+        // same press -- the release edge belongs to the drag, not to the id.
+        if (pick < 0) pick = 0;
+        m_touchDown = true;
+        m_touchParked = false;
+        m_touchPrimary = m_input.touches[pick].id;
+        m_touchX = m_input.touches[pick].x;
+        m_touchY = m_input.touches[pick].y;
+        m_input.mouseX = m_touchX;
+        m_input.mouseY = m_touchY;
+        m_input.mouseDown[0] = true;
+        m_input.mouseButton = Mouse_Left;
+        return;
+    }
+
+    if (m_touchDown) {
+        // The last finger left. The release has to land where it left, on the
+        // widget that was dragged there, so this one frame reports that
+        // position with the button up.
+        m_touchDown = false;
+        m_touchParked = true;
+        m_touchPrimary = -1;
+        m_touchCancelled = m_input.touchCancelled;
+        m_input.mouseX = m_touchX;
+        m_input.mouseY = m_touchY;
+        m_input.mouseDown[0] = false;
+        m_input.mouseButton = Mouse_Left;
+        return;
+    }
+
+    if (m_touchParked && mouseSpoke) {
+        m_touchParked = false;
+        return;
+    }
+    if (m_touchParked) {
+        // Nothing on the screen and no mouse news: there is no pointer. Saying
+        // so keeps the widget under the last tap from staying drawn as hovered,
+        // which is what a finger does to a `hover:` state.
+        m_input.mouseX = -1.0f;
+        m_input.mouseY = -1.0f;
+        m_input.mouseDown[0] = false;
+        m_input.mouseButton = -1;
+    }
+}
+
 void Kernel::update() {
+    applyTouchStream();
     auto screen = currentScreen();
     if (!screen || screen->widgets.empty()) return;
 
@@ -656,7 +737,8 @@ void Kernel::update() {
         if (a.mouseX != b.mouseX || a.mouseY != b.mouseY ||
             a.mouseButton != b.mouseButton ||
             a.scrollX != b.scrollX || a.scrollY != b.scrollY ||
-            a.lastChar != b.lastChar ||
+            a.lastChar != b.lastChar || a.touchCount != b.touchCount ||
+            a.touchCancelled != b.touchCancelled ||
             std::memcmp(a.mouseDown, b.mouseDown, sizeof(a.mouseDown)) != 0 ||
             std::memcmp(a.keyDown, b.keyDown, sizeof(a.keyDown)) != 0 ||
             std::memcmp(a.keyRepeat, b.keyRepeat, sizeof(a.keyRepeat)) != 0) {
@@ -796,13 +878,19 @@ void Kernel::update() {
     }
 
     if (releasedEdge) {
+        // A pointer the system took away is not a click. The widget still gets
+        // its release, because a slider thumb or a text selection has to let go
+        // either way.
+        const bool taken = m_touchCancelled;
+        m_touchCancelled = false;
         if (m_captured) {
             m_captured->onPointerUp(static_cast<MouseButton>(
                 m_pressButton >= 0 ? m_pressButton : 0));
         }
         // Click = press and release happened on the same widget, with the
         // left button (a right-click belongs to the context menu).
-        if (m_pressed && m_pressed == m_hovered && m_pressButton != Mouse_Right)
+        if (!taken && m_pressed && m_pressed == m_hovered &&
+            m_pressButton != Mouse_Right)
             clickWidget(m_pressed, p);
         m_captured = nullptr;
         m_pressed = nullptr;

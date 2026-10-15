@@ -905,9 +905,20 @@ compatibilidade e capacidade de manutenção.
     (`eglCreateWindowSurface` sobre o `ANativeWindow`, no lugar do pbuffer que
     o teste usa), um config EGL cujo formato de framebuffer o swap aceite, e
     leitura dos layouts por `AAsset` em vez de sistema de arquivos.
--   [ ] Toque no `InputState`: o estado hoje descreve um ponteiro só. Faltam os
-    ids de `AMotionEvent`, `ACTION_CANCEL` a devolver a captura, e os gestos que
-    o `Kernel` não sintetiza --- fling com inércia, pressionar-e-segurar, pinça.
+-   [x] Toque no `InputState`: a lista de dedos entra pelo estado
+    (`touches[]` com o id do `AMotionEvent` e a posição em pixels de
+    dispositivo, `touchCount`, `touchCancelled`) e o `Kernel` a dobra no único
+    ponteiro que a árvore já fala (`applyTouchStream`), então nenhum widget
+    precisa saber o que é um dedo. O dedo que começa um arrasto fica com ele
+    --- um segundo dedo não rouba a captura, e se o dono levantar com outro
+    ainda embaixo o mesmo arrasto continua --- o levantar do último dedo libera
+    o widget no lugar certo (o toque vira clique) e `touchCancelled` devolve a
+    captura sem clicar. Sem dedo na tela o ponteiro sai da árvore, porque um
+    estado `hover:` pintado no último item tocado é a pior marca que um toque
+    pode deixar. Numa máquina com os dois, o mouse recupera o ponteiro no
+    primeiro movimento dele. Testes em `debug/tests/touch_test.cpp`.
+-   [ ] Gestos que o `Kernel` ainda não sintetiza: pressionar-e-segurar, fling
+    com inércia depois do dedo sair e pinça (escala + rotação de dois dedos).
 -   [ ] Entrada de texto pelo IME: `InputState::lastChar` chega de eventos de
     teclado, e o NDK não expõe o método de entrada a código nativo --- um campo
     de texto no Android precisa da ponte JNI para a `InputMethodManager`, dos

@@ -184,6 +184,9 @@ if(OGUI_BUILD_TESTS)
     target_compile_definitions(ogui_kernel_test PRIVATE
         OGUI_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets")
 
+    add_executable(ogui_touch_test debug/tests/touch_test.cpp)
+    target_link_libraries(ogui_touch_test PRIVATE ogui)
+
     # Every manifest screen must parse and keep the ids the gallery binds to.
     add_executable(ogui_screens_test debug/tests/screens_test.cpp)
     target_link_libraries(ogui_screens_test PRIVATE ogui)
@@ -270,6 +273,7 @@ if(OGUI_BUILD_TESTS)
         add_test(NAME custom-widget COMMAND ogui_custom_widget)
     endif()
     add_test(NAME kernel COMMAND ogui_kernel_test)
+    add_test(NAME touch COMMAND ogui_touch_test)
     add_test(NAME unicode COMMAND ogui_unicode_test)
     add_test(NAME screens COMMAND ogui_screens_test)
     add_test(NAME scrollbar COMMAND ogui_scrollbar_test)

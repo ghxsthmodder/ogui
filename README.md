@@ -129,7 +129,7 @@ Win32 + WGL demo directly (the project compiles the library sources itself).
 cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-bad,
                                         # custom-widget, kernel, unicode, screens,
                                         # scrollbar, script, properties, templates,
-                                        # examples, golden, gl
+                                        # examples, golden, gl, touch
 ```
 
 * `parser` — XML tokenizer, attributes, styles, error reporting.
@@ -146,6 +146,14 @@ cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-b
   the walk reaches each ancestor in order, `stopPropagation` cuts it, raw wheel
   input never bubbles, and a handler may remove the widget the event is about
   mid-walk.
+* `touch` — the finger list folded into the kernel's pointer: a tap is a click
+  at logical coordinates whatever the screen scale, a drag keeps its capture
+  past the widget's edge and does not click when released elsewhere, a second
+  finger cannot steal the press and the drag survives the owning finger
+  lifting, `touchCancelled` releases without clicking, no widget is left
+  hovered after the last finger leaves, the mouse takes the pointer back when
+  it moves on a machine that has both, and a mouse-only host behaves exactly
+  as before.
 * `unicode` — on-demand glyph baking (a late glyph never moves an early one),
   the fallback chain between faces, the `.notdef` placeholder, zero-advance
   combining marks, CJK line breaking with no stranded closing punctuation, and
@@ -591,6 +599,8 @@ HarfBuzz evaluation (no GSUB/GPOS shaping, no bidi: see Known limitations).
 * `keyDown[256]` / `keyRepeat[256]` indexed by `ogui::KeyCode`
 * `lastChar` — one UTF-8 code point per frame (host deduplicates)
 * `time` — seconds since start; drives the tooltip delay
+* `touches[]` / `touchCount` / `touchCancelled` — the fingers on the screen,
+  each an `id` plus a device-pixel position, for a touch host
 
 `Kernel::frame()` recomputes hover, delivers press/release with capture
 (dragging keeps working outside the widget), routes characters to the focus
@@ -598,6 +608,19 @@ widget and key edges with `Mod_Shift/Ctrl/Alt/Super`. The host fills
 `mouseX/mouseY` with **device pixels** (what the OS reports); the kernel
 divides by the screen scale before anything reaches a widget, so widgets only
 ever see logical units. `Widget::absoluteOrigin()` converts bounds.
+
+A touch host fills `touches` instead of the mouse fields and the kernel folds
+the list into the one pointer the tree already speaks (`Kernel::applyTouchStream`),
+so no widget has to know a finger exists: a tap is a press and a release on the
+widget under it, the finger that owns a drag keeps it — a second finger landing
+elsewhere cannot steal the capture, and if the owner lifts while another stays
+down the same press carries on — and `touchCancelled` (Android's
+`ACTION_CANCEL`, a gesture the OS claimed) releases the widget without
+clicking it. Once the last finger is gone the pointer leaves the tree entirely,
+rather than leaving the widget under the last tap painted with its `hover:`
+state. A host that reports both is handled by whoever moves last: the mouse
+regains the pointer as soon as its fields change, and a finger takes it back
+when one lands.
 
 `Tab`/`Shift+Tab` walk the focusable widgets of the current screen in
 document order and wrap; `Kernel::focusNext(backwards)` exposes the same

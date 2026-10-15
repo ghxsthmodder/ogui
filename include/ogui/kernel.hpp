@@ -23,7 +23,17 @@ struct InputState;
 // ------------------------------------------------------------------
 // Input state
 // ------------------------------------------------------------------
+// One finger on the screen. `id` is the host's pointer id -- Android's
+// AMotionEvent pointer id, stable while that finger stays down -- and the
+// position is in device pixels, like mouseX/mouseY.
+struct TouchPoint {
+    int id = 0;
+    float x = 0.0f, y = 0.0f;
+};
+
 struct InputState {
+    static constexpr int kMaxTouchPoints = 16;
+
     bool mouseDown[4] = {false, false, false, false};
     int mouseButton = -1;         // -1 = none
     float mouseX = 0.0f, mouseY = 0.0f;
@@ -32,6 +42,18 @@ struct InputState {
     bool keyRepeat[256] = {false};
     uint32_t lastChar = 0;
     float time = 0.0f;            // seconds since start
+
+    // Every pointer on the screen right now, in the order the host reports
+    // them; a host without touch leaves touchCount at 0 and drives the mouse
+    // fields, which is what a desktop does. The kernel folds this list into
+    // the one pointer widgets see, so a widget does not have to know that
+    // touch exists.
+    TouchPoint touches[kMaxTouchPoints] = {};
+    int touchCount = 0;
+    // The system took the pointers away (Android's ACTION_CANCEL, a gesture the
+    // OS claimed, an incoming call). Not a release: the drag ends and nothing
+    // is clicked.
+    bool touchCancelled = false;
 };
 
 // ------------------------------------------------------------------
@@ -197,8 +219,9 @@ public:
     // Seconds since the first frame (InputState::time mirror).
     float time() const { return m_input.time; }
 
-    // Snapshot of the raw input the last frame was fed (mouse position,
-    // button/key arrays). Used by the Lua ogui.* input queries.
+    // What the last frame was fed, with the touch stream folded in: the mouse
+    // fields are the pointer the tree actually saw, not what the host sent.
+    // Used by the Lua ogui.* input queries.
     const InputState& input() const { return m_input; }
 
     // ---- lookup ----
@@ -311,6 +334,9 @@ public:
 
 private:
     void update();
+    // Fold InputState::touches into the one pointer the tree sees, and keep a
+    // host that reports both honest about which one moved.
+    void applyTouchStream();
     // Swap the ScriptHost to the current screen's scripts (clear + load).
     void reloadScreenScripts();
     // modifier bitmask derived from the current key state (see ModBits).
@@ -347,6 +373,17 @@ private:
     float m_lastClickTime = 0.0f;
     float m_lastClickX = 0.0f;
     float m_lastClickY = 0.0f;
+
+    // touch -> pointer bridge (see applyTouchStream)
+    int m_touchPrimary = -1;           // the id that owns the pointer now
+    bool m_touchDown = false;          // a finger is on the screen
+    bool m_touchParked = false;        // the finger left; the mouse has not spoken
+    bool m_touchCancelled = false;     // it left because the system took it
+    float m_touchX = 0.0f, m_touchY = 0.0f;
+    float m_rawMouseX = 0.0f, m_rawMouseY = 0.0f;
+    bool m_rawMouseDown = false;
+    int m_rawMouseButton = -1;
+    bool m_rawMouseKnown = false;
 
     // tooltip hover timing
     Widget* m_tipTarget = nullptr;
