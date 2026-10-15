@@ -129,7 +129,7 @@ Win32 + WGL demo directly (the project compiles the library sources itself).
 cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-bad,
                                         # custom-widget, kernel, unicode, screens,
                                         # scrollbar, script, properties, templates,
-                                        # examples, golden, gl, touch
+                                        # examples, golden, gl, touch, asset
 ```
 
 * `parser` — XML tokenizer, attributes, styles, error reporting.
@@ -204,6 +204,11 @@ cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-b
   applies the top-left rule; a shape in the wrong place or a colour off by more
   than that still fails. It **skips** where EGL or `libGLESv2` are missing, and
   where no context can be created (a machine with no software rasterizer).
+* `asset` — the one seam every byte goes through: a host that owns the names
+  serves a layout, a theme, a script, a font and an image from memory alone, a
+  name it declines falls through to the filesystem, a name nobody has is
+  reported as a missing file rather than an empty one, and with no reader
+  installed the library reads the same files it always did.
 
 Regenerate the golden after an intentional visual change:
 
@@ -559,7 +564,9 @@ With no explicit mapping, ogui probes the well-known file names for
 `sans` (default), `serif` and `mono` inside `/usr/share/fonts`,
 `/usr/local/share/fonts`, `~/.fonts` (Windows: `%WINDIR%\Fonts`). A family
 that cannot be found simply produces no text — tests report it instead of
-crashing.
+crashing. Both the explicit path and those probes go through the asset
+reader ([Where the bytes come from](#where-the-bytes-come-from)), so a host
+can ship a face inside its package and register it by asset name.
 
 Per-frame texture upload is handled by `GlBackend::render()` via
 `syncFonts()` and `syncImages()`; hosts normally never call them
@@ -796,6 +803,37 @@ Alternatively add it to your build tree with `add_subdirectory(ogui)`.
 The exported target carries the include path; stb stays an implementation
 detail.
 
+### Where the bytes come from
+
+Nothing inside the library calls `fopen`. Layouts (`parseFile`,
+`parseThemeFile`), scripts (`ScriptHost::loadFile`), fonts and images are all
+read through one function:
+
+```cpp
+#include "ogui/assets.hpp"
+
+ogui::setAssetReader([](const std::string& name)
+                         -> std::optional<std::vector<uint8_t>> {
+    if (auto* a = AAssetManager_open(mgr, name.c_str(), AASSET_MODE_BUFFER)) {
+        // ... read it into a vector, close it, return the bytes
+    }
+    return std::nullopt;      // "not mine" -- fall through to the filesystem
+});
+```
+
+`readFile(path)` asks that reader first and the filesystem second, so a host
+that installs nothing behaves exactly as it always did, and a host that
+installs one can ship some resources inside the package and leave the rest on
+disk. Returning `std::nullopt` means *this name is not mine*, which is
+deliberately different from returning an empty vector: a missing resource and a
+zero-length one are different mistakes. Names are passed through untouched, so
+the host decides what one means (an APK asset path, a URL, a key in a map).
+
+Two things stay on the real filesystem, on purpose and for now: Lua's own `io`
+library — a script reading a file is the script's business, not the toolkit's —
+and the directory browsers (`<pathpicker>`, the `treeview` lazy folder fill),
+which list a directory rather than read a named resource.
+
 ### Porting to OpenGL ES / Android
 
 `GlBackend` runs on an ES 3.0 context: `init(getProc, profile)` takes
@@ -821,13 +859,16 @@ backend.init([](const char* name) { return myContextGetProcAddress(name); });
 ```
 
 What is **not** there yet is the Android host. `ogui::Host` is Win32/WGL, so an
-Android port must supply its own `NativeActivity`/`AWindow` + EGL window surface,
-fill `InputState::touches` from `AMotionEvent` (pointer ids, `ACTION_CANCEL`) and
-read layouts through `AAsset` rather than the filesystem; the kernel already
-folds that list into its one pointer and already synthesizes the pan and the
-flick, so what is left on the gesture side is the long-press and the pinch. Text
-input needs the IME, since `InputState::lastChar` arrives from key events today.
-That host is the next phase; the renderer it would use is already portable.
+Android port must supply its own `NativeActivity`/`AWindow` + EGL window surface
+and fill `InputState::touches` from `AMotionEvent` (pointer ids,
+`ACTION_CANCEL`); the kernel already folds that list into its one pointer and
+already synthesizes the pan and the flick, so what is left on the gesture side
+is the long-press and the pinch. Reading the layouts is no longer one of the
+missing pieces — `setAssetReader()` puts `AAsset` behind the same call the
+desktop takes off the filesystem (see [Where the bytes come from](#where-the-bytes-come-from)).
+Text input needs the IME, since `InputState::lastChar` arrives from key events
+today. That host is the next phase; the renderer and the loaders it would use
+are already portable.
 
 ## Repository layout
 

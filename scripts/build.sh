@@ -18,6 +18,7 @@ WIN_AR="${WIN_AR:-x86_64-w64-mingw32-ar}"
 
 LIB_SRCS=(
     src/api.cpp
+    src/assets.cpp
     src/style.cpp
     src/drawlist.cpp
     src/rasterizer.cpp

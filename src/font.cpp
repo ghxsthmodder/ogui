@@ -6,6 +6,7 @@
 
 #include "ogui/font.hpp"
 #include "ogui/api.hpp"
+#include "ogui/assets.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -77,12 +78,22 @@ namespace {
         return ::stat(p.c_str(), &st) == 0 && S_ISREG(st.st_mode);
     }
 
+    // A font is reachable when it is on the filesystem *or* when the host's
+    // asset reader answers for that name: on Android a registered family points
+    // at an AAsset, which stat() has never heard of.
+    bool pathAvailable(const std::string& p) {
+        if (p.empty()) return false;
+        if (fileExists(p)) return true;
+        const auto& reader = assetReader();
+        return reader && reader(p).has_value();
+    }
+
     // Depth-limited directory walk looking for one of `candidates`.
     std::string probeDir(const std::string& dir, const std::vector<std::string>& candidates,
                          int depth) {
         for (const auto& c : candidates) {
             std::string p = dir + "/" + c;
-            if (fileExists(p)) return p;
+            if (pathAvailable(p)) return p;
         }
         if (depth <= 0) return {};
 
@@ -129,17 +140,9 @@ bool Font::load(const std::string& path, int logicalHeight, int /*dpi*/,
     m_revision = 0;
     m_notdefAdvance = 0;
 
-    FILE* f = fopen(path.c_str(), "rb");
-    if (!f) return false;
-    fseek(f, 0, SEEK_END);
-    long len = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    if (len <= 0) { fclose(f); return false; }
-
-    m_buffer.resize(static_cast<size_t>(len));
-    size_t got = fread(m_buffer.data(), 1, static_cast<size_t>(len), f);
-    fclose(f);
-    if (got != static_cast<size_t>(len)) return false;
+    auto bytes = readFile(path);
+    if (!bytes || bytes->empty()) return false;
+    m_buffer = std::move(*bytes);
 
     stbtt_fontinfo fi;
     if (!stbtt_InitFont(&fi, m_buffer.data(), 0)) return false;
@@ -564,7 +567,7 @@ void FontManager::clear() {
 
 std::string FontManager::resolve(const std::string& family) const {
     auto it = m_paths.find(family);
-    if (it != m_paths.end() && fileExists(it->second)) return it->second;
+    if (it != m_paths.end() && pathAvailable(it->second)) return it->second;
 
     // Well-known candidates per family, probed inside every search dir
     // (non-recursive; the common distro layouts are covered by m_dirs).

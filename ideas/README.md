@@ -903,8 +903,9 @@ compatibilidade e capacidade de manutenção.
     arredondar para o mais próximo, saiu do mesmo teste.
 -   [ ] Hospedeiro Android: `NativeActivity` com superfície EGL
     (`eglCreateWindowSurface` sobre o `ANativeWindow`, no lugar do pbuffer que
-    o teste usa), um config EGL cujo formato de framebuffer o swap aceite, e
-    leitura dos layouts por `AAsset` em vez de sistema de arquivos.
+    o teste usa) e um config EGL cujo formato de framebuffer o swap aceite.
+    Falta só o hospedeiro: os layouts já entram por `AAsset` pela costura de
+    leitura de assets, e o toque já cabe em `InputState`.
 -   [x] Toque no `InputState`: a lista de dedos entra pelo estado
     (`touches[]` com o id do `AMotionEvent` e a posição em pixels de
     dispositivo, `touchCount`, `touchCancelled`) e o `Kernel` a dobra no único
@@ -935,6 +936,22 @@ compatibilidade e capacidade de manutenção.
 -   [ ] Gestos que o `Kernel` ainda não sintetiza: pressionar-e-segurar --- que
     é como um dedo abriria um `contextmenu` --- e pinça (escala e rotação de
     dois dedos).
+-   [x] Leitura de assets por uma costura só: nada dentro da biblioteca chama
+    `fopen` --- layout (`parseFile`, `parseThemeFile`), script
+    (`ScriptHost::loadFile`), fonte e imagem passam por `ogui::readFile()`,
+    que pergunta primeiro ao `AssetReader` instalado pelo host e depois ao
+    sistema de arquivos. Um host Android aponta o leitor para o `AAssetManager`
+    e embarca o layout no APK; um host que não instala nada lê os mesmos
+    arquivos de sempre. `nullopt` significa "esse nome não é meu" (cai no
+    disco) e é diferente de um vetor vazio, que é "existe e está vazio" --- um
+    layout ausente e um corrompido são erros distintos a reportar. O caminho
+    explícito do `FontManager` e o *probe* dos diretórios de sistema também
+    aceitam um nome do leitor, então uma fonte registrada por nome de asset
+    funciona. Ficam no sistema de arquivos, de propósito e por enquanto: a
+    biblioteca `io` do Lua (lê o que o script quiser, não é assunto do
+    toolkit) e os navegadores de diretório (`<pathpicker>`, o preenchimento
+    lazy do `treeview`), que listam pastas em vez de ler um nome. Testes em
+    `debug/tests/asset_test.cpp`.
 -   [ ] Entrada de texto pelo IME: `InputState::lastChar` chega de eventos de
     teclado, e o NDK não expõe o método de entrada a código nativo --- um campo
     de texto no Android precisa da ponte JNI para a `InputMethodManager`, dos

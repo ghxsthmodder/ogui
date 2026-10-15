@@ -4,6 +4,7 @@
 #include "stb_image.h"
 
 #include "ogui/imagemanager.hpp"
+#include "ogui/assets.hpp"
 
 namespace ogui {
 
@@ -20,7 +21,12 @@ const ImageData* ImageManager::load(const std::string& path) {
     int w = 0, h = 0, channels = 0;
     // No vertical flip: row 0 is the top edge, matching the font atlas UV
     // convention (v = 0 at the top of a glyph quad).
-    stbi_uc* px = stbi_load(path.c_str(), &w, &h, &channels, 4);
+    stbi_uc* px = nullptr;
+    // Decoded from the bytes, wherever they came from: stb's own file loader
+    // would put a filesystem path back in front of an asset host.
+    if (auto bytes = readFile(path); bytes && !bytes->empty())
+        px = stbi_load_from_memory(bytes->data(), static_cast<int>(bytes->size()),
+                                   &w, &h, &channels, 4);
     if (px) {
         img = std::make_shared<ImageData>();
         img->id = m_nextId++;

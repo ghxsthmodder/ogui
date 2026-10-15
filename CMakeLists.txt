@@ -79,6 +79,7 @@ endif()
 # ---- Library -------------------------------------------------------------
 add_library(ogui STATIC
     src/api.cpp
+    src/assets.cpp
     src/style.cpp
     src/drawlist.cpp
     src/rasterizer.cpp
@@ -187,6 +188,14 @@ if(OGUI_BUILD_TESTS)
     add_executable(ogui_touch_test debug/tests/touch_test.cpp)
     target_link_libraries(ogui_touch_test PRIVATE ogui)
 
+    # Every byte the library opens goes through one seam: a host that owns the
+    # names (an APK's AAssetManager) and a host that owns none.
+    add_executable(ogui_asset_test debug/tests/asset_test.cpp)
+    target_link_libraries(ogui_asset_test PRIVATE ogui)
+    target_compile_definitions(ogui_asset_test PRIVATE
+        OGUI_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+        OGUI_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets")
+
     # Every manifest screen must parse and keep the ids the gallery binds to.
     add_executable(ogui_screens_test debug/tests/screens_test.cpp)
     target_link_libraries(ogui_screens_test PRIVATE ogui)
@@ -274,6 +283,7 @@ if(OGUI_BUILD_TESTS)
     endif()
     add_test(NAME kernel COMMAND ogui_kernel_test)
     add_test(NAME touch COMMAND ogui_touch_test)
+    add_test(NAME asset COMMAND ogui_asset_test)
     add_test(NAME unicode COMMAND ogui_unicode_test)
     add_test(NAME screens COMMAND ogui_screens_test)
     add_test(NAME scrollbar COMMAND ogui_scrollbar_test)
@@ -318,6 +328,7 @@ endforeach()
 
 install(FILES
     include/ogui/api.hpp
+    include/ogui/assets.hpp
     include/ogui/clipboard.hpp
     include/ogui/drawlist.hpp
     include/ogui/font.hpp

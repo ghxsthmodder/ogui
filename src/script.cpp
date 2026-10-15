@@ -11,6 +11,7 @@
 #include "ogui/widgets.hpp"
 #include "ogui/xmlparser.hpp"
 #include "ogui/style.hpp"
+#include "ogui/assets.hpp"
 
 #include <fstream>
 #include <sstream>
@@ -1272,16 +1273,14 @@ bool ScriptHost::loadString(const std::string& code, const std::string& name,
 }
 
 bool ScriptHost::loadFile(const std::string& path, std::string* error) {
-    std::ifstream f(path, std::ios::binary);
-    if (!f) {
+    auto bytes = readFile(path);
+    if (!bytes) {
         const std::string msg = "script: cannot open " + path;
         recordError(msg);
         if (error) *error = msg;
         return false;
     }
-    std::ostringstream ss;
-    ss << f.rdbuf();
-    return loadString(ss.str(), path, error);
+    return loadString(std::string(bytes->begin(), bytes->end()), path, error);
 }
 
 void ScriptHost::clear() {

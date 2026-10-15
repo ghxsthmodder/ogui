@@ -2,6 +2,7 @@
 #include "ogui/widget.hpp"
 #include "ogui/widgets.hpp"
 #include "ogui/font.hpp"
+#include "ogui/assets.hpp"
 
 #include <fstream>
 #include <cctype>
@@ -1536,16 +1537,12 @@ XmlParser::ParseResult XmlParser::parse(const std::string& xml, const Theme* the
 
 XmlParser::ParseResult XmlParser::parseFile(const std::string& path, const Theme* theme) {
     ParseResult res;
-    std::ifstream f(path, std::ios::binary);
-    if (!f.is_open()) {
+    auto bytes = readFile(path);
+    if (!bytes) {
         res.errors.push_back("cannot open file: " + path);
         return res;
     }
-    std::string data((std::istreambuf_iterator<char>(f)),
-                     std::istreambuf_iterator<char>());
-    f.close();
-
-    m_text = data;
+    m_text.assign(bytes->begin(), bytes->end());
     m_len = m_text.size();
     m_pos = 0;
     m_theme = theme;
@@ -1602,17 +1599,14 @@ XmlParser::ThemeResult XmlParser::parseTheme(const std::string& xml, const Theme
 }
 
 XmlParser::ThemeResult XmlParser::parseThemeFile(const std::string& path, const Theme& base) {
-    std::ifstream f(path, std::ios::binary);
-    if (!f.is_open()) {
+    auto bytes = readFile(path);
+    if (!bytes) {
         ThemeResult res;
         res.theme = base;
         res.errors.push_back("cannot open file: " + path);
         return res;
     }
-    std::string data((std::istreambuf_iterator<char>(f)),
-                     std::istreambuf_iterator<char>());
-    f.close();
-    return parseTheme(data, base);
+    return parseTheme(std::string(bytes->begin(), bytes->end()), base);
 }
 
 // ------------------------------------------------------------------
