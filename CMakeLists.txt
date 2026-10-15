@@ -225,6 +225,8 @@ if(OGUI_BUILD_TESTS)
 
     add_executable(ogui_touch_test debug/tests/touch_test.cpp)
     target_link_libraries(ogui_touch_test PRIVATE ogui)
+    target_compile_definitions(ogui_touch_test PRIVATE
+        OGUI_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets")
 
     # What an Android motion or key event means, tested without a phone: the
     # rules are plain data in AndroidInputBridge, only the getters need a device.

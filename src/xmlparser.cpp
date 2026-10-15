@@ -887,6 +887,11 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
     } else if (auto* img = dynamic_cast<Image*>(w.get())) {
         if (const std::string* v = get("source")) img->setImagePath(*v);
         if (const std::string* v = get("tile")) img->setTile(toBool(*v));
+        if (const std::string* v = get("zoom")) {
+            float z = img->zoom();
+            if (toFloat(*v, z)) img->setZoom(z);
+        }
+        if (const std::string* v = get("pinchzoom")) img->setPinchZoom(toBool(*v));
     } else if (auto* grp = dynamic_cast<Group*>(w.get())) {
         if (const std::string* v = get("name")) grp->setGroupName(*v);
         if (hasStyle) {

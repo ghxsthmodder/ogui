@@ -4,10 +4,16 @@
 // that list into the single pointer every widget already speaks. What this
 // checks is the bridging contract: a tap is a click, the drag stays with the
 // finger that started it, a pointer the system took away does not click, and a
-// host that only owns a mouse is affected by none of this.
+// host that only owns a mouse is affected by none of this. The second half is
+// the two gestures a finger holds instead of moving: the long-press and the
+// two-finger pinch.
 #include "ogui/kernel.hpp"
+#include "ogui/properties.hpp"
+#include "ogui/rasterizer.hpp"
 #include "ogui/widget.hpp"
 #include "ogui/widgets.hpp"
+#include "ogui/xmlparser.hpp"
+#include <cmath>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -491,6 +497,467 @@ void aFlingDiesWithItsScreen() {
     check(other->clicks == 1, "the screen that replaced it still taps");
 }
 
+// ---- the gestures a finger holds instead of moving -----------------------
+
+// A widget that records both: the event the hold turns into, and every factor
+// the pair hands it.
+class GestureProbe : public Probe {
+public:
+    int holds = 0, pinches = 0;
+    float holdX = 0.0f, holdY = 0.0f, lastFactor = 0.0f;
+    Offset2D lastPivot{};
+    bool pinchOk = true;
+
+    virtual bool wantsPinch() const override { return pinchOk; }
+    virtual void onPinch(float f, const Offset2D& p) override {
+        ++pinches;
+        lastFactor = f;
+        lastPivot = p;
+    }
+    virtual void onEvent(Event& e) override {
+        if (e.kind != EventKind::LongPress || e.currentTarget != this) return;
+        ++holds;
+        holdX = e.point.x;
+        holdY = e.point.y;
+    }
+};
+
+// One button in the middle of the screen (50,50,200,100) and a clock that
+// moves, which is all a hold needs.
+struct GestureRig {
+    Kernel kernel;
+    std::shared_ptr<Screen> screen;
+    GestureProbe* g = nullptr;
+    InputState st;
+
+    void build(bool withMenu) {
+        kernel.init();
+        screen = std::make_shared<Screen>("main");
+        screen->width = 800.0f;
+        screen->height = 600.0f;
+        screen->scale = 1.0f;
+        auto w = std::make_shared<GestureProbe>();
+        g = w.get();
+        g->setId("g");
+        g->setText("G");
+        g->setBounds(Rect{50, 50, 200, 100});   // centre (150,100)
+        screen->widgets.push_back(w);
+        if (withMenu) {
+            auto cm = std::make_shared<ContextMenu>();
+            cm->setId("cm");
+            auto item = std::make_shared<MenuItem>();
+            item->setLabel("Copy");
+            item->setCommand("copy");
+            cm->addChild(item);
+            screen->widgets.push_back(cm);
+            g->setContextMenuName("cm");
+        }
+        kernel.pushScreen(screen);
+        st = InputState{};
+        st.mouseButton = -1;
+    }
+
+    void frame(std::vector<TouchPoint> pts) {
+        st.time += 1.0f / 60.0f;
+        st.touchCount = 0;
+        for (auto& t : pts) st.touches[st.touchCount++] = t;
+        st.touchCancelled = false;
+        kernel.frame(st);
+    }
+    // Keep one finger exactly where it landed for `seconds`.
+    void hold(float x, float y, float seconds) {
+        const int frames = static_cast<int>(seconds * 60.0f);
+        for (int i = 0; i < frames; ++i) frame({Rig::pt(1, x, y)});
+    }
+};
+
+// The delay is measured on the host clock, so a test drives it by advancing
+// time, not by counting frames.
+void aHeldFingerLongPresses() {
+    GestureRig r;
+    r.build(false);
+    r.frame({Rig::pt(1, 150, 100)});
+    check(r.g->downs == 1, "the finger pressed the button");
+    r.hold(150, 100, 0.4f);
+    check(r.g->holds == 0, "under the delay a hold is still just a press");
+    r.hold(150, 100, 0.3f);
+    check(r.g->holds == 1, "past the delay the hold fires once");
+    check(r.g->holdX == 150.0f && r.g->holdY == 100.0f,
+          "the event carries the point under the finger");
+    r.hold(150, 100, 0.5f);
+    check(r.g->holds == 1, "and it does not repeat while the finger stays");
+    r.frame({});
+    check(r.g->ups == 1, "the button was released when the gesture fired");
+    check(r.g->clicks == 0, "letting go after a long-press clicks nothing");
+    // A second hold is a second gesture.
+    r.frame({Rig::pt(1, 150, 100)});
+    r.hold(150, 100, 0.7f);
+    check(r.g->holds == 2, "a new press can arm a new long-press");
+    r.frame({});
+}
+
+// The name a Lua listener registers for is the string eventName gives, so the
+// gesture is scriptable without the test needing a Lua VM.
+void theLongPressHasAName() {
+    check(std::string(eventName(EventKind::LongPress)) == "longPress",
+          "the event dispatches as longPress");
+}
+
+// A mouse button held down is the first frame of a selection, a slider drag or
+// a held key on a desktop -- and right-click already owns the context menu. So
+// the hold is a touch-only gesture.
+void aMouseHoldIsNotALongPress() {
+    GestureRig r;
+    r.build(false);
+    r.st.mouseX = 150.0f;
+    r.st.mouseY = 100.0f;
+    r.st.mouseButton = 0;
+    r.st.mouseDown[0] = true;
+    for (int i = 0; i < 80; ++i) {   // 1.3s of a held left button
+        r.st.time += 1.0f / 60.0f;
+        r.kernel.frame(r.st);
+    }
+    check(r.g->holds == 0, "a held mouse button never becomes a long-press");
+    r.st.mouseDown[0] = false;
+    r.st.time += 1.0f / 60.0f;
+    r.kernel.frame(r.st);
+    check(r.g->clicks == 1, "and it is still the press-release click it was");
+}
+
+// A finger that travels is a drag: the pan owns it, the hold is off.
+void aTravellingFingerDoesNotLongPress() {
+    GestureRig r;
+    r.build(false);
+    r.frame({Rig::pt(1, 150, 100)});
+    for (int i = 1; i <= 20; ++i)
+        r.frame({Rig::pt(1, 150.0f + 10.0f * i, 100)});   // past the slop
+    check(r.g->holds == 0, "a dragging finger does not hold");
+    r.frame({});
+    check(r.g->clicks == 0, "and it ends outside the button");
+}
+
+// What the finger came here for: the context menu, at exactly the point a
+// right-click would have put it.
+void aLongPressOpensTheContextMenu() {
+    GestureRig r;
+    r.build(true);
+    r.frame({Rig::pt(1, 150, 100)});
+    r.hold(150, 100, 0.7f);
+    check(r.g->holds == 1, "the hold fired");
+    check(r.kernel.popupOpen(), "and the widget's <contextmenu> opened");
+    if (r.kernel.popupOpen()) {
+        const Rect b = r.kernel.popup()->bounds();
+        check(b.x == 150.0f && b.y == 100.0f, "at the finger, not elsewhere");
+    }
+    r.frame({});
+    check(r.g->clicks == 0, "the button under it did not click");
+    r.kernel.closePopup();
+}
+
+// Two fingers on the same widget are one gesture: the pair claims the press,
+// and every frame after that is a ratio between the fingers plus the point
+// between them.
+void twoFingersPinchTheWidgetThatClaimsThem() {
+    GestureRig r;
+    r.build(false);
+    r.frame({Rig::pt(1, 150, 100)});
+    check(r.g->downs == 1, "the first finger pressed");
+
+    r.frame({Rig::pt(1, 150, 100), Rig::pt(2, 150, 200)});
+    check(r.g->pinches == 0, "the frame the pair forms is not a scale");
+    check(r.g->ups == 1, "claiming the pinch released the press");
+    check(r.g->clicks == 0, "and it did not click");
+
+    r.frame({Rig::pt(1, 150, 100), Rig::pt(2, 150, 300)});   // 100 -> 200
+    check(r.g->pinches == 1, "spreading hands the widget one factor");
+    check(std::fabs(r.g->lastFactor - 2.0f) < 1e-5f, "the ratio of the two spans");
+    check(r.g->lastPivot.x == 150.0f && r.g->lastPivot.y == 200.0f,
+          "with the pivot between the fingers");
+
+    r.frame({Rig::pt(1, 150, 100), Rig::pt(2, 150, 200)});   // 200 -> 100
+    check(r.g->pinches == 2 && std::fabs(r.g->lastFactor - 0.5f) < 1e-5f,
+          "closing in gives the inverse");
+
+    r.frame({Rig::pt(1, 150, 100)});   // one finger left: the gesture is over
+    r.frame({});
+    check(r.g->clicks == 0, "a pinch never turns into a tap");
+    check(r.g->holds == 0, "nor into a hold");
+}
+
+// Nobody claiming is a normal answer: two fingers on a plain button stay two
+// fingers, and lifting them is still a tap on what was under the first one.
+void aPinchNobodyWantsIsJustFingers() {
+    GestureRig r;
+    r.build(false);
+    r.g->pinchOk = false;
+    r.frame({Rig::pt(1, 150, 100)});
+    r.frame({Rig::pt(1, 150, 100), Rig::pt(2, 150, 300)});
+    r.frame({Rig::pt(1, 150, 100), Rig::pt(2, 400, 300)});
+    check(r.g->pinches == 0, "the declining button got no pinch");
+    check(r.g->ups == 0, "and it still holds the press");
+    r.frame({});
+    check(r.g->clicks == 1, "so the tap still clicks");
+}
+
+// A row that would pan if it were alone, and claims the pair when it is not.
+class Pinnable : public Pannable {
+public:
+    bool pinchOk = true;
+    int pinches = 0;
+    virtual bool wantsPinch() const override { return pinchOk; }
+    virtual void onPinch(float, const Offset2D&) override { ++pinches; }
+};
+
+struct PinchPanRig {
+    Kernel kernel;
+    std::shared_ptr<Screen> screen;
+    std::shared_ptr<ScrollView> sv;
+    Pinnable* inner = nullptr;
+    InputState st;
+
+    void build() {
+        kernel.init();
+        screen = std::make_shared<Screen>("main");
+        screen->width = 800.0f;
+        screen->height = 600.0f;
+        screen->scale = 1.0f;
+        sv = std::make_shared<ScrollView>();
+        sv->setBounds(Rect{50, 50, 300, 400});
+        auto child = std::make_shared<Pinnable>();
+        inner = child.get();
+        inner->setText("row");
+        inner->setBounds(Rect{0, 0, 280, 800});
+        sv->setContent(child);
+        screen->widgets.push_back(sv);
+        kernel.pushScreen(screen);
+        st = InputState{};
+        st.mouseButton = -1;
+    }
+    void frame(std::vector<TouchPoint> pts) {
+        st.time += 1.0f / 60.0f;
+        st.touchCount = 0;
+        for (auto& t : pts) st.touches[st.touchCount++] = t;
+        st.touchCancelled = false;
+        kernel.frame(st);
+    }
+};
+
+// A pinch takes the fingers away from the pan, which is the difference between
+// zooming a picture and scrolling the page under it.
+void aPinchDoesNotPan() {
+    PinchPanRig r;
+    r.build();
+    r.frame({Rig::pt(1, 150, 250)});
+    check(r.inner->downs == 1, "the finger pressed the row");
+    r.frame({Rig::pt(1, 150, 250), Rig::pt(2, 150, 350)});
+    r.frame({Rig::pt(1, 150, 250), Rig::pt(2, 150, 550)});
+    check(r.inner->pinches == 1, "the row took the pair");
+    check(r.inner->scrolls == 0, "and nothing was panned");
+    check(r.sv->scrollPosition().y == 0.0f, "the viewport stayed put");
+    r.frame({});
+    check(r.inner->clicks == 0, "a pinch is not a tap");
+
+    // The fingers fall back to the pan the moment nobody claims them.
+    r.inner->pinchOk = false;
+    r.inner->panOk = false;
+    r.frame({Rig::pt(1, 150, 400)});
+    r.frame({Rig::pt(1, 150, 400), Rig::pt(2, 150, 450)});
+    r.frame({Rig::pt(1, 150, 300), Rig::pt(2, 150, 350)});
+    r.frame({Rig::pt(1, 150, 200), Rig::pt(2, 150, 250)});
+    check(r.sv->scrollPosition().y != 0.0f,
+          "a pair nobody wants can still scroll the page");
+}
+
+// The consumer this gesture was built for: <image pinchzoom="true"> magnifies
+// under the fingers instead of scrolling the page.
+struct PinchRig {
+    Kernel kernel;
+    std::shared_ptr<Screen> screen;
+    std::shared_ptr<Image> img;
+    InputState st;
+
+    void build(bool tiled) {
+        kernel.init();
+        screen = std::make_shared<Screen>("main");
+        screen->width = 800.0f;
+        screen->height = 600.0f;
+        screen->scale = 1.0f;
+        img = std::make_shared<Image>();
+        img->setBounds(Rect{0, 0, 200, 200});
+        img->setImagePath(std::string(OGUI_ASSETS_DIR) + "/checker.png");
+        img->setPinchZoom(true);
+        img->setTile(tiled);
+        screen->widgets.push_back(img);
+        kernel.pushScreen(screen);
+        st = InputState{};
+        st.mouseButton = -1;
+    }
+    void frame(std::vector<TouchPoint> pts) {
+        st.time += 1.0f / 60.0f;
+        st.touchCount = 0;
+        for (auto& t : pts) st.touches[st.touchCount++] = t;
+        st.touchCancelled = false;
+        kernel.frame(st);
+    }
+    // The UV window the picture is cropped to, as the draw list says.
+    bool drawnWindow(float& u0, float& v0, float& u1, float& v1) const {
+        Rasterizer r;
+        r.reset();
+        img->onDraw(r);
+        const auto& v = r.drawList().vertices;
+        if (v.size() < 4) return false;
+        u0 = v0 = 1e9f;
+        u1 = v1 = -1e9f;
+        for (const auto& q : v) {
+            u0 = std::min(u0, q.u);
+            v0 = std::min(v0, q.v);
+            u1 = std::max(u1, q.u);
+            v1 = std::max(v1, q.v);
+        }
+        return true;
+    }
+};
+
+void theImageZoomsUnderTwoFingers() {
+    PinchRig r;
+    r.build(false);
+    check(r.img->zoom() == 1.0f, "an untouched image shows the whole picture");
+
+    // The first finger at (50,50) presses the image, the second one 100px to
+    // the right forms the pair, and spreading them doubles the zoom.
+    r.frame({Rig::pt(1, 50, 50)});
+    r.frame({Rig::pt(1, 50, 50), Rig::pt(2, 150, 50)});
+    r.frame({Rig::pt(1, 50, 50), Rig::pt(2, 250, 50)});   // 100 -> 200: x2
+    check(r.img->zoom() == 2.0f, "spreading the fingers magnifies");
+
+    // The pivot (150,50) sits at 0.75/0.25 of the 200x200 bounds, so the window
+    // the picture is cropped from has to keep that point where it was.
+    float u0 = 0, v0 = 0, u1 = 0, v1 = 0;
+    const bool drawn = r.drawnWindow(u0, v0, u1, v1);
+    check(drawn, "the zoomed image still emits its quad");
+    if (drawn) {
+        check(std::fabs((u1 - u0) - 0.5f) < 1e-5f &&
+                  std::fabs((v1 - v0) - 0.5f) < 1e-5f,
+              "a 2x window covers half the picture");
+        check(std::fabs(u0 - 0.375f) < 1e-5f && std::fabs(v0 - 0.125f) < 1e-5f,
+              "and it is anchored under the fingers");
+    }
+
+    r.frame({Rig::pt(1, 50, 50), Rig::pt(2, 1650, 50)});   // 8x wider: over the top
+    check(r.img->zoom() == 8.0f, "magnifying stops at the ceiling");
+    r.frame({Rig::pt(1, 50, 50), Rig::pt(2, 70, 50)});     // closed almost flat
+    check(r.img->zoom() == 1.0f, "and pinching in stops at the whole picture");
+    if (r.drawnWindow(u0, v0, u1, v1))
+        check(u0 == 0.0f && v0 == 0.0f && u1 == 1.0f && v1 == 1.0f,
+              "at 1x the frame shows all of it again");
+
+    r.frame({});
+    r.frame({Rig::pt(1, 50, 50)});
+    r.frame({});
+    check(r.img->zoom() == 1.0f, "a later single-finger tap does not rescale it");
+}
+
+// A tiled image repeats the picture, so there is no window to shrink: the
+// fingers belong to whatever scrolls behind it.
+void aTiledImageIsNotZoomable() {
+    PinchRig r;
+    r.build(true);
+    check(!r.img->wantsPinch(), "a tiled image declines the pinch");
+    r.frame({Rig::pt(1, 50, 50)});
+    r.frame({Rig::pt(1, 50, 50), Rig::pt(2, 150, 50)});
+    r.frame({Rig::pt(1, 50, 50), Rig::pt(2, 350, 50)});
+    check(r.img->zoom() == 1.0f, "and its zoom never moved");
+    r.frame({});
+    check(r.img->zoom() == 1.0f, "not even after the fingers left");
+}
+
+// A gesture must not outlive the widget it was heading for: `ogui.remove` frees
+// the tree under a finger that is still down, and the frames after that must
+// touch nothing. Run this under a sanitizer to make the contract bite.
+void aGestureDiesWithItsWidget() {
+    Kernel kernel;
+    kernel.init();
+    auto screen = std::make_shared<Screen>("main");
+    screen->width = 800.0f;
+    screen->height = 600.0f;
+    screen->scale = 1.0f;
+    auto gone = std::make_shared<GestureProbe>();
+    gone->setText("G");
+    gone->setBounds(Rect{50, 50, 200, 100});
+    gone->setContextMenuName("cm");   // a menu that is not there either
+    auto stay = std::make_shared<GestureProbe>();
+    stay->setText("S");
+    stay->setBounds(Rect{500, 50, 200, 100});
+    screen->widgets.push_back(gone);
+    screen->widgets.push_back(stay);
+    kernel.pushScreen(screen);
+
+    InputState st;
+    st.mouseButton = -1;
+    auto frame = [&](std::vector<TouchPoint> pts) {
+        st.time += 1.0f / 60.0f;
+        st.touchCount = 0;
+        for (auto& t : pts) st.touches[st.touchCount++] = t;
+        st.touchCancelled = false;
+        kernel.frame(st);
+    };
+
+    frame({Rig::pt(1, 150, 100)});          // a finger on the doomed row
+    kernel.forgetWidget(gone.get());
+    screen->widgets.erase(screen->widgets.begin());
+    gone.reset();                            // and it is really gone
+    kernel.invalidate();
+    for (int i = 0; i < 50; ++i)             // a whole second of nothing to hold
+        frame({Rig::pt(1, 150, 100)});
+    frame({Rig::pt(1, 150, 100), Rig::pt(2, 150, 300)});   // a pair to pinch
+    frame({Rig::pt(1, 150, 100), Rig::pt(2, 150, 500)});
+    frame({});
+    check(stay->clicks == 0,
+          "the frames over the freed row clicked nothing on their way past");
+
+    frame({Rig::pt(3, 600, 100)});          // the tree still works
+    frame({});
+    check(stay->clicks == 1, "and a new finger taps what is left");
+}
+
+// The XML attributes the feature is actually used through.
+void zoomIsSettableFromXmlAndScript() {
+    XmlParser p;
+    auto res = p.parse(R"(<screen id="s">
+  <image id="a" x="0" y="0" width="100" height="100" source="x.png"
+         zoom="3" pinchzoom="true"/>
+  <image id="b" x="0" y="0" width="100" height="100" zoom="40"/>
+  <image id="c" x="0" y="0" width="100" height="100" zoom="-5"/>
+</screen>)");
+    check(res.errors.empty(), "the layout parses");
+    Kernel k;
+    k.init();
+    auto s = std::make_shared<Screen>("s");
+    s->width = 800.0f;
+    s->height = 600.0f;
+    s->scale = 1.0f;
+    s->widgets.push_back(res.root);
+    k.pushScreen(s);
+    auto* a = dynamic_cast<Image*>(k.findWidget("a"));
+    auto* b = dynamic_cast<Image*>(k.findWidget("b"));
+    auto* c = dynamic_cast<Image*>(k.findWidget("c"));
+    check(a && b && c, "the three images are there");
+    if (!a || !b || !c) return;
+    check(a->zoom() == 3.0f, "zoom=3 is a 3x window");
+    check(a->pinchZoom(), "pinchzoom=true arms the gesture");
+    check(!b->pinchZoom(), "and a plain image is not pinching");
+    check(b->zoom() == 8.0f, "a wild zoom lands on the ceiling");
+    check(c->zoom() == 1.0f, "a zoom below 1 is the whole picture");
+
+    std::string error;
+    check(setWidgetProperty(*b, "zoom", "2.5", &error), error);
+    check(b->zoom() == 2.5f, "the property writes what the attribute writes");
+    check(setWidgetProperty(*b, "pinchzoom", "true", &error), error);
+    check(b->pinchZoom(), "pinchzoom is writable");
+    check(widgetProperty(*b, "zoom") == "2.5", "and readable");
+    check(widgetProperty(*b, "pinchzoom") == "true", "including as text");
+}
+
 }  // namespace
 
 int main() {
@@ -510,6 +977,18 @@ int main() {
     aSlowLiftDoesNotFling();
     aNewPressStopsTheFling();
     aFlingDiesWithItsScreen();
+    aHeldFingerLongPresses();
+    theLongPressHasAName();
+    aMouseHoldIsNotALongPress();
+    aTravellingFingerDoesNotLongPress();
+    aLongPressOpensTheContextMenu();
+    twoFingersPinchTheWidgetThatClaimsThem();
+    aPinchNobodyWantsIsJustFingers();
+    aPinchDoesNotPan();
+    theImageZoomsUnderTwoFingers();
+    aTiledImageIsNotZoomable();
+    aGestureDiesWithItsWidget();
+    zoomIsSettableFromXmlAndScript();
 
     if (g_failures) {
         std::cout << "touch_test: " << g_failures << " checks failed\n";

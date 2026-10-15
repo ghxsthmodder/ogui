@@ -535,6 +535,10 @@ void Kernel::dropPointerState() {
     m_panActive = false;
     m_flingWidget = nullptr;
     m_flingVX = m_flingVY = 0.0f;
+    m_holdWidget = nullptr;
+    m_holdArmed = false;
+    m_pinchWidget = nullptr;
+    m_pinchPrevDist = 0.0f;
 }
 
 void Kernel::setTheme(const Theme* theme) { m_theme = theme; invalidate(); }
@@ -788,6 +792,7 @@ void Kernel::updatePan(const Offset2D& p, bool down, bool pressedEdge,
     if (!m_pointerIsTouch) return;
 
     if (down && !m_panActive) {
+        if (m_pinchWidget) return;   // a pinch owns the fingers, not a pan
         const float dx = p.x - m_panStart.x, dy = p.y - m_panStart.y;
         if (std::fabs(dx) <= kPanSlop && std::fabs(dy) <= kPanSlop) return;
         // The pressed widget first, then every ancestor: the one that is
@@ -875,6 +880,138 @@ void Kernel::advanceFling(float dt) {
     }
     m_flingWidget->onPointerScroll(m_flingVX * dt / unit, m_flingVY * dt / unit);
     m_dirty = true;
+}
+
+// A finger that stays where it landed is not a press waiting to be released:
+// past the hold delay it is a long-press, which is how a touch screen opens a
+// context menu at all. A mouse is never armed -- a held button on a desktop is
+// the first frame of a selection, and right-click already has this job -- and a
+// finger that travels is a drag, which the pan above owns.
+void Kernel::updateLongPress(const Offset2D& p, bool down, bool pressedEdge,
+                             bool releasedEdge) {
+    if (pressedEdge) {
+        m_holdArmed = m_pointerIsTouch;
+        m_holdWidget = m_pressed;
+        m_holdAt = p;
+        m_holdStart = m_input.time;
+    }
+    if (!m_holdArmed) return;
+    if (!down || releasedEdge || m_panActive || m_pinchWidget) {
+        m_holdArmed = false;
+        return;
+    }
+    if (std::fabs(p.x - m_holdAt.x) > kPanSlop ||
+        std::fabs(p.y - m_holdAt.y) > kPanSlop) {
+        m_holdArmed = false;
+        return;
+    }
+    if (m_input.time - m_holdStart < kHoldSeconds) return;
+    m_holdArmed = false;
+    fireLongPress(m_holdWidget, p);
+}
+
+void Kernel::fireLongPress(Widget* w, const Offset2D& p) {
+    if (!w) return;
+    if (m_debugEvents) addLog("longPress " + describe(w));
+    if (m_captured) {
+        m_captured->onPointerUp(static_cast<MouseButton>(
+            m_pressButton >= 0 ? m_pressButton : 0));
+    }
+    // Released, not clicked: the press became the gesture, so letting go has to
+    // click nothing -- the same rule that keeps a pan from also being a tap.
+    m_captured = nullptr;
+    m_pressed = nullptr;
+    m_pressButton = -1;
+    m_holdWidget = nullptr;
+    m_dirty = true;
+
+    // What a finger came here for: the nearest ancestor's <contextmenu>, opened
+    // at the finger exactly where a right-click would have put it.
+    for (Widget* t = w; t != nullptr; t = t->parent()) {
+        if (t->contextMenuName().empty()) continue;
+        if (auto* cm = dynamic_cast<ContextMenu*>(
+                findWidget(t->contextMenuName())))
+            cm->openAt(p.x, p.y);
+        break;
+    }
+
+    Event e;
+    e.kind = EventKind::LongPress;
+    e.source = EventSource::Pointer;
+    e.target = w;
+    e.point = p;
+    dispatchEvent(e);
+}
+
+// Two fingers on the screen are one gesture, not two pointers: the pair's
+// distance is measured every frame and the ratio between frames goes to the
+// widget that claims it. Claiming takes the press away from the tree, so the
+// fingers can slide freely without also dragging, panning or clicking anything,
+// and the pan is out of the way for as long as the pinch holds.
+void Kernel::updatePinch(float sc) {
+    const int n = m_input.touchCount > InputState::kMaxTouchPoints
+                      ? InputState::kMaxTouchPoints
+                      : m_input.touchCount;
+    if (!m_pointerIsTouch || sc <= 0.0f || n < 2 || !m_touchDown) {
+        m_pinchWidget = nullptr;
+        m_pinchPrevDist = 0.0f;
+        return;
+    }
+    // The primary finger and the one that joined it: with three down, the extra
+    // one is noise, and the pair the user put down first is the gesture.
+    int a = -1, b = -1;
+    for (int i = 0; i < n; ++i) {
+        if (m_input.touches[i].id == m_touchPrimary) a = i;
+    }
+    if (a < 0) a = 0;
+    for (int i = 0; i < n; ++i) {
+        if (i != a) { b = i; break; }
+    }
+    if (b < 0) {
+        m_pinchWidget = nullptr;
+        m_pinchPrevDist = 0.0f;
+        return;
+    }
+    const Offset2D fa{m_input.touches[a].x / sc, m_input.touches[a].y / sc};
+    const Offset2D fb{m_input.touches[b].x / sc, m_input.touches[b].y / sc};
+    const Offset2D pivot{(fa.x + fb.x) * 0.5f, (fa.y + fb.y) * 0.5f};
+    const float dx = fb.x - fa.x, dy = fb.y - fa.y;
+    const float dist = std::sqrt(dx * dx + dy * dy);
+
+    if (!m_pinchWidget) {
+        // Ask the widget under the primary finger, then each of its ancestors,
+        // exactly the way the pan asks. Nobody claiming is a normal answer: the
+        // two fingers then stay whatever the one-finger machine makes them.
+        Widget* from = m_pressed ? m_pressed
+                     : (m_captured ? m_captured : m_hovered);
+        for (Widget* w = from; w != nullptr; w = w->parent()) {
+            if (!w->wantsPinch()) continue;
+            m_pinchWidget = w;
+            m_holdArmed = false;
+            if (m_captured) {
+                m_captured->onPointerUp(static_cast<MouseButton>(
+                    m_pressButton >= 0 ? m_pressButton : 0));
+            }
+            m_captured = nullptr;
+            m_pressed = nullptr;
+            m_pressButton = -1;
+            break;
+        }
+        if (!m_pinchWidget) return;
+        m_pinchPrevDist = dist;   // the frame the pair formed is not a zoom
+        return;
+    }
+
+    if (m_pinchPrevDist <= 0.0f || dist <= 0.0f) {
+        m_pinchPrevDist = dist;
+        return;
+    }
+    const float factor = dist / m_pinchPrevDist;
+    m_pinchPrevDist = dist;
+    if (factor != 1.0f) {
+        m_pinchWidget->onPinch(factor, pivot);
+        m_dirty = true;
+    }
 }
 
 void Kernel::update() {
@@ -1014,7 +1151,11 @@ void Kernel::update() {
     // While a button is down the capture owns the moves: dragging a slider
     // or a text selection past the widget's edge must keep feeding it (the
     // pointer is no longer "hovering" it there).
+    // Two fingers first: a pair that claims the gesture takes the press with it,
+    // and the one-finger machine below must not also read these moves as a pan.
+    updatePinch(sc);
     updatePan(p, down, pressedEdge, releasedEdge);
+    updateLongPress(p, down, pressedEdge, releasedEdge);
     Widget* moveTarget = m_panActive
                              ? nullptr
                              : ((popupHit && m_popup) ? popupHit

@@ -192,7 +192,7 @@ deliberately left out.
 |---|---|
 | `id` | lookup name (`Kernel::findWidget`; see Ids and lookup) |
 | `onClick` / `bind` | action name fired on click |
-| `contextMenu` | id of a `<contextmenu>` to pop on right-click |
+| `contextMenu` | id of a `<contextmenu>` to pop on right-click, or on a finger held half a second |
 | `tooltip` | hover text |
 | `focusable` | `true`/`1` forces a tab stop, `false` removes one; interactive widgets are focusable by default, decorative ones are not |
 | `accessible` / `aria-label` | accessible name for tooling and screen readers (no visual effect) |
@@ -491,7 +491,7 @@ and expands in place:
 | `badge` | `text`, `count`, `removable` | — |
 | `sparkline` | `values` (comma list), `label`, `max` | — |
 | `separator` | `thickness` | — |
-| `image` | `source`, `tile` | — |
+| `image` | `source`, `tile`, `zoom` (1..8), `pinchzoom` | — |
 
 ### Inputs
 

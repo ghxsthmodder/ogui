@@ -953,9 +953,30 @@ compatibilidade e capacidade de manutenção.
     sob o dedo, e quem fica com o arrasto é o ancestral rolável. Mouse não é
     dedo: um arrasto dele continua sendo seleção, slider, thumb. Testes em
     `debug/tests/touch_test.cpp`.
--   [ ] Gestos que o `Kernel` ainda não sintetiza: pressionar-e-segurar --- que
-    é como um dedo abriria um `contextmenu` --- e pinça (escala e rotação de
-    dois dedos).
+-   [x] Pressionar-e-segurar: meio segundo dentro do mesmo *slop* e o dedo deixa
+    de ser um toque esperando uma soltura. `updateLongPress` arma a espera só
+    quando o ponteiro veio de `touches` --- um botão do mouse segurado é o
+    primeiro quadro de uma seleção, e o botão direito já é o menu de contexto do
+    desktop --- e ao disparar entrega ao widget pressionado a liberação sem
+    clique, abre o `contextmenu` do ancestral mais próximo no ponto exato do dedo
+    e só então roteia o evento `longPress`, que sobe a árvore como qualquer outro.
+    Um dedo que anda além do *slop* é um arrasto, e um gesto não repete enquanto
+    o dedo fica: a armação é por toque, não por quadro. Testes em
+    `debug/tests/touch_test.cpp`.
+-   [x] Pinça: dois dedos são um gesto, não dois ponteiros. A distância entre eles
+    é medida a cada quadro e a razão entre dois quadros vai ao widget que reivindicar
+    o par --- a mesma ordem do *pan*: o pressionado e depois cada ancestral,
+    `wantsPinch` --- que toma a captura para si (liberada, sem clique) e segura os
+    dedos longe do arrasto enquanto a pinça durar. `factor` é a distância deste
+    quadro dividida pela do anterior, então quem recebe multiplica o que já tem e
+    não guarda memória de gesto nenhum; `pivot` é o ponto entre os dedos em
+    unidades lógicas. Quem consome hoje é `<image pinchzoom="true">`: o *zoom*
+    (1..8) é uma janela de UV sobre a mesma textura e o destino continua sendo o
+    *bounds*, então ampliar não recorta nem transforma nada --- e o ponto sob os
+    dedos fica onde estava, que é o que faz a pinça parecer segurar a figura e não
+    redimensionar a moldura. Rotação continua aberta de propósito: nada na
+    biblioteca gira uma subárvore, então não haveria a quem entregar um ângulo.
+    Testes em `debug/tests/touch_test.cpp`.
 -   [x] Leitura de assets por uma costura só: nada dentro da biblioteca chama
     `fopen` --- layout (`parseFile`, `parseThemeFile`), script
     (`ScriptHost::loadFile`), fonte e imagem passam por `ogui::readFile()`,

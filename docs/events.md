@@ -14,6 +14,7 @@ upwards.
 | Submit | `EventKind::Submit` | `"submit"` | the user presses Enter in a `textinput` |
 | Focus | `EventKind::Focus` | `"focus"` | a widget gains keyboard focus |
 | Blur | `EventKind::Blur` | `"blur"` | a widget loses keyboard focus |
+| LongPress | `EventKind::LongPress` | `"longPress"` | a finger stayed on one widget for half a second (`kHoldSeconds`), without travelling past the pan slop |
 
 `Event` carries everything a handler needs:
 
@@ -111,6 +112,41 @@ afterwards. `Kernel::forgetWidget` additionally clears the cached press/focus
 pointers, which is why the kernel does not click into freed memory on the next
 frame. A handler that clicks *another* widget nests: the inner route finishes
 and restores the outer one, so the original click still travels.
+
+## The two gestures a finger holds instead of moving
+
+**Long-press** (`longPress`) is an event, because it is something that happened
+*to* a widget: `Kernel::updateLongPress` arms a hold only when the pointer came
+from `InputState::touches` (a mouse button held down is the first frame of a
+selection, and right-click already owns the desktop context menu), keeps it armed
+while the finger stays inside the pan slop, and past `kHoldSeconds` fires the
+route. Before dispatching it the kernel releases the widget it was pressing — so
+letting go afterwards clicks nothing — and opens the nearest ancestor's
+`contextmenu` at the finger, exactly where a right-click would have put it.
+
+```lua
+ogui.on("row", "longPress", function(id, info)
+  ogui.toast("selected " .. id)
+end)
+```
+
+**Pinch** is deliberately *not* an event. A pinch is not something that happened
+to a widget, it is a widget holding two fingers: it is continuous, it has to be
+claimed by exactly one receiver, and its answer is a mutation of that widget's
+own state. So it goes through the same claim shape the pan uses — `Widget::wantsPinch()`
+asked of the pressed widget and then of each ancestor, first one to answer yes
+owns the pair — and the receiver gets `onPinch(factor, pivot)`. `factor` is this
+frame's finger distance divided by the last frame's, so a widget multiplies what
+it already holds by it and keeps no gesture memory; `pivot` is the point between
+the fingers in logical screen coordinates. Rotation is left out because nothing
+in the library can rotate a subtree, so there would be nothing to hand an angle
+to. Claiming the pinch releases the press without clicking and takes the fingers
+away from the pan for as long as the pair holds; when only one finger is left the
+one-finger machine owns it again.
+
+`Image` is the consumer shipped with the library: `<image pinchzoom="true">`
+magnifies into its own texture (`zoom`, clamped 1..8) with the point under the
+fingers held still, while the page behind it stays put.
 
 ## Programmatic writes stay silent
 

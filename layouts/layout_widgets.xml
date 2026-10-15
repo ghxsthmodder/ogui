@@ -112,7 +112,7 @@
     </panel>
   </grid>
 
-  <!-- menu de contexto do painel Formulario (botao direito) -->
+  <!-- menu de contexto do painel Formulario (botao direito; no toque, segurar) -->
   <contextmenu id="cm_form">
     <menuitem label="Limpar busca" command="cm_clear"/>
     <menuitem label="Adicionar badge" command="cm_add"/>

@@ -67,6 +67,7 @@ const char* eventName(EventKind kind) {
         case EventKind::Submit: return "submit";
         case EventKind::Focus:  return "focus";
         case EventKind::Blur:   return "blur";
+        case EventKind::LongPress: return "longPress";
     }
     return "unknown";
 }

@@ -266,6 +266,8 @@ public:
         if (m_clickTarget == w) m_clickTarget = nullptr;
         if (m_panTarget == w) { m_panTarget = nullptr; m_panActive = false; }
         if (m_flingWidget == w) m_flingWidget = nullptr;
+        if (m_holdWidget == w) { m_holdWidget = nullptr; m_holdArmed = false; }
+        if (m_pinchWidget == w) m_pinchWidget = nullptr;
     }
     // Last pointer position in logical screen coordinates (for per-region
     // hover effects inside one widget, e.g. SpinBox buttons).
@@ -344,6 +346,13 @@ private:
     void updatePan(const Offset2D& p, bool down, bool pressedEdge, bool releasedEdge);
     // Carry the velocity a flick left behind, decaying, through onPointerScroll.
     void advanceFling(float dt);
+    // The hold state machine (see m_holdArmed) and the gesture it delivers.
+    void updateLongPress(const Offset2D& p, bool down, bool pressedEdge,
+                         bool releasedEdge);
+    void fireLongPress(Widget* w, const Offset2D& p);
+    // The two-finger scale, fed straight from InputState::touches. Takes the
+    // dpi scale because the host reports raw fingers in device pixels.
+    void updatePinch(float sc);
     // Forget every pointer cache when the screen changes: the tree they were
     // taken from may be gone with it.
     void dropPointerState();
@@ -417,6 +426,26 @@ private:
     int m_sampleCount = 0;
     Widget* m_flingWidget = nullptr;
     float m_flingVX = 0.0f, m_flingVY = 0.0f;
+
+    // ---- the two gestures a finger holds instead of moving ----
+    // Held still past kHoldSeconds, a press stops being a press waiting for a
+    // release and becomes a long-press: the widget's <contextmenu> opens at the
+    // finger, the way a right-click opens it, "longPress" is routed, and the
+    // press is consumed so letting go clicks nothing. Travelling past the pan
+    // slop first disarms it, because a drag is a drag, and a mouse is never
+    // armed at all -- a held button on a desktop is the start of a selection.
+    static constexpr float kHoldSeconds = 0.5f;
+    Widget* m_holdWidget = nullptr;
+    Offset2D m_holdAt{};          // where the finger landed, logical units
+    float m_holdStart = 0.0f;     // input clock at that moment
+    bool m_holdArmed = false;
+
+    // Two fingers: the pair's distance ratio between frames, to whoever claims
+    // it. Armed by the second finger, so one finger never pinches, and finished
+    // the moment the count falls back below two -- the surviving finger holds no
+    // press, so it cannot click on its way out either.
+    Widget* m_pinchWidget = nullptr;
+    float m_pinchPrevDist = 0.0f;
 
     // tooltip hover timing
     Widget* m_tipTarget = nullptr;

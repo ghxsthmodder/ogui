@@ -162,11 +162,33 @@ public:
     void setTile(bool t) { m_tile = t; }
     bool tile() const { return m_tile; }
 
+    // Zoom into the picture: the destination stays the widget's bounds and the
+    // source window shrinks, so a magnified image is cropped by its own frame
+    // instead of painting over its neighbours. Clamped 1..8 -- a `zoom="40"`
+    // asks for more than the texture can give and lands on the ceiling.
+    // Re-setting the zoom recentres the window; a pinch puts it under the
+    // fingers instead.
+    void setZoom(float z);
+    float zoom() const { return m_zoom; }
+    // Opt this image in to a two-finger pinch: the pair scales `zoom` and keeps
+    // the point under the fingers where it was. Tiled images decline, since
+    // there is no zoom that does not also move every tile.
+    void setPinchZoom(bool on) { m_pinchZoom = on; }
+    bool pinchZoom() const { return m_pinchZoom; }
+    virtual bool wantsPinch() const override { return m_pinchZoom && !m_tile; }
+    virtual void onPinch(float factor, const Offset2D& pivot) override;
+
     virtual void onDraw(Rasterizer& r) const override;
 
 private:
+    // The source window a pinch left behind, or negative for "centre it".
+    void uvWindow(float& u, float& v, float& span) const;
+
     std::string m_path;
     bool m_tile = false;
+    bool m_pinchZoom = false;
+    float m_zoom = 1.0f;
+    float m_uvX = -1.0f, m_uvY = -1.0f;
 };
 
 // ------------------------------------------------------------------

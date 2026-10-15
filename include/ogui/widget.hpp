@@ -24,7 +24,7 @@ struct InputState;
 // stays with the hit-tested or focused widget and never bubbles: it is
 // positional and streaming, so handing it to the ancestors too would just
 // double every scroll and every caret move.
-enum class EventKind { Click, Change, Submit, Focus, Blur };
+enum class EventKind { Click, Change, Submit, Focus, Blur, LongPress };
 
 // Where a click came from: the pointer, or Enter/Space on the focused widget.
 enum class EventSource { Pointer, Keyboard };
@@ -272,6 +272,19 @@ public:
     // scroll. Widgets that do not answer stay exactly as they were, which is why
     // a text field selects under a finger and does not pan.
     virtual bool wantsPan(float dx, float dy) const;
+    // Two fingers moving apart or together. Asked the same way wantsPan is --
+    // the widget the first finger pressed, then each of its ancestors -- and the
+    // one that says yes owns the pair: the press it still holds is released
+    // without clicking, and a finger that is part of a pinch never also pans or
+    // flicks the content. `factor` is this frame's distance between the fingers
+    // divided by the last frame's (1.06 = spreading 6% wider since the previous
+    // frame), so a widget multiplies whatever it holds by it and needs no
+    // gesture memory of its own; `pivot` is the point between the fingers in
+    // logical screen coordinates, where the content should stay put. Rotation is
+    // deliberately not part of this: nothing in the library can rotate a
+    // subtree, so there is nothing to hand an angle to.
+    virtual bool wantsPinch() const { return false; }
+    virtual void onPinch(float, const Offset2D&) {}
     virtual void onKeyDown(KeyCode key, uint32_t mods);
     virtual void onKeyUp(KeyCode key);
     // True if this widget wants the raw Tab key for itself (e.g. a text

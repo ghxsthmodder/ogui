@@ -21,8 +21,9 @@ creates for you (`ogui::Host`, a built-in Win32/WGL window and event loop, or
 * **Input dispatch** — hover, capture (drag), focus, key routing, modifiers,
   click bindings, hover tooltips, and the same pointer from a finger: every
   touch of the event is carried, the kernel picks the one a gesture belongs to,
-  a drag over a scrollable widget becomes a pan and a flick, and `CANCEL`
-  releases without clicking.
+  a drag over a scrollable widget becomes a pan and a flick, a held finger is a
+  long-press that opens the context menu, two fingers pinch an image, and
+  `CANCEL` releases without clicking.
 * **Visual states** — declarative `hover:`/`pressed:`/`focus:`/`checked:`/
   `selected:`/`disabled:` overlays on colors, border width and radius, with
   optional `transition="0.2"` blending — no script required.
@@ -43,7 +44,7 @@ creates for you (`ogui::Host`, a built-in Win32/WGL window and event loop, or
   widget creation (`add`/`remove`/`clear`), tree navigation
   (`children`/`parent`/`index`), per-widget event
   listeners (`ogui.on`/`ogui.off`) on typed events that bubble to the
-  ancestors (`click`/`change`/`submit`/`focus`/`blur`,
+  ancestors (`click`/`change`/`submit`/`focus`/`blur`/`longPress`,
   see [`docs/events.md`](docs/events.md)), declarative data bindings
   (`ogui.bind`/`ogui.unbind`) and inspection
   (`ogui.dump`/`inspect`/`debug`/`stats`).
@@ -170,7 +171,16 @@ cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-b
   first, then its ancestors — takes the capture away without clicking, the
   content tracks the finger in its own `scrollUnit()` steps, a thumb drag or a
   text selection vetoes, a flick keeps scrolling and settles, a slow release
-  leaves no inertia, and a new finger stops a scroll in flight.
+  leaves no inertia, and a new finger stops a scroll in flight. The two gestures
+  a finger holds: a half-second hold fires `longPress` once, opens the widget's
+  `contextmenu` at the finger and clicks nothing on release while a held mouse
+  button stays a selection, and a claimed pair releases the press without
+  clicking, hands the widget the distance ratio with the pivot between the
+  fingers, keeps the pan off the fingers until one lifts, magnifies a
+  `pinchzoom` image inside 1..8 with the point under the fingers held still, and
+  falls back to the pan when nobody wants it — and a widget removed while a
+  finger is still on it takes its hold and its pair down with it, which is what
+  the sanitizer run of this test is really checking.
 * `unicode` — on-demand glyph baking (a late glyph never moves an early one),
   the fallback chain between faces, the `.notdef` placeholder, zero-advance
   combining marks, CJK line breaking with no stranded closing punctuation, and
@@ -567,7 +577,7 @@ theme default.
 | `separator` | rule, horizontal or vertical | `thickness`, `color` |
 | `tabs` / `tab` | header strip over stacked pages (inactive pages take no input); pages that don't fit the width collapse into a `...` popup menu, or with `scrolling="true"` the header becomes a drag/wheel-scrollable strip that keeps every tab visible | `active`, `tabHeight`, `headerColor`, `tabColor`, `activeColor`, `accent`, `scrolling` / `label` |
 | `group` | titled grouping box | `name` |
-| `image` | RGBA image file (PNG/JPG/… decoded by `ImageManager` via stb_image): stretched to the bounds, or repeated at native size with `tile`; `border` draws a frame on top; a missing file draws nothing | `source` (path, relative to the working directory), `tile` |
+| `image` | RGBA image file (PNG/JPG/… decoded by `ImageManager` via stb_image): stretched to the bounds, or repeated at native size with `tile`; `zoom` crops the bounds down to that fraction of the picture (1..8) instead of stretching the whole thing; `pinchzoom` lets two fingers set the zoom, keeping the point under the fingers still; `border` draws a frame on top; a missing file draws nothing | `source` (path, relative to the working directory), `tile`, `zoom`, `pinchzoom` |
 | `scrollview` | wheel-scrollable clipped viewport over its children | `scrollX`, `scrollY`, `scrollStep` |
 
 Toasts (transient notification banners) are a kernel layer rather than an
@@ -680,6 +690,26 @@ becomes a flick: `Kernel::advanceFling` decays it exponentially through the same
 `onPointerScroll` until it stops, and putting a finger back down stops it. A
 mouse drag is none of this — it is still a selection, a slider, a thumb.
 
+A finger that does *not* travel is a gesture of its own. Half a second inside
+the same slop and `Kernel::updateLongPress` calls `Kernel::fireLongPress`: the
+pressed widget is released without being clicked, the nearest ancestor's
+`contextmenu` opens at the finger — which is how a touch screen reaches a context
+menu at all — and a `longPress` event takes the normal route up the tree. A mouse
+button held that long is still the first frame of a selection, so the hold is
+armed only when the pointer came from `touches`.
+
+Two fingers are one gesture, not two pointers. `Kernel::updatePinch` measures the
+distance between them every frame and offers the pair to the pressed widget and
+then to each ancestor, the way the pan does; the first `Widget::wantsPinch` wins,
+takes the press with it (released, not clicked) and holds the fingers away from
+the pan until one lifts. The receiver gets `onPinch(factor, pivot)`: this frame's
+distance divided by the last frame's, and the point between the fingers in
+logical units, so a widget multiplies whatever it already holds and needs no
+gesture memory. `Image` is the consumer: `<image pinchzoom="true">` magnifies
+into its own texture (1..8) with the point under the fingers held still, while
+the page behind it stays put. Rotation is left out on purpose — nothing in the
+library can rotate a subtree, so there is nothing to hand an angle to.
+
 `Tab`/`Shift+Tab` walk the focusable widgets of the current screen in
 document order and wrap; `Kernel::focusNext(backwards)` exposes the same
 movement and `Kernel::setFocusWidget()` / `Widget::isFocusable()` /
@@ -697,19 +727,27 @@ through `commitText()` and lands in the same one-code-point-per-frame queue.
 
 ## Events and propagation
 
-Five semantic events — `click`, `change`, `submit`, `focus`, `blur` — are typed
+Six semantic events — `click`, `change`, `submit`, `focus`, `blur`,
+`longPress` — are typed
 (`ogui::EventKind`) and carried by one `ogui::Event` that names its `target`,
 the `currentTarget` being visited, the click `point` and its `source` (pointer
 or keyboard). `Kernel::dispatchEvent` visits the widget the event happened to,
 then each ancestor up to the screen root; at every stop the widget's C++
 `Widget::onEvent` runs and its Lua listeners fire with `(id, info)`. A container
 therefore watches its children with one listener, and `Event::stopPropagation()`
-(C++) or `return false` (Lua) ends the walk.
+(C++) or `return false` (Lua) ends the walk. A sixth kind, `longPress`, is the
+finger equivalent of a right-click: `Kernel::fireLongPress` releases the pressed
+widget, opens the nearest ancestor's `contextmenu` at the finger and then
+dispatches the event, so a `longPress` listener and a context menu are the same
+gesture seen from either side.
 
 Deliberately *not* propagated: raw mouse moves, wheel steps and key presses go
 to the hit-tested or focused widget only, and `onclick` actions resolve against
 the pressed widget alone. A scroll is offered to the nearest ancestor that can
-actually scroll, which picks one receiver rather than broadcasting. Handlers may
+actually scroll, which picks one receiver rather than broadcasting. A pinch is
+not an event either: it is continuous and it needs exactly one receiver, so it
+travels by the pan's claim rule (`Widget::wantsPinch` → `onPinch`) instead of
+the event walk. Handlers may
 remove the widget under the event — the kernel holds the chain, so the walk
 finishes safely. [`docs/events.md`](docs/events.md) documents the tables and the
 edge cases.
@@ -964,6 +1002,12 @@ device size, one frame per input event and per `APP_CMD_REDRAW_NEEDED`, and a
 hand-drained `ALooper_pollOnce` loop with a 16 ms budget while a window is up
 (`ALooper_pollAll` is documented as obsoleted: it "may ignore wakes").
 
+The gestures are what the device is for, and the staged screens use them:
+`layout_demo.xml`'s first `<image>` carries `pinchzoom="true"`, so two fingers
+spread over it magnify into the texture, and holding a finger on the
+`layout_widgets.xml` form panel opens the same `cm_form` menu the desktop reaches
+with the right button.
+
 What it does not do is the soft keyboard's text. NDK r30 ships no
 `AInputConnection` header, so a pure-NDK composing-text path is not available;
 the host shows and hides the input method (`showKeyboard()`/`hideKeyboard()`)
@@ -1038,12 +1082,13 @@ thirdparty/lua    vendored Lua 5.4 interpreter sources (scripting)
   only one this machine can make headlessly. It has not been run on a vendor
   Android GPU driver, and the APK has not been installed on a device — see
   [The Android host](#the-android-host).
-* Touch gestures stop at the pan and the flick. There is no long-press (so a
-  finger cannot open a `contextmenu`) and no pinch; `InputState` carries every
-  finger, so the kernel has what it needs to synthesize both, but no widget is
-  handed the gesture yet. Panning a text area with a finger is declined on
-  purpose: a `textinput`/`textarea` drag is a selection, and the enclosing
-  scrollable ancestor takes the drag instead.
+* Touch gestures cover the pan, the flick, the long-press and the pinch. What is
+  left is rotation: `InputState` carries each finger's position, so an angle is
+  computable, but nothing in the library can rotate a subtree and there is no
+  widget hook to hand it to. One widget consumes the pinch today (`image`);
+  anything else that wants it overrides `wantsPinch`/`onPinch`. Panning a text
+  area with a finger is declined on purpose: a `textinput`/`textarea` drag is a
+  selection, and the enclosing scrollable ancestor takes the drag instead.
 * On Android the soft keyboard can be shown but its text has nowhere to go:
   the NDK exposes no `AInputConnection`, so composing input needs a Java-side
   input connection feeding `AndroidInputBridge::commitText()`. Key events are

@@ -35,9 +35,9 @@
   <label id="lbl_img_t" x="1.25%" y="316" width="92.5%" height="16"
          text="Image: ajustado (esq.), tileado (dir.)"/>
   <image id="img_demo" source="assets/checker.png" x="1.25%" y="336" width="180" height="90"
-         border="@accent"/>
+         pinchzoom="true" border="@accent"/>
   <image id="img_tile" source="assets/checker.png" x="25%" y="336" width="300" height="90"
          tile="true" border="@accent"/>
   <label id="lbl_img" x="63.75%" y="336" width="35%" height="90" wrap="true"
-         text="src aponta para o arquivo RGBA (PNG via stb). tile repete a textura; sem tile ela e esticada ao bounds."/>
+         text="src aponta para o arquivo RGBA (PNG via stb). tile repete a textura; sem tile ela e esticada ao bounds. Com pinchzoom, dois dedos ampliam a imagem ate 8x."/>
 </screen>

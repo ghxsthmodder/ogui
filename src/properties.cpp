@@ -770,6 +770,20 @@ std::vector<PropertyDef> imageProps() {
                 return true;
             },
             "repeat at native size instead of stretching"),
+        numberProp<Image>(
+            "zoom", [](const Image& i) { return i.zoom(); },
+            [](Image& i, double v) {
+                i.setZoom(static_cast<float>(v));
+                return true;
+            },
+            "magnification 1..8: the bounds show that much less of the picture"),
+        boolProp<Image>(
+            "pinchzoom", [](const Image& i) { return i.pinchZoom(); },
+            [](Image& i, bool v) {
+                i.setPinchZoom(v);
+                return true;
+            },
+            "a two-finger pinch scales this image instead of scrolling"),
     };
 }
 

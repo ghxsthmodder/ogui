@@ -113,6 +113,41 @@ void Button::onDraw(Rasterizer& r) const {
 Image::Image() = default;
 Image::~Image() = default;
 
+void Image::setZoom(float z) {
+    m_zoom = std::clamp(z, 1.0f, 8.0f);
+    m_uvX = m_uvY = -1.0f;   // no gesture has placed the window yet
+}
+
+// The part of the texture the bounds show. `span` is what one zoomed axis
+// covers, and an anchor below zero means "nobody moved it: centre it".
+void Image::uvWindow(float& u, float& v, float& span) const {
+    span = 1.0f / std::max(1.0f, m_zoom);
+    const float loose = 1.0f - span;
+    u = m_uvX < 0.0f ? loose * 0.5f : std::clamp(m_uvX, 0.0f, loose);
+    v = m_uvY < 0.0f ? loose * 0.5f : std::clamp(m_uvY, 0.0f, loose);
+}
+
+// Two fingers spreading: scale the window and slide it so the point they are
+// holding stays where it was, which is what makes a pinch feel like grabbing
+// the picture rather than like resizing a frame.
+void Image::onPinch(float factor, const Offset2D& pivot) {
+    if (!m_pinchZoom || m_tile || factor <= 0.0f) return;
+    const Rect b = bounds();
+    if (b.w <= 0.0f || b.h <= 0.0f) return;
+
+    float u = 0.0f, v = 0.0f, span = 0.0f;
+    uvWindow(u, v, span);
+    const float px = std::clamp((pivot.x - b.x) / b.w, 0.0f, 1.0f);
+    const float py = std::clamp((pivot.y - b.y) / b.h, 0.0f, 1.0f);
+    const float ax = u + px * span;   // where that point sits in the picture
+    const float ay = v + py * span;
+
+    m_zoom = std::clamp(m_zoom * factor, 1.0f, 8.0f);
+    const float nspan = 1.0f / m_zoom;
+    m_uvX = std::clamp(ax - px * nspan, 0.0f, 1.0f - nspan);
+    m_uvY = std::clamp(ay - py * nspan, 0.0f, 1.0f - nspan);
+}
+
 void Image::onDraw(Rasterizer& r) const {
     if (!m_style.isVisible) return;
     Rect b = bounds();
@@ -124,7 +159,9 @@ void Image::onDraw(Rasterizer& r) const {
         // leaves the image's own colours untouched.
         const Color tint{255, 255, 255, 255};
         if (!m_tile) {
-            r.drawRectUV(b, Rect{0, 0, 1, 1}, tint, img->id);
+            float u = 0.0f, v = 0.0f, span = 0.0f;
+            uvWindow(u, v, span);
+            r.drawRectUV(b, Rect{u, v, span, span}, tint, img->id);
         } else {
             // One full-UV quad per tile keeps both backends' samplers on
             // their clamp-to-edge default.
