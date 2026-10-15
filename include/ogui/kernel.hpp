@@ -258,17 +258,9 @@ public:
     Widget* pressedWidget() const { return m_pressed; }
     // Drop cached pointers to a widget that is about to leave the tree
     // (script-driven ogui.remove). Call before the last shared_ptr dies.
-    void forgetWidget(Widget* w) {
-        if (m_focus == w) m_focus = nullptr;
-        if (m_hovered == w) m_hovered = nullptr;
-        if (m_captured == w) m_captured = nullptr;
-        if (m_pressed == w) m_pressed = nullptr;
-        if (m_clickTarget == w) m_clickTarget = nullptr;
-        if (m_panTarget == w) { m_panTarget = nullptr; m_panActive = false; }
-        if (m_flingWidget == w) m_flingWidget = nullptr;
-        if (m_holdWidget == w) { m_holdWidget = nullptr; m_holdArmed = false; }
-        if (m_pinchWidget == w) m_pinchWidget = nullptr;
-    }
+    // Covers the whole subtree: a panel that is removed takes the focused
+    // field inside it, the row being flicked and the tooltip being shown.
+    void forgetWidget(Widget* w);
     // Last pointer position in logical screen coordinates (for per-region
     // hover effects inside one widget, e.g. SpinBox buttons).
     Offset2D mousePos() const {
@@ -356,6 +348,11 @@ private:
     // Forget every pointer cache when the screen changes: the tree they were
     // taken from may be gone with it.
     void dropPointerState();
+    // The screen-change form of that: the open popup is dismissed first, so
+    // its owner's callback still runs against a live tree. The caller has to
+    // hold the outgoing screen across it, because dropping the focus announces
+    // a Blur to the widget losing it and that widget lives in that screen.
+    void dropScreenState();
     // Swap the ScriptHost to the current screen's scripts (clear + load).
     void reloadScreenScripts();
     // modifier bitmask derived from the current key state (see ModBits).

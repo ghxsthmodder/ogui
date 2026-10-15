@@ -299,6 +299,16 @@ entry, so the id reports `nullptr` rather than a dangling pointer. If you keep
 a raw `Widget*` of your own, clear it through `Kernel::forgetWidget` before the
 widget leaves the tree.
 
+That call is the same promise for the kernel's own caches: it drops every
+pointer the frame holds at a widget *and at everything under it* — focus,
+hover, the press, the pan, the fling, the long-press hold, the pinch and the
+tooltip — and dismisses the floating popup if the widget leaving is inside the
+one being drawn. `ogui.remove` and `ogui.clear` make it for you; a host that
+calls `removeChild` itself has to. A screen change is the other half:
+`pushScreen`, `popScreen` and `switchScreen` dismiss the popup and clear the
+focus *before* the outgoing tree is released, so the `blur` a widget loses on
+the way out still reaches a live object.
+
 ## Event routing
 
 Five semantic events travel the tree: `click`, `change`, `submit`, `focus` and

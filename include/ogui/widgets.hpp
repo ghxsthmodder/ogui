@@ -1933,6 +1933,9 @@ public:
 
 private:
     struct Row { TreeItem* node = nullptr; int depth = 0; };
+    // The pre-toggle layout, held weakly: a row's node can be removed from the
+    // tree while the 0.18s compression tween is still drawing it.
+    struct Snap { std::weak_ptr<Widget> node; int depth = 0; };
 
     void flatten(Widget* parent, int depth);   // rebuild m_rows
     void clampSelected();
@@ -1993,7 +1996,7 @@ private:
     // vanished slide into it and fade out -- so the list compresses instead
     // of the children simply blinking away.
     std::map<const TreeItem*, float> m_animOldY;
-    std::vector<Row> m_animOldRows;    // for detecting vanishing rows
+    std::vector<Snap> m_animOldRows;   // for detecting vanishing rows
     float m_animToggleY = 0.0f;
     float m_animOldH = 0.0f;           // widget height when the tween began
     Tween m_anim;

@@ -228,6 +228,11 @@ if(OGUI_BUILD_TESTS)
     target_compile_definitions(ogui_touch_test PRIVATE
         OGUI_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets")
 
+    # Widgets removed while the kernel or a popup still points at them. These
+    # are the checks the ASAN tree is here for.
+    add_executable(ogui_lifetime_test debug/tests/lifetime_test.cpp)
+    target_link_libraries(ogui_lifetime_test PRIVATE ogui)
+
     # What an Android motion or key event means, tested without a phone: the
     # rules are plain data in AndroidInputBridge, only the getters need a device.
     add_executable(ogui_android_test debug/tests/android_test.cpp)
@@ -327,6 +332,7 @@ if(OGUI_BUILD_TESTS)
         add_test(NAME custom-widget COMMAND ogui_custom_widget)
     endif()
     add_test(NAME kernel COMMAND ogui_kernel_test)
+    add_test(NAME lifetime COMMAND ogui_lifetime_test)
     add_test(NAME touch COMMAND ogui_touch_test)
     add_test(NAME asset COMMAND ogui_asset_test)
     add_test(NAME unicode COMMAND ogui_unicode_test)

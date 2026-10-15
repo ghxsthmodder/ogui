@@ -241,8 +241,19 @@ void ComboBox::openPopup() {
     m_popup->setTextColor(m_text);
     m_popup->setHighlightColor(m_highlight);
     m_popup->setHighlightTextColor(m_highlightText);
-    m_popup->setOnSelect([this](int row) { commit(row); });
-    m_popup->setOnDismiss([this] { m_open = false; });   // outside press closed it
+    // The kernel holds the popup, so the popup can outlive this widget when the
+    // tree removes it. The callbacks capture the owner weakly and pin it for
+    // their duration: `this` is only sound while the reference still exists,
+    // and holding it stops a command from deleting the widget underneath itself.
+    const std::weak_ptr<Widget> owner = weak_from_this();
+    m_popup->setOnSelect([this, owner](int row) {
+        if (!owner.lock()) return;
+        commit(row);
+    });
+    m_popup->setOnDismiss([this, owner] {   // outside press closed it
+        if (!owner.lock()) return;
+        m_open = false;
+    });
     m_popup->fadeIn();
     m_popup->setVisible(true);   // closePopup() hid it; re-arm before drawing
 
@@ -458,7 +469,11 @@ void Tabs::openOverflow() {
     const float ox = o.x + b.w - 170.0f, oy = o.y + m_headerHeight;
     m_overflow->setBounds(placePopup(Offset2D{ox, oy}, oy, 170.0f,
                                      m_overflow->contentHeight(), sw, sh));
-    m_overflow->setOnSelect([this](const std::string& cmd) {
+    // See ComboBox::openPopup: the popup outlives the widget that opened it, so
+    // the owner is pinned for the duration of the callback.
+    const std::weak_ptr<Widget> owner = weak_from_this();
+    m_overflow->setOnSelect([this, owner](const std::string& cmd) {
+        if (!owner.lock()) return;
         if (Kernel* k = kernel()) k->closePopup();
         if (m_overflow) m_overflow->setVisible(false);
         setActive(std::atoi(cmd.c_str()));
@@ -1618,7 +1633,11 @@ void TreeView::rebuildAnimated() {
     m_animOldH = m_bounds.h;
     // Snapshot the layout we are leaving (positions in pixels, pre-scroll).
     m_animOldY.clear();
-    m_animOldRows = m_rows;
+    m_animOldRows.clear();
+    for (const auto& row : m_rows)
+        m_animOldRows.push_back(
+            {row.node ? row.node->weak_from_this() : std::weak_ptr<Widget>{},
+             row.depth});
     for (size_t i = 0; i < m_rows.size(); ++i)
         m_animOldY[m_rows[i].node] = static_cast<float>(i) * m_rowH;
 
@@ -1986,13 +2005,19 @@ void TreeView::onDraw(Rasterizer& r) const {
     if (anim) {
         // Rows that just vanished slide into the toggled parent and fade out.
         for (size_t i = 0; i < m_animOldRows.size(); ++i) {
-            const Row& old = m_animOldRows[i];
+            const Snap& old = m_animOldRows[i];
+            // The node was removed while the tween runs; a vanished row that is
+            // already gone simply stops being drawn. lock() also pins it for the
+            // rest of this frame, so a nested change cannot free it under emit().
+            const std::shared_ptr<Widget> alive = old.node.lock();
+            if (!alive) continue;
+            const TreeItem* node = static_cast<const TreeItem*>(alive.get());
             bool still = false;
             for (const auto& nr : m_rows)
-                if (nr.node == old.node) { still = true; break; }
+                if (nr.node == node) { still = true; break; }
             if (still) continue;
             const float oldY = static_cast<float>(i) * m_rowH;
-            emit(old.node, old.depth, lerp(oldY, m_animToggleY, t), 1.0f - t,
+            emit(node, old.depth, lerp(oldY, m_animToggleY, t), 1.0f - t,
                  false, false);
         }
     }
@@ -2310,7 +2335,10 @@ void MenuBar::openMenu(size_t index) {
     }
     m_popup->setBounds(placePopup(Offset2D{o.x + mx, o.y}, o.y + b.h, w,
                                   m_popup->contentHeight(), sw, sh));
-    m_popup->setOnSelect([this](const std::string& cmd) {
+    // The popup outlives the menu bar when the tree removes it (see ComboBox).
+    const std::weak_ptr<Widget> owner = weak_from_this();
+    m_popup->setOnSelect([this, owner](const std::string& cmd) {
+        if (!owner.lock()) return;
         if (Kernel* k = kernel()) k->closePopup();
         if (m_popup) m_popup->setVisible(false);
         if (m_onCommand && !cmd.empty()) m_onCommand(cmd);
@@ -2395,7 +2423,10 @@ void ContextMenu::openAt(float x, float y) {
     // taller than the space below it opens upwards instead.
     m_popup->setBounds(placePopup(Offset2D{x, y}, y, w,
                                   m_popup->contentHeight(), sw, sh));
-    m_popup->setOnSelect([this](const std::string& cmd) {
+    // The popup outlives the menu when the tree removes it (see ComboBox).
+    const std::weak_ptr<Widget> owner = weak_from_this();
+    m_popup->setOnSelect([this, owner](const std::string& cmd) {
+        if (!owner.lock()) return;
         if (Kernel* k = kernel()) k->closePopup();
         if (m_popup) m_popup->setVisible(false);
         if (m_onCommand && !cmd.empty()) m_onCommand(cmd);

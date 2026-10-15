@@ -108,9 +108,10 @@ click listener is the common case. `Kernel::dispatchEvent` collects the whole
 chain as `shared_ptr`s before calling anything, so the ancestors stay reachable
 and the removed widget stays alive until the walk ends: the event finishes its
 route over a tree that no longer contains its target, and the widget is freed
-afterwards. `Kernel::forgetWidget` additionally clears the cached press/focus
-pointers, which is why the kernel does not click into freed memory on the next
-frame. A handler that clicks *another* widget nests: the inner route finishes
+afterwards. `Kernel::forgetWidget` additionally clears the cached pointers —
+press, focus, hover, pan, fling, hold, pinch and the tooltip — over the whole
+subtree the removal takes with it, which is why the kernel does not click into
+freed memory on the next frame. A handler that clicks *another* widget nests: the inner route finishes
 and restores the outer one, so the original click still travels.
 
 ## The two gestures a finger holds instead of moving

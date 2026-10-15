@@ -185,6 +185,12 @@ cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-b
   the fallback chain between faces, the `.notdef` placeholder, zero-advance
   combining marks, CJK line breaking with no stranded closing punctuation, and
   real Cyrillic ink reaching the framebuffer.
+* `lifetime` — the pointers that outlive their widgets: a screen torn down by
+  `popScreen`/`switchScreen` while the kernel was its only owner (the Blur has
+  to reach a field that is still alive), a tooltip still showing on the widget
+  a script just removed, a focus and a held press inside a panel that left the
+  tree, a popup whose owner died and is still on screen taking clicks, and a
+  tree row the collapse animation is still drawing after the node was deleted.
 * `screens` — every manifest screen parses in both themes and keeps the ids the gallery binds to.
 * `scrollbar` — presses on the listbox/treeview/table/scrollview/window/textarea bars scroll instead of selecting or hitting children; dropdown popups fit the screen and scroll.
 * `script` — `<script>` collection, screen-bound Lua loading on screen
@@ -256,6 +262,15 @@ leaves the C++ frames below it by longjmp, which does not run destructors, so a
 binding may not `luaL_error` while its frame still owns a string or a vector —
 `src/script.cpp` copies the message onto the Lua stack and jumps only after the
 objects that carried it are out of scope.
+
+Removing a widget is the same class of problem in the other direction: the
+kernel and the widgets both keep raw pointers into the tree. `forgetWidget()`
+walks the whole subtree before the last `shared_ptr` dies (focus, hover, the
+press, the pan, the fling, the hold, the pinch and the tooltip), every screen
+change drops its pointers *before* the outgoing tree is released, and a popup
+callback that was built with `[this]` also captures `weak_from_this()` and
+returns when the owner is gone, because the kernel holds the floating layer as
+well as the widget that opened it.
 
 ```sh
 cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug \

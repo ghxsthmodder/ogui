@@ -189,7 +189,12 @@ void ColorPicker::onPointerDown(MouseButton btn, const Offset2D&) {
     if (!m_popup) m_popup = std::make_shared<ColorPopup>();
     m_popup->setHSV(m_h, m_s, m_v);
     m_popup->setVisible(true);
-    m_popup->setOnChanged([this](float h, float s, float v) {
+    // The kernel holds the popup, so it can outlive this widget when the tree
+    // removes it: the callback runs only while the owner is still referenced,
+    // and pinning it keeps a command from deleting the widget underneath itself.
+    const std::weak_ptr<Widget> owner = weak_from_this();
+    m_popup->setOnChanged([this, owner](float h, float s, float v) {
+        if (!owner.lock()) return;
         m_h = h; m_s = s; m_v = v;
         applyHsv();
         if (m_onChanged) m_onChanged(colorHex());
@@ -281,7 +286,10 @@ void PathPicker::listDir(const std::string& dir) {
     const float h = std::min(m_popup->contentHeight(), 340.0f);
     m_popup->setBounds(placePopup(Offset2D{o.x, o.y}, o.y + b.h + 2.0f,
                                   std::max(b.w, 220.0f), h, sw, sh));
-    m_popup->setOnSelect([this, dir](const std::string& cmd) {
+    // The popup outlives the picker when the tree removes it (see ComboBox).
+    const std::weak_ptr<Widget> owner = weak_from_this();
+    m_popup->setOnSelect([this, dir, owner](const std::string& cmd) {
+        if (!owner.lock()) return;
         if (!cmd.empty() && cmd[0] == 'd' && cmd.size() > 1 && cmd[1] == ':') {
             std::string next;
             if (cmd.substr(2) == "..") {

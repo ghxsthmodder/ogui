@@ -487,17 +487,19 @@ void Kernel::reloadScreenScripts() {
 void Kernel::pushScreen(std::shared_ptr<Screen> screen) {
     if (!screen) return;
     m_screenStack.push_back(screen);
-    dropPointerState();
-    setFocus(*this, m_focus, nullptr);
+    dropScreenState();
     reloadScreenScripts();
     invalidate();
 }
 
 void Kernel::popScreen() {
     if (m_screenStack.size() > 1) {
+        // The stack is the only owner a host that wrote
+        // `pushScreen(makeScreen())` ever gave the screen, so it dies on the
+        // pop. Hold it until the outgoing tree has said its last goodbyes.
+        auto leaving = m_screenStack.back();
+        dropScreenState();
         m_screenStack.pop_back();
-        dropPointerState();
-        setFocus(*this, m_focus, nullptr);
         reloadScreenScripts();
         invalidate();
     }
@@ -514,9 +516,10 @@ void Kernel::switchScreen(std::shared_ptr<Screen> screen) {
             screen->height = cur->height;
             screen->scale = cur->scale;
         }
+        auto leaving = m_screenStack.back();
         m_screenStack.back() = screen;
-        dropPointerState();
-        setFocus(*this, m_focus, nullptr);
+        dropScreenState();
+        leaving.reset();
         reloadScreenScripts();
         invalidate();
     }
@@ -539,6 +542,43 @@ void Kernel::dropPointerState() {
     m_holdArmed = false;
     m_pinchWidget = nullptr;
     m_pinchPrevDist = 0.0f;
+    m_tipTarget = nullptr;
+    m_tipTimer = 0.0f;
+}
+
+// The removal counterpart of dropPointerState: a widget that leaves the tree
+// takes everything the frame cached against it, and the subtree under it goes
+// with it -- the field that holds the focus inside a removed panel, the row a
+// finger is still flicking, the tooltip being shown. Without the descent the
+// next frame reads the memory the removal freed.
+void Kernel::forgetWidget(Widget* w) {
+    if (!w) return;
+    if (m_focus == w) m_focus = nullptr;
+    if (m_hovered == w) m_hovered = nullptr;
+    if (m_captured == w) m_captured = nullptr;
+    if (m_pressed == w) m_pressed = nullptr;
+    if (m_clickTarget == w) m_clickTarget = nullptr;
+    if (m_panTarget == w) { m_panTarget = nullptr; m_panActive = false; }
+    if (m_flingWidget == w) m_flingWidget = nullptr;
+    if (m_holdWidget == w) { m_holdWidget = nullptr; m_holdArmed = false; }
+    if (m_pinchWidget == w) m_pinchWidget = nullptr;
+    if (m_tipTarget == w) { m_tipTarget = nullptr; m_tipTimer = 0.0f; }
+    // The open popup is drawn from its own tree: a widget of that tree leaving
+    // means the popup shows a hole, so it closes.
+    if (m_popup)
+        for (Widget* a = w; a; a = a->parent())
+            if (a == m_popup.get()) { closePopup(); break; }
+    for (const auto& c : w->children())
+        if (c) forgetWidget(c.get());
+}
+
+// The screen-change form: a dropdown or a menu belongs to the screen that
+// opened it, so it goes with that screen -- dismissed while its owner is still
+// there to hear about it.
+void Kernel::dropScreenState() {
+    closePopup();
+    dropPointerState();
+    setFocus(*this, m_focus, nullptr);
 }
 
 void Kernel::setTheme(const Theme* theme) { m_theme = theme; invalidate(); }

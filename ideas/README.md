@@ -1017,8 +1017,13 @@ exemplo básico funciona. Sempre que aplicável, verificar:
 
 -   [ ] A API está documentada e segue as convenções da biblioteca.
 -   [ ] Os valores e argumentos inválidos produzem erros úteis.
--   [ ] O ciclo de vida é seguro, inclusive após remoção de widgets ou
-    troca de tela.
+-   [x] O ciclo de vida é seguro, inclusive após remoção de widgets ou
+    troca de tela. (`debug/tests/lifetime_test.cpp`, coberto pelo ASAN:
+    `forgetWidget` desce a árvore e limpa o tooltip, a troca de tela solta o
+    popup e o foco *antes* de liberar a tela que sai, o callback de popup
+    captura `weak_from_this()` e o snapshot de animação do `treeview` segura as
+    linhas fracamente. Falta ainda: um host que chama `removeChild` sozinho tem
+    que chamar `Kernel::forgetWidget` antes — a biblioteca não observa a remoção.)
 -   [ ] O comportamento por mouse, teclado e foco está definido.
 -   [ ] A integração com XML, Lua e estilos é consistente.
 -   [ ] Há testes automatizados para o comportamento principal e
