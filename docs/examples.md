@@ -259,6 +259,70 @@ travel — `onclick="save"` runs on the Save button alone. `docs/events.md` stat
 the rules, including how a listener stops propagation and what raw mouse, wheel
 and key input deliberately never does.
 
+## Reusing a piece of layout
+
+A `<template>` turns markup into an element. Attributes on the declaration are
+its parameters with their defaults, `${name}` is where they land, `<slot/>` is
+where the instance's children go, and every id inside is scoped to the instance:
+
+```xml
+<screen id="s">
+  <template name="Gauge" label="load" value="0">
+    <panel id="box" width="200" height="46">
+      <label id="name" text="${label}" x="0" y="0" width="200" height="16"/>
+      <progress id="bar" value="${value}" x="0" y="22" width="140" height="12"/>
+      <label id="cap" text="waiting" x="146" y="22" width="54" height="12"/>
+    </panel>
+  </template>
+
+  <Gauge id="cpu" label="CPU" value="0.6" x="16" y="16"/>
+  <Gauge label="Disk" value="0.35" x="16" y="72"/>
+
+  <template name="Row" title="row">
+    <column id="col" width="220" height="120">
+      <label id="title" text="${title}" x="0" y="0" width="220" height="18"/>
+      <slot/>
+    </column>
+  </template>
+
+  <Row id="stats" title="Stats" x="260" y="16">
+    <Gauge label="Net" value="0.1" y="24"/>
+  </Row>
+</screen>
+```
+
+`cpu` is the component instance; inside it the ids are `cpu.name`, `cpu.bar`
+and `cpu.cap`. The second `<Gauge>` has no id of its own, so it takes one from
+its component name: `Gauge#1.box`, `Gauge#1.bar`, … The `<Gauge>` written inside
+`Row` is scoped by its host as well — `stats.Gauge#2.bar` — which is why two
+rows can hold the same component without colliding. Attributes the body did not
+consume (`x="16"`, `style="…"`, a colour) still apply to the generated root, so
+an instance positions and restyles itself like any hand-written widget.
+
+Behaviour then addresses those scoped ids, and the component root is the event
+boundary — one listener on it hears every click that happened inside:
+
+```lua
+function ogui_on_load()
+  ogui.set("cpu.cap", "text", ogui.get("cpu.bar", "value"))
+
+  ogui.on("cpu", "click", function(id, info)
+    -- id is the component, info.target the widget actually hit
+    ogui.set("cpu.cap", "text", info.target)
+  end)
+
+  -- a component expands in a fragment too
+  local added, err = ogui.add("stats", '<Gauge label="Swap" value="0.2" y="60"/>')
+  if not added then ogui.log("add failed: " .. tostring(err)) end
+end
+```
+
+Ship components in a shared file by declaring them in a `<theme>` stylesheet and
+pulling it in before the screen that uses them:
+`<stylesheet path="themes/kit.xml"/>`. `debug/tests/templates_test.cpp` is the
+executable version of all of this, including what the parser reports when a
+parameter is missing or a component expands inside itself.
+
 ## Registering a widget in C++
 
 `widgetRegistry()` (`include/ogui/widgets.hpp`) is the map the parser builds

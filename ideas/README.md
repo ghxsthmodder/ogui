@@ -760,8 +760,20 @@ a execução de forma segura e previsível.
 
 ### Fase 3 --- Componentes e layout declarativo
 
--   [ ] Templates/componentes reutilizáveis. *(adiado — o próprio plano recomenda estabilizar antes; adiado conscientemente)*
--   [ ] Parâmetros, slots e escopo local de IDs.
+-   [x] Templates/componentes reutilizáveis. `<template name="Card">` declara o
+    componente e registra o nome como elemento (`src/xmlparser.cpp`): parâmetros
+    com valor padrão, `${param}` no corpo, `<slot/>` (com conteúdo de reserva),
+    composição de componentes até 16 níveis e um catálogo global, compartilhado
+    por um `<theme>` carregado via `<stylesheet path>`. Os erros nomeiam o
+    componente que o autor escreveu (`while expanding <Card>: ...`), um
+    `<script>` do corpo vale por instância e `docs/xml-reference.md` tem a
+    secção *Templates (components)*.
+-   [x] Parâmetros, slots e escopo local de IDs. Cada instância é o seu próprio
+    escopo: os IDs do corpo ganham o prefixo da instância (`cpu.bar`) e os
+    escopos aninham-se na componente que os contém (`stats.Gauge#2.bar`), pelo
+    que duas host da mesma componente não colidem; uma instância sem `id`
+    recebe `<Nome>#<n>`; atributos e estilos não consumidos como parâmetros
+    caem sobre a raiz gerada, e a raiz é a fronteira dos eventos do componente.
 -   [x] Layout flexível com limites e espaçamento consistente.
 -   [x] Estados visuais em estilos.
 -   [x] Bindings unidirecionais.

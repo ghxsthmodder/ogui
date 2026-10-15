@@ -63,7 +63,9 @@ Register it before parsing; replacing a built-in name works the same way.
 ## General syntax rules
 
 - **Attribute names are case-insensitive** (`FontSize`, `fontSize`,
-  `FONT_SIZE` are the same key). **Element names are exact-match lowercase.**
+  `FONT_SIZE` are the same key). **Element names are exact-match lowercase** —
+  except a component instance, whose tag is the `<template name="…">` written
+  by the author, case included ([Templates](#templates-components)).
 - A bare attribute with no value means `"true"`: `<checkbox checked/>`.
 - Values may be quoted (`attr="12"`) or unquoted (`attr=12`); quoted values
   stop at the closing `"`, unquoted ones at whitespace, `>` or `/`.
@@ -277,6 +279,11 @@ the inherited colour so the name means what is on screen: `background` on a
 `ogui.on` keys a listener by it. Ids only have to be unique per screen — a
 lookup never walks into another screen on the stack.
 
+A dot is an ordinary character in an id, and that is what makes a
+[component](#templates-components) addressable from outside: the ids a template
+authored are prefixed with the instance's scope, so `ogui.get("cpu.bar",
+"value")` reads the progress bar inside `<Gauge id="cpu">`.
+
 The kernel keeps an `id -> widget` index over the current screen and rebuilds
 it lazily, once, after anything that changes the tree: `addChild`,
 `removeChild`, `takeChildren`, `Widget::setId`, a screen push/pop/switch or an
@@ -409,6 +416,71 @@ registrations) out of the screen and into a shared document:
 - `<manifest theme="themes/game.xml">` loads a stylesheet as the app theme
   instead of the `dark`/`light` presets.
 
+## Templates (components)
+
+`<template name="Card">` declares a reusable piece of layout. Declaring it
+registers the name as an element, so an instance is written as an ordinary tag
+and expands in place:
+
+```xml
+<screen id="s">
+  <style name="primary" background="@accent" color="@white" radius="6"/>
+  <style name="ghost" background="transparent" color="@accent" radius="6"/>
+
+  <template name="PrimaryButton" text="OK" variant="primary" height="38">
+    <button text="${text}" style="${variant}" width="150" height="${height}"/>
+  </template>
+
+  <PrimaryButton id="startButton" text="Iniciar" y="20"/>
+  <PrimaryButton text="Sair" variant="ghost" y="70"/>
+</screen>
+```
+
+- **Parameters.** Every attribute on `<template>` except `name` declares a
+  parameter with that default. `${name}` in the body is replaced by the
+  instance's attribute of the same name, falling back to the default.
+  Attribute names are lowercased, so `${rowHeight}` matches `rowheight="…"`.
+  A placeholder with neither keeps its literal text and reports
+  `template 'X': required parameter 'name' has no value`.
+- **Local ids.** Each instance is its own id scope: the body's `<label
+  id="t">` inside `<Card id="c1">` is addressed as `c1.t`, by `findWidget`, by
+  `ogui.get`/`ogui.set`/`ogui.on` and by `onClick`. Scopes nest, so a
+  component inside a component is `c1.row.t`, and two hosts of the same
+  component never collide. An instance without an `id` gets one from its
+  component name and a per-document counter (`Card#1`, `Card#2`, …). When the
+  body has a **single root**, that root *is* the instance: `<PrimaryButton
+  id="startButton">` names the button itself and the body's own root id is
+  replaced by it; with several roots, they are wrapped in a plain container
+  carrying the instance id.
+- **Slots.** `<slot/>` is where the instance's children land (inside the
+  instance's scope). `<slot>` with content uses that markup as the fallback
+  when the instance has no children. A component with no `<slot/>` warns
+  `<X>: template has no <slot/>, its children were dropped`.
+- **Attributes fall through.** Whatever the body did not consume as a
+  parameter still applies to the generated root, exactly as if it had been
+  written there: `y="20"` above moves the button without erasing the authored
+  `width`/`height`, and `style="…"`, `<style element="PrimaryButton">` and
+  colour attributes style the instance like any other element. Body attributes
+  are the base, the instance's win.
+- **Events.** An instance is a normal widget in the tree, so [event
+  routing](#event-routing) gives a component its own API for free: `ogui.on
+  ("cpu", "click", fn)` fires when the user clicks anything inside `cpu`,
+  with `info.target` naming the widget actually hit and `id`/
+  `info.currentTarget` the component.
+- **Scripts.** A `<script>` in a body is copied into every instance, already
+  namespaced for it; the parser warns, because it then runs once per instance.
+- **Where to declare.** The component catalogue is global to the process, so a
+  shared file works: put `<template>` elements in a `<theme>` stylesheet and
+  pull it in with `<stylesheet path="themes/kit.xml"/>` (or
+  `<manifest theme="themes/kit.xml">`) **before** the screen that uses them.
+  A later `<template name="X">` replaces an earlier one; a component name never
+  shadows a built-in element or a `widgetRegistry()` entry, which always win.
+- **Guards.** Self-expansion reports `template 'X' expands inside itself`, a
+  17th level reports `more than 16 components nested`, an empty body reports
+  `expands to no markup`, and anything wrong inside a body is re-reported at
+  the instance site as `while expanding <Card>: …`, so the message names the
+  component the author wrote rather than markup they never saw.
+
 ## Elements
 
 ### Text
@@ -514,10 +586,11 @@ Overflowing tab headers collapse into a `...` popup menu automatically.
 | Element | Notes |
 |---|---|
 | `manifest` | root only; `theme`, children `screen title path` |
-| `theme` | root only; a stylesheet — children `palette`, `default`, `style`, `font`; `base` (`dark`/`light`) |
+| `theme` | root only; a stylesheet — children `palette`, `default`, `style`, `font`, `template`; `base` (`dark`/`light`) |
 | `palette` | token colour overrides, only valid inside a `<theme>` root |
 | `default` | base Style overrides, only valid inside a `<theme>` root |
 | `stylesheet` | merges an external `<theme>` file into this document | `path` |
+| `template` | declares a reusable component: `<template name="Card" title="…">markup</template>`; registers `Card` as an element. Data-only, yields no widget of its own — see [Templates](#templates-components) |
 | `font` | registers a font family: `<font family="anton" source="assets/Anton-Regular.ttf"/>`; later `font="anton"` attributes resolve to that file. Data-only, yields no widget |
 | `script` | a Lua chunk for the screen: `<script src="file.lua"/>` or inline `<script>code</script>` (raw text up to `</script>`, no entity decoding). Data-only, yields no widget — see [Scripting](#scripting-lua) |
 | `option` | entry of `optionspin`/`combobox` |

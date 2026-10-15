@@ -10,6 +10,12 @@ creates for you (`ogui::Host`, a built-in Win32/WGL window and event loop).
 
 * **XML layouts** — `<window>`, `<column>`, `<button>`, `<tabs>`, ... with
   named styles, authored in a text editor and hot-reloaded by re-parsing.
+* **Reusable components** — `<template name="Card">` declares markup that
+  becomes an element: parameters with defaults, `${name}` substitution,
+  `<slot/>` content areas, ids scoped to the instance (`card.title`, nesting
+  with the component that owns them) and a root that hears its own events, so a
+  screen composes instead of repeating itself
+  (see [`docs/xml-reference.md`](docs/xml-reference.md#templates-components)).
 * **Input dispatch** — hover, capture (drag), focus, key routing, modifiers,
   click bindings, hover tooltips.
 * **Visual states** — declarative `hover:`/`pressed:`/`focus:`/`checked:`/
@@ -119,7 +125,8 @@ Win32 + WGL demo directly (the project compiles the library sources itself).
 ```sh
 cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-bad,
                                         # custom-widget, kernel, unicode, screens,
-                                        # scrollbar, script, examples, golden
+                                        # scrollbar, script, properties, templates,
+                                        # examples, golden
 ```
 
 * `parser` — XML tokenizer, attributes, styles, error reporting.
@@ -152,6 +159,13 @@ cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-b
   tag factory refusing any widget that reaches runtime without a table,
   per-type value validation with its error text, and the Lua
   `ogui.get`/`ogui.set` fallback plus `ogui.props`.
+* `templates` — reusable components: parameter defaults and instance
+  overrides, `<slot/>` with fallback markup, id scopes that nest with the
+  components that own them, attribute and style fall-through to the generated
+  root, composition (a component inside a component inside a slot), per-instance
+  scripts, the recursion/depth guards and every error message naming the
+  component an author actually wrote — plus a component driven through a real
+  `Kernel` frame and one added at runtime by `ogui.add`.
 * `examples` — runs `examples/hello.xml` and `examples/counter.xml` through a
   real `Kernel` (load/show hooks, a clicked button, a live binding) and then
   parses every fenced `xml`/`lua` block in `docs/examples.md`, so the docs
@@ -431,6 +445,7 @@ theme default.
 | `theme` | stylesheet root: shared palette + named styles + fonts (`base="dark\|light"` preset it layers over) | `name`, `base` |
 | `palette` | inside `<theme>` only: re-colours tokens (`accent="#e8b33c" ...`); unknown tokens warn | token names |
 | `stylesheet` | merges an external `<theme>` file into the current document (named styles, fonts, palette) | `path` |
+| `template` | declares a reusable component whose `name` becomes an element (data-only, no widget of its own): `${param}` substitution, `<slot/>` for the instance's children, ids scoped to the instance | `name`, then one attribute per parameter default |
 | `script` | Lua chunk for the screen — `<script src="file.lua"/>` or inline `<script>code</script>`; hooks `ogui_on_load`/`ogui_on_update`/`ogui_on_click`/`ogui_on_event` + `ogui` API (see [xml-reference](docs/xml-reference.md)) | `src` |
 | `panel` | plain rectangle container | — |
 | `window` | bordered panel with a title bar (children are offset by it) | `title`, `titleVisible` |

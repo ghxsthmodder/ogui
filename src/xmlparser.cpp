@@ -164,6 +164,13 @@ void XmlParser::parseElement() {
         return;
     }
 
+    // <template name="Card"> declares a reusable component; like <style> it
+    // is data-only and yields no widget of its own.
+    if (tag == "template") {
+        parseTemplateDef(attrs, selfClosing);
+        return;
+    }
+
     // <font family="..." source="file.ttf"> registers a font family with the
     // FontManager; like <style> it is data-only and yields no widget.
     if (tag == "font") {
@@ -271,9 +278,7 @@ void XmlParser::parseElement() {
             return;
         }
         const std::string code = m_text.substr(m_pos, end - m_pos);
-        m_pos = end + 9;   // strlen("</script>")
-        while (m_pos < m_len && m_text[m_pos] != '>') ++m_pos;
-        if (m_pos < m_len) ++m_pos;
+        m_pos = end + 9;   // strlen("</script>"), closing '>' included
         if (m_result) m_result->scripts.emplace_back(code, false);
         if (m_scriptHandler) m_scriptHandler(code, false);
         return;
@@ -283,6 +288,10 @@ void XmlParser::parseElement() {
                                m_stack.empty() ? Style{} : m_stack.back().style,
                                attrs);
     if (!widget) {
+        // Not a built-in: it may still name a component declared by a
+        // <template>, which expands in place of the element.
+        if (instantiateTemplate(tag, attrs, selfClosing)) return;
+
         // Unknown tag: report it and skip the whole element so the rest of
         // the document still parses.
         addError("unknown element <" + tag + ">");
@@ -1506,6 +1515,9 @@ XmlParser::ParseResult XmlParser::parse(const std::string& xml, const Theme* the
     if (theme) setActiveTheme(*theme);
     m_root = nullptr;
     m_stack.clear();
+    m_templateStack.clear();
+    m_templateCount.clear();
+    m_templateScopes.clear();
     m_themeTarget = nullptr;
     m_namedStyles.clear();
     m_elementStyles.clear();
@@ -1540,6 +1552,9 @@ XmlParser::ParseResult XmlParser::parseFile(const std::string& path, const Theme
     if (theme) setActiveTheme(*theme);
     m_root = nullptr;
     m_stack.clear();
+    m_templateStack.clear();
+    m_templateCount.clear();
+    m_templateScopes.clear();
     m_themeTarget = nullptr;
     m_namedStyles.clear();
     m_elementStyles.clear();
@@ -1564,6 +1579,9 @@ XmlParser::ThemeResult XmlParser::parseTheme(const std::string& xml, const Theme
     m_theme = nullptr;
     m_root = nullptr;
     m_stack.clear();
+    m_templateStack.clear();
+    m_templateCount.clear();
+    m_templateScopes.clear();
     m_namedStyles = base.namedStyles;
     m_elementStyles = base.elementStyles;
     Theme target = base;
@@ -1595,6 +1613,377 @@ XmlParser::ThemeResult XmlParser::parseThemeFile(const std::string& path, const 
                      std::istreambuf_iterator<char>());
     f.close();
     return parseTheme(data, base);
+}
+
+// ------------------------------------------------------------------
+// Templates: reusable components
+// ------------------------------------------------------------------
+std::map<std::string, XmlParser::TemplateDef>& templateRegistry() {
+    static std::map<std::string, XmlParser::TemplateDef> reg;
+    return reg;
+}
+
+namespace {
+std::string trimMarkup(const std::string& s) {
+    size_t a = s.find_first_not_of(" \t\r\n");
+    if (a == std::string::npos) return {};
+    const size_t b = s.find_last_not_of(" \t\r\n");
+    return s.substr(a, b - a + 1);
+}
+
+// A template name has to survive being read back as a tag: no delimiters.
+bool validTagName(const std::string& s) {
+    if (s.empty()) return false;
+    for (char c : s) {
+        if (c == '<' || c == '>' || c == '/' || c == '"' || c == '\'' ||
+            std::isspace(static_cast<unsigned char>(c)))
+            return false;
+    }
+    return true;
+}
+} // namespace
+
+void XmlParser::parseTemplateDef(const std::map<std::string, std::string>& attrs,
+                                 bool selfClosing) {
+    auto nameIt = attrs.find("name");
+    const std::string name =
+        nameIt == attrs.end() ? std::string() : trimMarkup(nameIt->second);
+    if (!validTagName(name)) {
+        addError("template: name is required and must be a tag name");
+        skipElement("template", selfClosing);
+        return;
+    }
+
+    std::string body;
+    if (!selfClosing) {
+        // Captured raw, like an inline <script>: the component is markup the
+        // parser only reads when an instance expands it.
+        const size_t end = m_text.find("</template>", m_pos);
+        if (end == std::string::npos) {
+            addError("template '" + name + "': unterminated <template>");
+            m_pos = m_len;
+            return;
+        }
+        body = m_text.substr(m_pos, end - m_pos);
+        m_pos = end + 11;   // strlen("</template>"), closing '>' included
+    }
+    if (trimMarkup(body).empty()) {
+        addError("template '" + name + "': empty body");
+        return;
+    }
+    // Instance ids are namespaced, so a body script could address its own
+    // widgets -- but it is loaded once per instance, which is worth saying.
+    if (body.find("<script") != std::string::npos)
+        addWarning("template '" + name + "': its <script> runs once per instance");
+
+    TemplateDef def;
+    def.name = name;
+    def.body = std::move(body);
+    for (const auto& kv : attrs)
+        if (kv.first != "name") def.params[kv.first] = kv.second;
+    templateRegistry()[name] = std::move(def);
+}
+
+std::string XmlParser::substituteParams(
+    const std::string& body, const std::map<std::string, std::string>& params,
+    std::vector<std::string>& missing) {
+    std::string out;
+    out.reserve(body.size());
+    for (size_t i = 0; i < body.size();) {
+        if (body[i] != '$' || i + 1 >= body.size() || body[i + 1] != '{') {
+            out.push_back(body[i++]);
+            continue;
+        }
+        const size_t end = body.find('}', i + 2);
+        if (end == std::string::npos) {
+            out.append(body, i, body.size() - i);
+            break;
+        }
+        const std::string name = body.substr(i + 2, end - i - 2);
+        // Attribute names arrive lowercased from parseAttributes(), so a
+        // placeholder like ${Text} still finds text="...".
+        std::string lower = name;
+        for (char& ch : lower)
+            ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        auto it = params.find(name);
+        if (it == params.end()) it = params.find(lower);
+        if (it == params.end()) {
+            if (std::find(missing.begin(), missing.end(), name) == missing.end())
+                missing.push_back(name);
+            out.append(body, i, end - i + 1);   // leave the placeholder literal
+        } else {
+            out += it->second;
+        }
+        i = end + 1;
+    }
+    return out;
+}
+
+std::string XmlParser::fillSlots(const std::string& body,
+                                 const std::string& children, bool& hadSlot) {
+    std::string out;
+    out.reserve(body.size());
+    size_t i = 0;
+    while (i < body.size()) {
+        const size_t slot = body.find("<slot", i);
+        if (slot == std::string::npos) {
+            out.append(body, i, body.size() - i);
+            break;
+        }
+        const size_t after = slot + 5;
+        if (after < body.size() && body[after] != '>' && body[after] != '/' &&
+            !std::isspace(static_cast<unsigned char>(body[after]))) {
+            // "<slotmachine>" is a tag that merely starts with "slot".
+            out.append(body, i, after - i);
+            i = after;
+            continue;
+        }
+        out.append(body, i, slot - i);
+        hadSlot = true;
+        const size_t gt = body.find('>', after);
+        if (gt == std::string::npos) {
+            out.append(body, slot, body.size() - slot);
+            break;
+        }
+        if (gt > after && body[gt - 1] == '/') {   // <slot/>
+            out += children;
+            i = gt + 1;
+            continue;
+        }
+        // <slot>fallback</slot>: its own markup only shows when the instance
+        // brings no children.
+        const size_t close = body.find("</slot>", gt + 1);
+        if (close == std::string::npos) {
+            out.append(body, slot, body.size() - slot);
+            break;
+        }
+        out += children.empty() ? body.substr(gt + 1, close - gt - 1) : children;
+        const size_t end = body.find('>', close);
+        i = (end == std::string::npos) ? body.size() : end + 1;
+    }
+    return out;
+}
+
+std::string XmlParser::takeElementBody(const std::string& tag) {
+    // Balanced scan for </tag> that keeps the text it spans (skipElement()
+    // walks the same shape but throws the body away): the instance's children
+    // are handed to the component's <slot/>.
+    const size_t bodyStart = m_pos;
+    int depth = 1;
+    size_t i = m_pos;
+    while (i < m_len) {
+        if (m_text[i] != '<') { ++i; continue; }
+        const bool closing = (i + 1 < m_len && m_text[i + 1] == '/');
+        size_t s = i + (closing ? 2 : 1);
+        size_t e = s;
+        while (e < m_len && m_text[e] != '>' && m_text[e] != '/' &&
+               !std::isspace(static_cast<unsigned char>(m_text[e]))) {
+            ++e;
+        }
+        const std::string name = m_text.substr(s, e - s);
+        const size_t gt = m_text.find('>', i);
+        if (gt == std::string::npos) break;
+        if (closing) {
+            if (name == tag && --depth == 0) {
+                m_pos = gt + 1;
+                return m_text.substr(bodyStart, i - bodyStart);
+            }
+        } else if (name == tag && !(gt > e && m_text[gt - 1] == '/')) {
+            ++depth;
+        }
+        i = gt + 1;
+    }
+    addError("unterminated <" + tag + ">");
+    m_pos = m_len;
+    return m_text.substr(bodyStart);
+}
+
+std::vector<std::shared_ptr<Widget>> XmlParser::expandFragment(
+    const std::string& markup, const Style& inherited, ParseResult& out) {
+    // The component body is parsed as a document of its own: its own cursor,
+    // element stack and error positions, while the theme, the named styles
+    // and the script handler keep coming from the outer parse.
+    std::string outer;
+    outer.swap(m_text);
+    std::vector<ParseState> outerStack;
+    outerStack.swap(m_stack);
+    const size_t outerLen = m_len, outerPos = m_pos;
+    const size_t wcPos = m_wcPos, wcLine = m_wcLine, wcCol = m_wcCol;
+    ParseResult* outerResult = m_result;
+
+    m_text = markup;
+    m_len = m_text.size();
+    m_pos = 0;
+    m_wcPos = 0;
+    m_wcLine = 1;
+    m_wcCol = 1;
+    m_result = &out;
+
+    auto holder = std::make_shared<Widget>();
+    m_stack.push_back({holder, "fragment", inherited, {}, false, std::string()});
+    while (m_pos < m_len) {
+        skipWhitespace();
+        if (m_pos >= m_len) break;
+        if (m_text[m_pos] == '<' && m_pos + 1 < m_len && m_text[m_pos + 1] == '/') {
+            // A close tag with nothing to close: the generated markup is
+            // unbalanced. Consume it, keep the siblings, and let the error
+            // line point at the component.
+            m_pos += 2;
+            parseTagName();
+            while (m_pos < m_len && m_text[m_pos] != '>') ++m_pos;
+            if (m_pos < m_len) ++m_pos;
+            out.errors.push_back(where() + ": stray closing tag");
+            continue;
+        }
+        parseElement();
+    }
+    std::vector<std::shared_ptr<Widget>> widgets = holder->takeChildren();
+
+    m_text.swap(outer);
+    m_stack.swap(outerStack);
+    m_len = outerLen;
+    m_pos = outerPos;
+    m_wcPos = wcPos;
+    m_wcLine = wcLine;
+    m_wcCol = wcCol;
+    m_result = outerResult;
+    return widgets;
+}
+
+void XmlParser::namespaceIds(const std::shared_ptr<Widget>& w,
+                             const std::string& prefix) {
+    if (!w) return;
+    // A nested component instance already carries the full path: its scope was
+    // built with this one as its parent, so re-prefixing would stack it twice.
+    if (w->rawAttributes().count("_template")) return;
+    if (!w->id().empty()) w->setId(prefix + "." + w->id());
+    for (const auto& c : w->children()) namespaceIds(c, prefix);
+}
+
+bool XmlParser::instantiateTemplate(const std::string& tag,
+                                    const std::map<std::string, std::string>& attrs,
+                                    bool selfClosing) {
+    auto& reg = templateRegistry();
+    auto it = reg.find(tag);
+    if (it == reg.end()) return false;
+    // Copied: expanding the body may register another template and invalidate
+    // the reference held here.
+    const TemplateDef def = it->second;
+
+    if (std::find(m_templateStack.begin(), m_templateStack.end(), tag) !=
+        m_templateStack.end()) {
+        addError("template '" + tag + "' expands inside itself");
+        if (!selfClosing) skipElement(tag, false);
+        return true;
+    }
+    if (m_templateStack.size() >= 16) {
+        addError("template '" + tag + "': more than 16 components nested");
+        if (!selfClosing) skipElement(tag, false);
+        return true;
+    }
+
+    std::string children;
+    if (!selfClosing) children = takeElementBody(tag);
+
+    // Parameters: the template's own attributes are the defaults, the
+    // instance's attributes override them.
+    std::map<std::string, std::string> params = def.params;
+    for (const auto& kv : attrs) params[kv.first] = kv.second;
+
+    std::vector<std::string> missing;
+    std::string markup = substituteParams(def.body, params, missing);
+    for (const auto& name : missing)
+        addError("template '" + tag + "': required parameter '" + name +
+                 "' has no value");
+
+    bool hadSlot = false;
+    markup = fillSlots(markup, children, hadSlot);
+    if (!hadSlot && !trimMarkup(children).empty())
+        addWarning("<" + tag + ">: template has no <slot/>, its children were dropped");
+
+    const Style inherited = m_stack.empty() ? Style{} : m_stack.back().style;
+
+    const auto idIt = attrs.find("id");
+    const std::string instanceId =
+        idIt == attrs.end() || trimMarkup(idIt->second).empty() ? std::string()
+                                                                : idIt->second;
+    // An unnamed instance still needs an id scope, so it takes "<Name>#<n>".
+    std::string own = instanceId.empty()
+                          ? tag + "#" + std::to_string(++m_templateCount[tag])
+                          : instanceId;
+    // Scopes nest: an instance inside a component belongs to that component,
+    // so the same inner id in two hosts stays addressable in each of them.
+    const std::string prefix =
+        m_templateScopes.empty() ? own : m_templateScopes.back() + "." + own;
+
+    m_templateStack.push_back(tag);
+    m_templateScopes.push_back(prefix);
+    ParseResult local;
+    std::vector<std::shared_ptr<Widget>> parts = expandFragment(markup, inherited, local);
+    m_templateScopes.pop_back();
+    m_templateStack.pop_back();
+
+    // The body's own problems are reported at the instance site, naming the
+    // component the author actually wrote.
+    for (const auto& e : local.errors)
+        addError("while expanding <" + tag + ">: " + e);
+    for (const auto& w : local.warnings)
+        addWarning("while expanding <" + tag + ">: " + w);
+    if (m_result)
+        for (auto& s : local.scripts) m_result->scripts.push_back(std::move(s));
+
+    if (parts.empty()) {
+        addError("template '" + tag + "' expands to no markup");
+        return true;
+    }
+
+    std::shared_ptr<Widget> root;
+    if (parts.size() == 1) {
+        root = parts.front();
+        if (!instanceId.empty()) {
+            // The instance *is* its single root: <PrimaryButton id="start"/>
+            // addresses the button itself, not a wrapper around it.
+            for (const auto& c : root->children()) namespaceIds(c, prefix);
+            root->setId(prefix);
+        } else {
+            // Unnamed: the body's own root id needs the scope too, or two
+            // copies of the component would collide on it.
+            namespaceIds(root, prefix);
+        }
+    } else {
+        root = std::make_shared<Widget>();
+        root->setId(prefix);
+        for (auto& p : parts) {
+            namespaceIds(p, prefix);
+            root->addChild(p);
+        }
+    }
+
+    // Attributes the component did not consume as placeholders still style
+    // the generated root, exactly as if they had been written on it: an
+    // instance overrides geometry, colours and state of its own body. The
+    // body's authored attributes are the base, so a single `y="90"` on the
+    // instance moves the widget instead of erasing the rest of its geometry.
+    auto merged = root->rawAttributes();
+    merged.erase("id");
+    merged.erase("_template");
+    bool overrode = false;
+    for (const auto& kv : attrs) {
+        if (kv.first == "id") continue;
+        auto old = merged.find(kv.first);
+        if (old != merged.end() && old->second == kv.second) continue;
+        merged[kv.first] = kv.second;
+        overrode = true;
+    }
+    if (overrode) applyAttributes(root, tag, withNamedStyle(tag, merged));
+
+    auto raw = root->rawAttributes();
+    raw["_template"] = tag;
+    root->setRawAttributes(raw);
+
+    if (!m_stack.empty() && m_stack.back().widget)
+        m_stack.back().widget->addChild(root);
+    return true;
 }
 
 } // namespace ogui

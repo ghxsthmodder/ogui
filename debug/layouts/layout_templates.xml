@@ -1,0 +1,63 @@
+<?xml version="1.0"?>
+<!-- layout_templates.xml : componentes reutilizaveis. <template> declara uma
+     peca de layout que vira elemento: os atributos da declaracao sao parametros
+     com valor padrao, ${nome} marca onde entram, <slot/> e a area de conteudo da
+     instancia e cada instancia e o seu proprio escopo de ids — host.cpu.bar,
+     host.Gauge#1.bar, links.wan.again. A raiz gerada aceita os atributos que o
+     corpo nao consumiu (x/y aqui posicionam a instancia) e e a fronteira dos
+     eventos do componente: um ouvinte em host.cpu escuta o clique de qualquer
+     widget dentro dele. -->
+<screen id="templates">
+  <template name="Gauge" label="load" value="0" hint="aguardando">
+    <panel id="box" width="220" height="70">
+      <label id="name" text="${label}" x="0" y="0" width="220" height="18"/>
+      <progress id="bar" value="${value}" x="0" y="24" width="150" height="14"/>
+      <label id="cap" text="${hint}" x="158" y="24" width="62" height="14"/>
+      <slot/>
+    </panel>
+  </template>
+
+  <template name="Section" title="section">
+    <column id="col" width="240">
+      <label id="ttl" text="${title}" x="0" y="0" width="240" height="22"/>
+      <slot/>
+    </column>
+  </template>
+
+  <label id="ttl" text="Reusable components" fontSize="20" x="20" y="40" width="360" height="30"/>
+
+  <Section id="host" title="Host" x="20" y="80">
+    <Gauge id="cpu" label="CPU" value="0.6"/>
+    <Gauge label="Disk" value="0.35" hint="lendo"/>
+  </Section>
+
+  <Section id="links" title="Network" x="300" y="80">
+    <Gauge id="wan" label="WAN" value="0.2">
+      <button id="again" text="poll" x="0" y="44" width="90" height="26"/>
+    </Gauge>
+  </Section>
+
+  <label id="out" text="init" x="20" y="300" width="520" height="22"/>
+
+  <script>
+function ogui_on_load()
+  -- um widget interno e alcancado pelo id com o escopo da instancia
+  local function pct(id)
+    return string.format("%d%%", math.floor((tonumber(ogui.get(id, "value")) or 0) * 100 + 0.5))
+  end
+  ogui.set("out", "text", "cpu=" .. pct("host.cpu.bar") ..
+                          " wan=" .. pct("links.wan.bar"))
+  ogui.set("host.Gauge#1.cap", "text", "ok")
+
+  -- o componente expoe os eventos da raiz para fora
+  ogui.on("host.cpu", "click", function(id, info)
+    ogui.set("out", "text", id .. " heard a click on " .. info.target)
+  end)
+  ogui.on("links.wan.again", "click", function()
+    local v = tonumber(ogui.get("links.wan.bar", "value")) or 0
+    ogui.set("links.wan.bar", "value", v > 0.5 and 0.2 or 0.8)
+    ogui.set("out", "text", "re-polled wan")
+  end)
+end
+  </script>
+</screen>

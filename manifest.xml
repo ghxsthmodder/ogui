@@ -15,4 +15,5 @@
   <screen title="Script"     path="layouts/layout_script.xml"/>
   <screen title="Design"     path="layouts/layout_design.xml"/>
   <screen title="Form"       path="layouts/layout_form.xml"/>
+  <screen title="Templates"  path="layouts/layout_templates.xml"/>
 </manifest>

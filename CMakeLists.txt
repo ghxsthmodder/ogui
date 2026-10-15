@@ -202,6 +202,10 @@ if(OGUI_BUILD_TESTS)
     add_executable(ogui_properties_test debug/tests/properties_test.cpp)
     target_link_libraries(ogui_properties_test PRIVATE ogui)
 
+    # Reusable components: <template>, parameters, slots and scoped ids.
+    add_executable(ogui_templates_test debug/tests/templates_test.cpp)
+    target_link_libraries(ogui_templates_test PRIVATE ogui)
+
     # The documentation examples: layouts driven through a Kernel, plus every
     # fenced xml/lua block in docs/examples.md parsed and loaded.
     add_executable(ogui_examples_test debug/tests/examples_test.cpp)
@@ -245,6 +249,7 @@ if(OGUI_BUILD_TESTS)
     add_test(NAME scrollbar COMMAND ogui_scrollbar_test)
     add_test(NAME script COMMAND ogui_script_test)
     add_test(NAME properties COMMAND ogui_properties_test)
+    add_test(NAME templates COMMAND ogui_templates_test)
     add_test(NAME examples COMMAND ogui_examples_test)
     if(TARGET ogui_golden_test)
         add_test(NAME golden COMMAND ogui_golden_test)

@@ -60,6 +60,19 @@ public:
         std::function<void(const std::string& payload, bool isFile)>;
     void setScriptHandler(ScriptHandler h) { m_scriptHandler = std::move(h); }
 
+    // ---- templates --------------------------------------------------------
+    // <template name="Card" title=""> declares a reusable component: its
+    // markup body is stored raw and expanded wherever the name appears as a
+    // tag. ${param} placeholders take the instance's attributes, the template
+    // attributes are their defaults, and <slot/> receives the instance's
+    // children. A tag the widget factory does not know is looked up here.
+    struct TemplateDef {
+        std::string name;
+        // Parameter defaults, keyed by attribute name (already lowercased).
+        std::map<std::string, std::string> params;
+        std::string body;   // raw markup between <template> and </template>
+    };
+
 private:
     std::string m_text;
     const Theme* m_theme = nullptr;
@@ -120,6 +133,44 @@ private:
     void parseStyleDef(const std::map<std::string, std::string>& attrs,
                        bool selfClosing);
 
+    // Handles <template name="...">...</template> (declares a component).
+    void parseTemplateDef(const std::map<std::string, std::string>& attrs,
+                          bool selfClosing);
+
+    // Expands a registered template at an instance site and attaches the
+    // result to the parent on the stack. Returns false when `tag` names no
+    // template, so the caller can still report an unknown element.
+    bool instantiateTemplate(const std::string& tag,
+                             const std::map<std::string, std::string>& attrs,
+                             bool selfClosing);
+
+    // Reads the raw markup between the cursor and </tag>, leaving the cursor
+    // after that closing tag.
+    std::string takeElementBody(const std::string& tag);
+
+    // ${name} substitution: values come from `params`; a placeholder with no
+    // value stays literal and its name is reported in `missing`.
+    static std::string substituteParams(
+        const std::string& body,
+        const std::map<std::string, std::string>& params,
+        std::vector<std::string>& missing);
+
+    // Replaces every <slot/> (or <slot>fallback</slot>) with `children`,
+    // falling back to the slot's own markup when the instance has none.
+    // `hadSlot` reports whether the body carried a slot at all.
+    static std::string fillSlots(const std::string& body,
+                                 const std::string& children, bool& hadSlot);
+
+    // Parses component markup as a document of its own (its own cursor, so
+    // its errors carry the component's line:col) and returns its widgets.
+    std::vector<std::shared_ptr<Widget>> expandFragment(
+        const std::string& markup, const Style& inherited, ParseResult& out);
+
+    // Prefixes every id in the subtree so a component's ids stay local:
+    // instance "start" + body id "title" reads back as "start.title".
+    static void namespaceIds(const std::shared_ptr<Widget>& w,
+                             const std::string& prefix);
+
     // Named styles collected from <style> elements (name -> attributes).
     std::map<std::string, std::map<std::string, std::string>> m_namedStyles;
 
@@ -152,6 +203,24 @@ private:
 
     // Receiver for <script> elements (see setScriptHandler()).
     ScriptHandler m_scriptHandler;
+
+    // Active template expansions, innermost last: seeing a name already on
+    // the stack means the template calls itself.
+    std::vector<std::string> m_templateStack;
+
+    // Instances per component name in this document: an instance without an
+    // id still needs its own id scope, so it takes "<Name>#<n>".
+    std::map<std::string, int> m_templateCount;
+
+    // The id scope of each expansion on m_templateStack, innermost last. A
+    // component instantiated inside another one nests: "card.row", so the
+    // same inner id in two hosts of the same component stays addressable.
+    std::vector<std::string> m_templateScopes;
 };
+
+// The component catalogue, keyed by tag name. It is global so a shared
+// components file parsed before a screen supplies that screen's templates; a
+// later <template name="X"> replaces an earlier one.
+std::map<std::string, XmlParser::TemplateDef>& templateRegistry();
 
 } // namespace ogui
