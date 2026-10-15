@@ -1,6 +1,7 @@
 // ogui_properties_test.cpp : the typed property registry -- class chains and
 // overrides, the generic write/read round-trip over every built-in property,
-// per-type value validation and the Lua get/set/props surface.
+// per-type value validation, the side-effect-free value check the XML parser
+// runs its attributes through, and the Lua get/set/props surface.
 #include "ogui/kernel.hpp"
 #include "ogui/properties.hpp"
 #include "ogui/script.hpp"
@@ -314,6 +315,71 @@ void testValidation() {
     CHECK(spark.style().backgroundColor.r != 0xff);
 }
 
+void testValueCheck() {
+    // checkWidgetProperty() is the same verdict setWidgetProperty() reaches
+    // for a malformed value, with nothing applied: the XML parser asks it
+    // about attributes it has already set, so a re-write would double-apply
+    // them (and clobber the forms only the parser understands).
+    Button button;
+    const double width0 = std::stod(widgetProperty(button, "width"));
+    std::string error;
+
+    CHECK(checkWidgetProperty(button, "width", "wide", &error) ==
+          PropertyCheck::Rejected);
+    CHECK_MSG(error.find("'width' expects number") != std::string::npos, error);
+    CHECK(checkWidgetProperty(button, "width", "123", &error) ==
+          PropertyCheck::Accepted);
+    CHECK(error.empty());
+    CHECK(std::stod(widgetProperty(button, "width")) == width0);
+
+    // Unknown names are not malformed values: an attribute the registry does
+    // not carry is the parser's own, and reporting it would call valid
+    // authoring a mistake.
+    CHECK(checkWidgetProperty(button, "nope", "1", &error) ==
+          PropertyCheck::Unknown);
+    // Any text is a valid value for a string property.
+    CHECK(checkWidgetProperty(button, "id", "@@ whatever", &error) ==
+          PropertyCheck::Accepted);
+    CHECK(checkWidgetProperty(button, "enabled", "maybe", &error) ==
+          PropertyCheck::Rejected);
+    Label label;
+    CHECK(checkWidgetProperty(label, "align", "middle-ish", &error) ==
+          PropertyCheck::Rejected);
+    CHECK_MSG(error.find("left|center|right") != std::string::npos, error);
+    CHECK(checkWidgetProperty(label, "align", "RIGHT", &error) ==
+          PropertyCheck::Accepted);
+    // A setter that rejects a well-formed value of its own accord is not
+    // predicted here -- only the declared type and choices are.
+    Keybind keybind;
+    CHECK(checkWidgetProperty(keybind, "value", "not a combo", &error) ==
+          PropertyCheck::Accepted);
+    // Read-only is about writing, not about the value's form.
+    ComboBox combo;
+    CHECK(checkWidgetProperty(combo, "count", "3", &error) ==
+          PropertyCheck::Accepted);
+    CHECK(checkWidgetProperty(combo, "count", "three", &error) ==
+          PropertyCheck::Rejected);
+
+    // ---- palette tokens ---------------------------------------------------
+    // Palette::token() has to keep answering an unknown name with `window`
+    // (a live theme draws something), so membership is a separate question.
+    CHECK(palette().hasToken("accent"));
+    CHECK(palette().hasToken("ACCENT"));
+    CHECK(palette().hasToken("textBright"));
+    CHECK(!palette().hasToken("nope"));
+    CHECK(!palette().hasToken(""));
+    Color c{};
+    CHECK(parseColorValue("@accent", c));
+    CHECK(c.r == palette().accent.r);
+    CHECK(!parseColorValue("@nope", c));
+    CHECK(parseColorValue("#f00", c) && c.r == 255 && c.g == 0);
+    CHECK(!parseColorValue("reddish", c));
+    // The colour property says which half of its grammar the value missed.
+    CHECK(checkWidgetProperty(button, "background", "@nope", &error) ==
+          PropertyCheck::Rejected);
+    CHECK_MSG(error.find("'background' expects") != std::string::npos, error);
+}
+
 void testFacadeAndKernel() {
     Kernel k;
     k.init();
@@ -421,6 +487,7 @@ int main() {
     testRoundTrip();
     testFactoryCoverage();
     testValidation();
+    testValueCheck();
     testFacadeAndKernel();
     testLua();
 

@@ -107,7 +107,12 @@ std::string formatColor(const Color& c) {
 bool parseColorValue(const std::string& text, Color& out) {
     if (text.empty()) return false;
     if (text[0] == '@') {
-        out = palette().token(text.substr(1));
+        // Palette::token() answers an unknown name with `window`, which is the
+        // right thing to draw and the wrong thing to accept: a typo'd token
+        // has to fail here so the author hears about it.
+        const std::string name = text.substr(1);
+        if (!palette().hasToken(name)) return false;
+        out = palette().token(name);
         return true;
     }
     const char* p = text.c_str();
@@ -281,6 +286,43 @@ bool setWidgetProperty(Widget& w, const std::string& name,
     }
     if (Kernel* k = w.kernel()) k->invalidate();
     return true;
+}
+
+PropertyCheck checkWidgetProperty(const Widget& w, const std::string& name,
+                                  const std::string& value,
+                                  std::string* error) {
+    if (error) error->clear();
+    const auto* def = PropertyRegistry::instance().find(w, name);
+    if (!def) return PropertyCheck::Unknown;
+    const std::string& n = def->name;
+    switch (def->type) {
+    case PropertyType::Bool: {
+        bool v = false;
+        if (parseBool(value, v)) return PropertyCheck::Accepted;
+        setValueError(error, n, "true/false/1/0/yes/no/on/off", value);
+        return PropertyCheck::Rejected;
+    }
+    case PropertyType::Number: {
+        double v = 0.0;
+        if (parseNumber(value, v)) return PropertyCheck::Accepted;
+        setValueError(error, n, "number", value);
+        return PropertyCheck::Rejected;
+    }
+    case PropertyType::Color: {
+        Color c{};
+        if (parseColorValue(value, c)) return PropertyCheck::Accepted;
+        setValueError(error, n,
+                      "\"#rrggbb\", \"#rrggbbaa\" or \"@token\"", value);
+        return PropertyCheck::Rejected;
+    }
+    case PropertyType::Enum:
+        if (matchesChoice(def->choices, value)) return PropertyCheck::Accepted;
+        setValueError(error, n, joinedChoices(def->choices), value);
+        return PropertyCheck::Rejected;
+    case PropertyType::String:
+        break;
+    }
+    return PropertyCheck::Accepted;
 }
 
 // ------------------------------------------------------------------

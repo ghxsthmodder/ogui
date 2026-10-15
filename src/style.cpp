@@ -15,61 +15,67 @@ void setActiveTheme(const Theme& theme) {
 }
 
 // ---- palette token lookup --------------------------------------------------
-const Color& Palette::token(const std::string& raw) const {
+namespace {
+// The one list of token names. `token`, `setToken` and `hasToken` all resolve
+// through it, so a token can never be settable but unknown (or the reverse).
+struct TokenRef {
+    const char* name;                       // lowercase, as @name is spelled
+    Color Palette::*member;
+};
+const TokenRef kTokens[] = {
+    {"window", &Palette::window},
+    {"screen", &Palette::screen},
+    {"surface", &Palette::surface},
+    {"surfacehi", &Palette::surfaceHi},
+    {"surfacelo", &Palette::surfaceLo},
+    {"border", &Palette::border},
+    {"borderstrong", &Palette::borderStrong},
+    {"track", &Palette::track},
+    {"guide", &Palette::guide},
+    {"text", &Palette::text},
+    {"textbright", &Palette::textBright},
+    {"white", &Palette::white},
+    {"dim", &Palette::dim},
+    {"focus", &Palette::focus},
+    {"accent", &Palette::accent},
+    {"danger", &Palette::danger},
+    {"info", &Palette::info},
+    {"warn", &Palette::warn},
+    {"error", &Palette::error},
+    {"overlay", &Palette::overlay},
+    {"shadow", &Palette::shadow},
+};
+
+std::string lowerToken(const std::string& raw) {
     std::string name;
     name.reserve(raw.size());
     for (char c : raw)
         name.push_back(c >= 'A' && c <= 'Z' ? char(c - 'A' + 'a') : c);
-    if (name == "window")       return window;
-    if (name == "screen")       return screen;
-    if (name == "surface")      return surface;
-    if (name == "surfacehi")    return surfaceHi;
-    if (name == "surfacelo")    return surfaceLo;
-    if (name == "border")       return border;
-    if (name == "borderstrong") return borderStrong;
-    if (name == "track")        return track;
-    if (name == "guide")        return guide;
-    if (name == "text")         return text;
-    if (name == "textbright")   return textBright;
-    if (name == "white")        return white;
-    if (name == "dim")          return dim;
-    if (name == "focus")        return focus;
-    if (name == "accent")       return accent;
-    if (name == "danger")       return danger;
-    if (name == "info")         return info;
-    if (name == "warn")         return warn;
-    if (name == "error")        return error;
-    if (name == "overlay")      return overlay;
-    if (name == "shadow")       return shadow;
+    return name;
+}
+} // namespace
+
+const Color& Palette::token(const std::string& raw) const {
+    const std::string name = lowerToken(raw);
+    for (const auto& t : kTokens) {
+        if (name == t.name) return this->*(t.member);
+    }
     return window;
 }
 
 bool Palette::setToken(const std::string& raw, const Color& c) {
-    std::string name;
-    name.reserve(raw.size());
-    for (char ch : raw)
-        name.push_back(ch >= 'A' && ch <= 'Z' ? char(ch - 'A' + 'a') : ch);
-    if (name == "window")       { window = c; return true; }
-    if (name == "screen")       { screen = c; return true; }
-    if (name == "surface")      { surface = c; return true; }
-    if (name == "surfacehi")    { surfaceHi = c; return true; }
-    if (name == "surfacelo")    { surfaceLo = c; return true; }
-    if (name == "border")       { border = c; return true; }
-    if (name == "borderstrong") { borderStrong = c; return true; }
-    if (name == "track")        { track = c; return true; }
-    if (name == "guide")        { guide = c; return true; }
-    if (name == "text")         { text = c; return true; }
-    if (name == "textbright")   { textBright = c; return true; }
-    if (name == "white")        { white = c; return true; }
-    if (name == "dim")          { dim = c; return true; }
-    if (name == "focus")        { focus = c; return true; }
-    if (name == "accent")       { accent = c; return true; }
-    if (name == "danger")       { danger = c; return true; }
-    if (name == "info")         { info = c; return true; }
-    if (name == "warn")         { warn = c; return true; }
-    if (name == "error")        { error = c; return true; }
-    if (name == "overlay")      { overlay = c; return true; }
-    if (name == "shadow")       { shadow = c; return true; }
+    const std::string name = lowerToken(raw);
+    for (const auto& t : kTokens) {
+        if (name == t.name) { this->*(t.member) = c; return true; }
+    }
+    return false;
+}
+
+bool Palette::hasToken(const std::string& raw) const {
+    const std::string name = lowerToken(raw);
+    for (const auto& t : kTokens) {
+        if (name == t.name) return true;
+    }
     return false;
 }
 

@@ -14,7 +14,8 @@
 // resolved against the working directory, the same rule the demo host follows,
 // so `--chdir` has to point at the directory the app runs from.
 //
-// Exit code: 0 clean, 1 errors found, 2 the file could not be read.
+// Exit code: 0 clean, 1 errors found (an unreadable file is one), 2 a usage
+// problem -- no files, an unknown option, or a --chdir without its directory.
 #include "ogui/xmlparser.hpp"
 
 #include <cstdio>
@@ -109,25 +110,36 @@ int main(int argc, char** argv) {
     bool asTheme = false;
     bool manifest = false;
     std::vector<std::string> files;
+    const char* usage = "usage: ogui_validate [--theme|--manifest] "
+                        "[--chdir DIR] file.xml...";
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
         if (a == "--theme") asTheme = true;
         else if (a == "--manifest") manifest = true;
-        else if (a == "--chdir" && i + 1 < argc) {
+        else if (a == "--chdir") {
+            // A --chdir that swallows its own argument is the difference
+            // between "the layout was validated" and "the wrong file was
+            // reported unreadable", so say which option is short.
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "--chdir needs a directory\n%s\n", usage);
+                return 2;
+            }
             if (OG_CHDIR(argv[++i]) != 0) {
                 std::fprintf(stderr, "cannot enter directory %s\n", argv[i]);
                 return 2;
             }
         } else if (a == "-h" || a == "--help") {
-            std::printf("usage: ogui_validate [--theme|--manifest] "
-                        "[--chdir DIR] file.xml...\n");
+            std::printf("%s\n", usage);
             return 0;
+        } else if (a.size() > 1 && a[0] == '-') {
+            // An option that does not exist used to be validated as a file
+            // name, which reported a typo as a missing document.
+            std::fprintf(stderr, "unknown option '%s'\n%s\n", a.c_str(), usage);
+            return 2;
         } else files.push_back(a);
     }
     if (files.empty()) {
-        std::fprintf(stderr,
-                     "usage: ogui_validate [--theme|--manifest] [--chdir DIR] "
-                     "file.xml...\n");
+        std::fprintf(stderr, "%s\n", usage);
         return 2;
     }
     for (const auto& f : files) {

@@ -125,6 +125,12 @@ private:
                          const std::string& tag,
                          const std::map<std::string, std::string>& attrs);
 
+    // Reports, as errors, the attribute values whose type the property
+    // registry disagrees with. Checks only: applies nothing.
+    void validateAttributeValues(const std::shared_ptr<Widget>& w,
+                                 const std::string& tag,
+                                 const std::map<std::string, std::string>& attrs);
+
     // Applies an element's raw text content (trimmed) to a widget that
     // carries a text payload, e.g. <cell>Zoe</cell>.
     void applyContent(const std::shared_ptr<Widget>& w, const std::string& raw);

@@ -82,8 +82,11 @@ Register it before parsing; replacing a built-in name works the same way.
 Every colour attribute (`background`, `color`, `border`, ...) accepts either a
 hex literal (`"#4488ff"`, `"#48f"`) or a **palette token** (`"@accent"`).
 Tokens resolve against the *active theme* at parse time, so one theme swap
-restyles the whole tree; an unknown token silently falls back to `window`.
-Tag-level `<style>` definitions may use tokens too.
+restyles the whole tree. A token the palette does not carry is a parse error
+(`attribute "background": unknown palette token "@nope"`): `Palette::token()`
+still answers an unknown name with `window`, which is what a live theme must
+draw, but an authored layout no longer gets away with the typo. Tag-level
+`<style>` definitions may use tokens too.
 
 | Token | Dark | Light | Typical use |
 |---|---|---|---|
@@ -259,8 +262,12 @@ PropertyRegistry::instance().declare(typeid(Led), typeid(Widget), {
 The XML parser keeps applying authored attributes through its own typed chain
 (it also handles geometry expressions, named styles and the legacy `font`
 pseudo-syntax); the registry is the runtime, name-based path to the same
-setters. All 61 classes the tag registry can build are declared — 1975
-read/write properties between them, and `debug/tests/properties_test.cpp`
+setters. It is also the parser's referee: `checkWidgetProperty()` answers the
+same question a write would, without applying anything, which is what lets
+`applyAttributes()` report `height="abc"` as an error after the fact (see
+[Error reporting](#error-reporting)). All 61 classes the tag registry can build
+are declared — 1975 read/write properties between them, and
+`debug/tests/properties_test.cpp`
 writes each one back onto itself and checks the value reads out unchanged, then
 walks the factory and refuses a tag whose class has no table.
 
@@ -760,6 +767,33 @@ background on purpose.
 `XmlParser::parse()` returns `{root, errors, warnings, scripts}`. Errors never abort
 the parse: unknown root/element names are logged and skipped, and the caller
 always receives a usable tree.
+
+An **attribute whose value does not fit the property it names is an error**. Once
+the element exists the parser walks every authored attribute through the typed
+property registry — `checkWidgetProperty()` asks what the name expects and
+compares, applying nothing — and reports the mismatches with the element's
+line:col:
+
+```
+25:95: <grid> property 'gap' expects number, got 'ten'
+52:66: <section> property 'expanded' expects true/false/1/0/yes/no/on/off, got 'ture'
+3:62: <button> attribute "background": unknown palette token '@acent'
+3:62: <button> property 'align' expects left|center|right, got 'middle'
+3:62: <button> attribute "weird:radius": unknown visual state 'weird'
+```
+
+That matters because every concrete setter in the parser is forgiving by design:
+`height="abc"` seeds 0, `visible="ture"` reads false, `@nope` draws the window
+colour, and the widget looks like an intentional flat dark rectangle. The check
+costs nothing at runtime (it runs while parsing) and turns those into a lint hit
+for `ogui_validate` and for the `errors` a host already receives.
+
+What stays silent, on purpose: a name no property exposes (`thumbcolor`, `active`)
+— those attributes are still the parser's private vocabulary and reporting them
+would call valid authoring a mistake — the relative geometry forms (`width="50%"`,
+`height="fill"`) that a number type does not describe, and a value that only the
+widget's own setter can reject (a `keybind` naming no entry), which is caught when
+the widget is built rather than by the registry.
 
 `ogui_validate` (built from `examples/validate.cpp`) is the command-line driver
 for that reporting — it parses files or a whole `manifest.xml`, prints each

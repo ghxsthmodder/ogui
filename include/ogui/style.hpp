@@ -38,6 +38,11 @@ struct Palette {
     // Case-insensitive token assignment (used by <theme> stylesheets);
     // false when the name matches no token.
     bool setToken(const std::string& name, const Color& c);
+
+    // True when `name` is one of the tokens above. `token()` answers an
+    // unknown name with `window`, so this is the only way to tell an author
+    // that their "@acent" is a typo instead of a colour.
+    bool hasToken(const std::string& name) const;
 };
 
 // ---- style: layout + style, merged from XML <style> and per-element attrs --

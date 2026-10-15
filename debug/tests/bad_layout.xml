@@ -8,6 +8,10 @@
   <!-- not a registered tag -->
   <hologram id="ghost" x="10" y="60" width="120" height="40"/>
 
+  <!-- a value the property cannot use: the widget is still built, but the
+       parser reports what it expected instead of drawing 0 pixels -->
+  <button id="typo" text="Click" x="10" y="100" width="120" height="tall"/>
+
   <!-- <style> without a name: a warning, the element is dropped -->
   <style background="#ff0000"/>
 </screen>

@@ -1,8 +1,10 @@
-// ogui_parser_test.cpp : unit test for the XML layout parser.
+// ogui_parser_test.cpp : unit test for the XML layout parser -- the tree it
+// builds, the attributes it applies and the invalid values it reports.
 // Build: g++ -std=c++20 tests/parser_test.cpp -I../include -L../build -logui -o parser_test
 #include "ogui/xmlparser.hpp"
 #include "ogui/font.hpp"
 #include <cassert>
+#include <cctype>
 #include <iostream>
 
 int main() {
@@ -321,6 +323,83 @@ int main() {
 </screen>)XML");
         assert(!r10.errors.empty());
         assert(r10.root->children().size() == 1);
+    }
+
+    // ---- a value that does not fit its property is an error ---------------
+    // Every setter in applyAttributes() swallows what it cannot parse, so
+    // before this pass `height="abc"` silently seeded 0 and `@nope` silently
+    // drew the window colour. The registry says what each name expects and the
+    // parser now reports the mismatch -- while still building the widget, so a
+    // typo is diagnostics rather than a broken screen.
+    {
+        ogui::XmlParser p11;
+        auto r11 = p11.parse(R"XML(<screen id="s">
+  <button id="b" x="10" y="10" width="80" height="abc" visible="ture"
+          align="middle-ish" background="@nope" text="Go"/>
+  <label id="l" color="#zzz" text="hi"/>
+</screen>)XML");
+        assert(r11.root != nullptr);
+        assert(r11.root->children().size() == 2);
+        auto count = [&r11](const char* needle) {
+            int n = 0;
+            for (const auto& e : r11.errors)
+                if (e.find(needle) != std::string::npos) ++n;
+            return n;
+        };
+        assert(count("expects number") == 1);
+        assert(count("expects true/false") == 1);
+        assert(count("left|center|right") == 1);
+        // An unknown palette token is named as such, not as a bad hex literal.
+        assert(count("unknown palette token '@nope'") == 1);
+        assert(count("#rrggbb") == 1);
+        assert(r11.errors.size() == 5);
+        // Each error carries the position and the element it was authored on.
+        for (const auto& e : r11.errors) {
+            assert(!e.empty() && std::isdigit(static_cast<unsigned char>(e[0])));
+            assert(e.find("<button>") != std::string::npos ||
+                   e.find("<label>") != std::string::npos);
+        }
+        // And the widget is there with the values the setters did accept.
+        auto b11 = std::dynamic_pointer_cast<ogui::Button>(r11.root->children()[0]);
+        assert(b11 != nullptr);
+        assert(b11->text() == "Go");
+    }
+
+    // The XML-only forms the property types do not describe stay clean:
+    // relative geometry, an "@" that is ordinary text, a name no property
+    // exposes, and a state overlay whose value fits the property it overlays.
+    {
+        ogui::XmlParser p12;
+        auto r12 = p12.parse(R"XML(<screen id="s">
+  <panel id="bg" x="0" y="0" width="100%" height="fill" background="@screen"/>
+  <button id="b" x="20" y="20" width="50%" height="60" foo="bar"
+          text="@handle" hover:background="#202020" hover:radius="8"
+          background="#111111" radius="4" transition="0.2" shadow="12,4"/>
+</screen>)XML");
+        assert(r12.root != nullptr);
+        if (!r12.errors.empty()) std::cerr << "unexpected: " << r12.errors[0] << '\n';
+        assert(r12.errors.empty());
+    }
+
+    // A `state:` that is not one of the seven visual states is a typo the
+    // overlay machinery drops on the floor, so the parser says so -- but only
+    // for a property that carries states at all.
+    {
+        ogui::XmlParser p13;
+        auto r13 = p13.parse(R"XML(<screen id="s">
+  <button id="b" background="#111111" hover:background="wide"
+          weird:radius="4" hover:thumbcolor="#202020"/>
+</screen>)XML");
+        assert(r13.root != nullptr);
+        assert(r13.errors.size() == 2);
+        auto has13 = [&r13](const char* needle) {
+            for (const auto& e : r13.errors)
+                if (e.find(needle) != std::string::npos) return true;
+            return false;
+        };
+        assert(has13("unknown visual state 'weird'"));
+        assert(has13("attribute \"hover:background\""));
+        assert(has13("expects \"#rrggbb\""));
     }
 
     std::cout << "parser_test: OK - parsed " << child_count << " top-level widgets\n";

@@ -145,10 +145,14 @@ cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-b
                                         # examples, golden, gl, touch, asset, android
 ```
 
-* `parser` — XML tokenizer, attributes, styles, error reporting.
+* `parser` — XML tokenizer, attributes, styles, error reporting, and the value
+  validation that makes `height="abc"`, `visible="ture"`, `align="middle"`,
+  `background="@nope"` and `weird:radius="4"` errors instead of a widget that
+  quietly draws something else — while still building the tree.
 * `drawlist` — rasterizer geometry, text measurement and wrapping.
 * `validate` — `ogui_validate --manifest` over every screen in `manifest.xml`:
-  the shipped layouts must parse with zero errors.
+  the shipped layouts must parse with zero errors, so the lint above has already
+  been run over the gallery.
 * `validate-bad` — the same tool on `debug/tests/bad_layout.xml` must exit 1 and
   report the unknown element with its line:col.
 * `custom-widget` — registers a `<led>` element through `widgetRegistry()` and
@@ -201,7 +205,8 @@ cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-b
   overrides, host classes declaring their own, a write/read round-trip over
   every one of the 1975 built-in properties that read and write, a walk of the
   tag factory refusing any widget that reaches runtime without a table,
-  per-type value validation with its error text, and the Lua
+  per-type value validation with its error text, the side-effect-free
+  `checkWidgetProperty()` the XML parser screens attributes with, and the Lua
   `ogui.get`/`ogui.set` fallback plus `ogui.props`.
 * `templates` — reusable components: parameter defaults and instance
   overrides, `<slot/>` with fallback markup, id scopes that nest with the
@@ -863,10 +868,18 @@ editor or a CI step can lint a layout before it is ever rendered:
 
 Output is `path: ok — N widgets, M scripts, K warning(s)` per file, then a
 `validate: N error(s), M warning(s)` total; exit status is 0 clean, 1 on any
-error, 2 on a usage or unreadable-file problem. `--theme` and `--manifest`
-switch what the listed files are read as, and because
-`<stylesheet path="..."/>` and `<script src="..."/>` resolve against the
-working directory, `--chdir` has to point at the directory the app runs from.
+error, 2 on a usage problem (an unknown option, or `--chdir` without its
+directory). `--theme` and `--manifest` switch what the listed files are read
+as, and because `<stylesheet path="..."/>` and `<script src="..."/>` resolve
+against the working directory, `--chdir` has to point at the directory the app
+runs from.
+
+An attribute whose value does not fit the property it names is one of those
+errors: `height="tall"`, `visible="ture"`, `align="middle"`, `@acent` and a
+`weird:radius` overlay each report what the property expected, because every
+concrete setter in the parser is forgiving and would otherwise draw a widget
+that looks intentional. See
+[`docs/xml-reference.md`](docs/xml-reference.md#error-reporting).
 
 The tutorials — smallest layout, a working counter, loading order and script
 scopes, event/timer/binding snippets, a custom C++ widget, and what a mistake

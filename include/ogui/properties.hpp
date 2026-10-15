@@ -98,7 +98,8 @@ OGUI_API std::string formatNumber(double v);
 OGUI_API bool parseNumber(const std::string& text, double& out);
 OGUI_API bool parseBool(const std::string& text, bool& out);
 OGUI_API std::string formatColor(const Color& c);
-// "#rgb[a]"/"#rrggbb[aa]" literals and "@token" palette references.
+// "#rgb[a]"/"#rrggbb[aa]" literals and "@token" palette references; a token
+// the palette does not carry is not a colour, so it is false.
 OGUI_API bool parseColorValue(const std::string& text, Color& out);
 OGUI_API bool matchesChoice(const std::vector<std::string>& choices,
                             const std::string& value);
@@ -238,5 +239,24 @@ OGUI_API bool setWidgetProperty(Widget& w, const std::string& name,
                                 std::string* error = nullptr);
 // Names of every property the widget exposes, sorted.
 OGUI_API std::vector<std::string> widgetPropertyNames(const Widget& w);
+
+// Outcome of checkWidgetProperty().
+enum class PropertyCheck {
+    Accepted,  // the value is well-formed for this property
+    Unknown,   // neither this class nor a base declares the name
+    Rejected,  // the name is real and the value is not valid for it
+};
+// Checks a value's form without applying anything: the XML parser reports an
+// authored typo without re-running a setter that has already run, and a tool
+// can screen a candidate value before offering it. `error` receives the
+// message the write would have produced. Only the declared type and choices
+// are consulted -- a setter that rejects a well-formed value of its own accord
+// (a Keybind naming no entry) is not predicted here. A read-only property
+// still answers by the value's form: refusing to write is not the value being
+// malformed.
+OGUI_API PropertyCheck checkWidgetProperty(const Widget& w,
+                                           const std::string& name,
+                                           const std::string& value,
+                                           std::string* error = nullptr);
 
 }  // namespace ogui

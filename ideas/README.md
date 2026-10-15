@@ -1016,7 +1016,19 @@ Uma funcionalidade não deve ser considerada concluída apenas porque o
 exemplo básico funciona. Sempre que aplicável, verificar:
 
 -   [ ] A API está documentada e segue as convenções da biblioteca.
--   [ ] Os valores e argumentos inválidos produzem erros úteis.
+-   [x] Os valores e argumentos inválidos produzem erros úteis. (O
+    `XmlParser` agora passa cada atributo autoral pelo `PropertyRegistry` —
+    `checkWidgetProperty()` olha o tipo declarado e as choices sem aplicar nada
+    — e um valor que não cabe no nome vira erro com linha, coluna e o que a
+    propriedade esperava: `height="tall"`, `visible="ture"`, `align="middle"`,
+    `@token` inexistente, um `estado:` que não é dos sete. Antes cada setter
+    engolia o que não parseava (`height` virava 0, `@nope` desenhava `window`).
+    O CLI do `ogui_validate` também passou a reclamar de `--chdir` sem
+    argumento e de opção inexistente, em vez de validar isso como nome de
+    arquivo. Coberto por `parser_test`/`properties_test` e pelo bloco
+    expect-error de `docs/examples.md`. Falta ainda: um atributo que nenhuma
+    propriedade declara (`thumbcolor`, `active`) continua silencioso — é o
+    incremento de "name drift" entre XML e registry.)
 -   [x] O ciclo de vida é seguro, inclusive após remoção de widgets ou
     troca de tela. (`debug/tests/lifetime_test.cpp`, coberto pelo ASAN:
     `forgetWidget` desce a árvore e limpa o tooltip, a troca de tela solta o

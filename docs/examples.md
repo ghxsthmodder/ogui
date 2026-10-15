@@ -402,6 +402,26 @@ problem:
 </screen>
 ```
 
+A mistyped *value* is an error as well. Every setter in the parser is forgiving
+— `height="tall"` seeds 0 and `@acent` draws the window colour, which looks
+like a design decision rather than a typo — so each attribute is checked against
+the type the property registry declares for its name, and the message says what
+was expected:
+
+```xml expect-error
+<screen id="values">
+  <button id="b" text="Click" x="10" y="10" width="80" height="tall"
+          visible="ture" align="middle" background="@acent"/>
+</screen>
+```
+
+```
+error: 3:62: <button> property 'align' expects left|center|right, got 'middle'
+error: 3:62: <button> attribute "background": unknown palette token '@acent'
+error: 3:62: <button> property 'height' expects number, got 'tall'
+error: 3:62: <button> property 'visible' expects true/false/1/0/yes/no/on/off, got 'ture'
+```
+
 ```sh
 $ ./build/ogui_validate examples/hello.xml
 examples/hello.xml: ok — 3 widgets, 0 scripts, 0 warning(s)
@@ -413,8 +433,9 @@ $ ./build/ogui_validate themes/design.xml --theme            # a stylesheet
 
 Errors mean the layout will lose a widget at runtime; warnings mean it kept
 something but had to guess (`unknown style "menu-on"`, a `<style>` with no
-name). The exit code is 0 clean, 1 errors, 2 unreadable input, which is what
-lets an editor save hook or a CI step call the same binary the docs quote.
+name). The exit code is 0 clean, 1 errors (a file that could not be read is
+one), 2 a usage problem, which is what lets an editor save hook or a CI step
+call the same binary the docs quote.
 
 ## Running the examples
 

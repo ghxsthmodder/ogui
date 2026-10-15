@@ -3,10 +3,12 @@
 #include "ogui/widgets.hpp"
 #include "ogui/font.hpp"
 #include "ogui/assets.hpp"
+#include "ogui/properties.hpp"
 
 #include <fstream>
 #include <cctype>
 #include <algorithm>
+#include <iterator>
 
 namespace ogui {
 
@@ -664,6 +666,37 @@ void parseFontAttr(const std::string& v, std::string& family, int& size) {
     family = v.substr(0, sp);
     int sz = 0;
     if (toInt(v.substr(sp + 1), sz) && sz > 0) size = sz;
+}
+
+// The states a `state:property` overlay understands, and the properties that
+// carry one. The overlay block and the value validation both need this answer,
+// so it is stated once.
+const char* const kVisualStates[] = {
+    "normal", "hover", "pressed", "focus", "disabled", "checked", "selected"};
+const char* const kOverlayColors[] = {
+    "background", "color", "border", "bordercolor"};
+const char* const kOverlayFloats[] = {"borderwidth", "radius"};
+
+bool isIn(const char* const* list, size_t n, const std::string& s) {
+    for (size_t i = 0; i < n; ++i)
+        if (s == list[i]) return true;
+    return false;
+}
+
+bool isVisualState(const std::string& s) {
+    return isIn(kVisualStates, std::size(kVisualStates), s);
+}
+
+bool isOverlayColor(const std::string& name) {
+    return isIn(kOverlayColors, std::size(kOverlayColors), name);
+}
+
+bool isOverlayFloat(const std::string& name) {
+    return isIn(kOverlayFloats, std::size(kOverlayFloats), name);
+}
+
+bool isOverlayable(const std::string& name) {
+    return isOverlayColor(name) || isOverlayFloat(name);
 }
 
 } // namespace
@@ -1406,18 +1439,6 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         if (toFloat(*v, d)) w->setVisualTransition(d);
     }
     {
-        static const char* const kStateNames[] = {
-            "normal", "hover", "pressed", "focus", "disabled",
-            "checked", "selected"};
-        static const char* const kColorProps[] = {
-            "background", "color", "border", "bordercolor"};
-        static const char* const kFloatProps[] = {"borderwidth", "radius"};
-        auto isIn = [](const char* const* list, size_t n,
-                       const std::string& s) {
-            for (size_t i = 0; i < n; ++i)
-                if (s == list[i]) return true;
-            return false;
-        };
         std::map<std::string,
                  std::vector<std::pair<std::string, std::string>>> patches;
         for (const auto& [key, val] : attrs) {
@@ -1425,14 +1446,12 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
             if (colon == std::string::npos) continue;
             const std::string st = key.substr(0, colon);
             const std::string prop = key.substr(colon + 1);
-            const bool isColor = isIn(kColorProps, 4, prop);
-            const bool isFloat = !isColor && isIn(kFloatProps, 2, prop);
-            if (!isColor && !isFloat) continue;
-            if (!isIn(kStateNames, 7, st)) continue;
+            if (!isOverlayable(prop)) continue;
+            if (!isVisualState(st)) continue;
             patches[prop].emplace_back(st, val);
         }
         for (const auto& [prop, list] : patches) {
-            const bool isColor = isIn(kColorProps, 4, prop);
+            const bool isColor = isOverlayColor(prop);
             const std::string* base = get(prop.c_str());
             if (isColor) {
                 if (!base) {
@@ -1459,6 +1478,70 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
                 }
             }
         }
+    }
+
+    validateAttributeValues(w, tag, attrs);
+}
+
+// ---- authored-value validation ---------------------------------------------
+// Every setter above swallows a value it cannot use: `height="abc"` seeds 0,
+// `visible="ture"` reads false, `background="@nope"` draws the window colour.
+// The typed property registry knows what each of those names expects, so run
+// the values through it once the element is built and report the mismatch.
+// Nothing is applied here -- the attributes have already been applied by the
+// concrete setters, and a re-write through the registry would clobber the
+// forms only they understand.
+void XmlParser::validateAttributeValues(const std::shared_ptr<Widget>& w,
+                                        const std::string& tag,
+                                        const std::map<std::string, std::string>& attrs) {
+    if (!w || !m_result) return;
+    for (const auto& [key, val] : attrs) {
+        // `hover:background` is an overlay of a property the widget exposes, so
+        // its value has to fit that property just the same -- and the state has
+        // to be one the overlay machinery reads at all.
+        std::string name = key;
+        bool isOverlay = false;
+        const size_t colon = key.find(':');
+        if (colon != std::string::npos) {
+            const std::string state = key.substr(0, colon);
+            name = key.substr(colon + 1);
+            if (!isVisualState(state)) {
+                if (isOverlayable(name)) {
+                    addError("<" + tag + "> attribute \"" + key
+                             + "\": unknown visual state '" + state + "'");
+                }
+                continue;
+            }
+            isOverlay = true;
+        }
+        const auto* def = PropertyRegistry::instance().find(*w, name);
+        // A name the registry does not carry is not this pass's business: the
+        // parser has attributes no property exposes, and reporting those would
+        // call valid authoring a mistake.
+        if (!def) continue;
+        // "@name" resolves against the palette, and Palette::token answers an
+        // unknown name with `window` -- a typo'd token would draw a silently
+        // wrong colour, so say which half of the value is bad rather than
+        // letting the colour type call it a malformed literal. Checked only
+        // where a colour is expected: "@" is ordinary text anywhere else.
+        if (def->type == PropertyType::Color && !val.empty() && val[0] == '@' &&
+            !palette().hasToken(val.substr(1))) {
+            addError("<" + tag + "> attribute \"" + key +
+                     "\": unknown palette token '" + val + "'");
+            continue;
+        }
+        // Geometry takes the relative forms the number type does not describe.
+        if (def->type == PropertyType::Number && !isOverlay &&
+            (name == "x" || name == "y" || name == "width" ||
+             name == "height") &&
+            (val == "fill" || (!val.empty() && val.back() == '%'))) {
+            continue;
+        }
+        std::string error;
+        if (checkWidgetProperty(*w, name, val, &error) != PropertyCheck::Rejected)
+            continue;
+        addError("<" + tag + "> " +
+                 (isOverlay ? "attribute \"" + key + "\": " : "") + error);
     }
 }
 
