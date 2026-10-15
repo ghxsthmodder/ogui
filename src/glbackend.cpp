@@ -1,6 +1,7 @@
-// OpenGL 3.3 core backend. All entry points are resolved at runtime through
-// the host's GetProc; this file never includes <GL/gl.h> and never links
-// against libGL/opengl32, so the library stays dependency-free.
+// OpenGL 3.3 core / OpenGL ES 3.0 backend. All entry points are resolved at
+// runtime through the host's GetProc; this file never includes <GL/gl.h> and
+// never links against libGL/opengl32/libGLESv2, so the library stays
+// dependency-free.
 #include "ogui/glbackend.hpp"
 #include "ogui/imagemanager.hpp"
 
@@ -30,6 +31,7 @@ using GLsizei = int;
 using GLuint = unsigned int;
 using GLfloat = float;
 using GLchar = char;
+using GLubyte = unsigned char;
 using GLsizeiptr = std::ptrdiff_t;
 using GLintptr = std::ptrdiff_t;
 
@@ -42,6 +44,7 @@ constexpr GLenum GL_TEXTURE0           = 0x84C0;
 constexpr GLenum GL_UNSIGNED_BYTE      = 0x1401;
 constexpr GLenum GL_FLOAT              = 0x1406;
 constexpr GLenum GL_RGBA               = 0x1908;
+constexpr GLenum GL_RGBA8              = 0x8058;
 constexpr GLenum GL_TRIANGLES          = 0x0004;
 constexpr GLenum GL_UNSIGNED_INT       = 0x1405;
 constexpr GLenum GL_ARRAY_BUFFER       = 0x8892;
@@ -61,7 +64,13 @@ constexpr GLenum GL_ONE                = 1;
 constexpr GLenum GL_R8                 = 0x8229;
 constexpr GLenum GL_RED                = 0x1903;
 constexpr GLenum GL_UNPACK_ALIGNMENT   = 0x0CF5;
-constexpr GLenum GL_TEXTURE_SWIZZLE_RGBA = 0x8E46;
+// ES 3.0 only exposes the per-component swizzles; the aggregate
+// GL_TEXTURE_SWIZZLE_RGBA (0x8E46) is desktop-only, so setting the four
+// channels one by one is the single path that works on both.
+constexpr GLenum GL_TEXTURE_SWIZZLE_R  = 0x8E42;
+constexpr GLenum GL_TEXTURE_SWIZZLE_G  = 0x8E43;
+constexpr GLenum GL_TEXTURE_SWIZZLE_B  = 0x8E44;
+constexpr GLenum GL_TEXTURE_SWIZZLE_A  = 0x8E45;
 constexpr GLenum GL_SRC_ALPHA          = 0x0302;
 constexpr GLenum GL_ONE_MINUS_SRC_ALPHA = 0x0303;
 constexpr GLboolean GL_FALSE_          = 0;
@@ -80,6 +89,9 @@ constexpr GLenum GL_BLEND_SRC_RGB      = 0x80C9;
 constexpr GLenum GL_BLEND_DST_RGB      = 0x80C8;
 constexpr GLenum GL_BLEND_SRC_ALPHA    = 0x80CB;
 constexpr GLenum GL_BLEND_DST_ALPHA    = 0x80CA;
+// string queries (profile detection, and what a shader failure is quoted with)
+constexpr GLenum GL_VERSION                  = 0x1F02;
+constexpr GLenum GL_SHADING_LANGUAGE_VERSION = 0x8B8C;
 } // namespace
 
 // ---- function pointer table ------------------------------------------------
@@ -87,13 +99,13 @@ struct GlBackend::Api {
     // state
     void (*Enable)(GLenum) = nullptr;
     void (*Disable)(GLenum) = nullptr;
-    void (*BlendFunc)(GLenum, GLenum) = nullptr;
     void (*Scissor)(GLint, GLint, GLsizei, GLsizei) = nullptr;
     void (*Viewport)(GLint, GLint, GLsizei, GLsizei) = nullptr;
     // state query / restore
     GLboolean (*IsEnabled)(GLenum) = nullptr;
     void (*GetIntegerv)(GLenum, GLint*) = nullptr;
     void (*BlendFuncSeparate)(GLenum, GLenum, GLenum, GLenum) = nullptr;
+    const GLubyte* (*GetString)(GLenum) = nullptr;
     // buffers
     void (*GenVertexArrays)(GLsizei, GLuint*) = nullptr;
     void (*BindVertexArray)(GLuint) = nullptr;
@@ -128,7 +140,6 @@ struct GlBackend::Api {
     void (*BindTexture)(GLenum, GLuint) = nullptr;
     void (*TexImage2D)(GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, const void*) = nullptr;
     void (*TexParameteri)(GLenum, GLenum, GLint) = nullptr;
-    void (*TexParameteriv)(GLenum, GLenum, const GLint*) = nullptr;
     void (*PixelStorei)(GLenum, GLint) = nullptr;
     void (*DeleteTextures)(GLsizei, const GLuint*) = nullptr;
     void (*ActiveTexture)(GLenum) = nullptr;
@@ -164,6 +175,20 @@ void* defaultGetProc(const char* name) {
     static void* lib = dlopen(
         "/System/Library/Frameworks/OpenGL.framework/OpenGL", RTLD_LAZY | RTLD_LOCAL);
     return lib ? dlsym(lib, name) : nullptr;
+#elif defined(__ANDROID__)
+    // An ES-only platform: nothing here may reach for libGL. The GL ES entry
+    // points are exported by libGLESv2, the getters by libEGL.
+    static void* gles = dlopen("libGLESv2.so", RTLD_LAZY | RTLD_LOCAL);
+    if (gles) {
+        if (void* p = dlsym(gles, name)) return p;
+    }
+    using EglGetProc = void* (*)(const char*);
+    static EglGetProc eglGetProc = [] {
+        static void* egl = dlopen("libEGL.so", RTLD_LAZY | RTLD_LOCAL);
+        return egl ? reinterpret_cast<EglGetProc>(dlsym(egl, "eglGetProcAddress"))
+                   : nullptr;
+    }();
+    return eglGetProc ? eglGetProc(name) : nullptr;
 #else
     using GetProcArb = void* (*)(const char*);
     static void* lib = dlopen("libGL.so.1", RTLD_LAZY | RTLD_LOCAL);
@@ -209,12 +234,12 @@ bool GlBackend::loadFunctions(GetProcFn getProc) {
     // state
     need(a.Enable, "glEnable");
     need(a.Disable, "glDisable");
-    need(a.BlendFunc, "glBlendFunc");
     need(a.BlendFuncSeparate, "glBlendFuncSeparate");
     need(a.Scissor, "glScissor");
     need(a.Viewport, "glViewport");
     need(a.IsEnabled, "glIsEnabled");
     need(a.GetIntegerv, "glGetIntegerv");
+    need(a.GetString, "glGetString");
     // buffers
     need(a.GenVertexArrays, "glGenVertexArrays");
     need(a.BindVertexArray, "glBindVertexArray");
@@ -249,7 +274,6 @@ bool GlBackend::loadFunctions(GetProcFn getProc) {
     need(a.BindTexture, "glBindTexture");
     need(a.TexImage2D, "glTexImage2D");
     need(a.TexParameteri, "glTexParameteri");
-    need(a.TexParameteriv, "glTexParameteriv");
     need(a.PixelStorei, "glPixelStorei");
     need(a.DeleteTextures, "glDeleteTextures");
     need(a.ActiveTexture, "glActiveTexture");
@@ -266,7 +290,11 @@ bool GlBackend::loadFunctions(GetProcFn getProc) {
 bool GlBackend::createPipeline() {
     Api& a = *m_api;
 
-    static const char* VS = R"(#version 330 core
+    // One shader body, two dialects: the desktop and ES 3.00 versions of GLSL
+    // agree on everything this pipeline uses (layout locations, `in`/`out`,
+    // `texture()`), so only the #version line and the ES precision statement
+    // change. highp matches the desktop arithmetic, so both paths round alike.
+    static const char* kVsBody = R"(
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec2 aUV;
 layout(location = 2) in vec4 aColor;
@@ -277,20 +305,30 @@ void main() {
     vUV = aUV;
     vColor = aColor;
     gl_Position = uProj * vec4(aPos, 0.0, 1.0);
-})";
+}
+)";
 
-    static const char* FS = R"(#version 330 core
+    static const char* kFsBody = R"(
 in vec2 vUV;
 in vec4 vColor;
 uniform sampler2D uTex;
 out vec4 fragColor;
 void main() {
     fragColor = texture(uTex, vUV) * vColor;
-})";
+}
+)";
 
-    auto compile = [&](GLenum type, const char* src) -> GLuint {
+    const std::string srcVs = std::string(m_es ? "#version 300 es\n"
+                                               : "#version 330 core\n") + kVsBody;
+    std::string srcFs =
+        std::string(m_es ? "#version 300 es\n" : "#version 330 core\n");
+    if (m_es) srcFs += "precision highp float;\n";
+    srcFs += kFsBody;
+
+    auto compile = [&](GLenum type, const std::string& src) -> GLuint {
         GLuint sh = a.CreateShader(type);
-        a.ShaderSource(sh, 1, &src, nullptr);
+        const char* p = src.c_str();
+        a.ShaderSource(sh, 1, &p, nullptr);
         a.CompileShader(sh);
         GLint ok = 0;
         a.GetShaderiv(sh, GL_COMPILE_STATUS, &ok);
@@ -298,16 +336,16 @@ void main() {
             char log[1024] = {0};
             GLsizei n = 0;
             a.GetShaderInfoLog(sh, sizeof(log), &n, log);
-            m_error = std::string("shader compile failed: ") + log;
+            m_error = describe() + ": shader compile failed: " + log;
             a.DeleteShader(sh);
             return 0;
         }
         return sh;
     };
 
-    GLuint vs = compile(GL_VERTEX_SHADER, VS);
+    GLuint vs = compile(GL_VERTEX_SHADER, srcVs);
     if (!vs) return false;
-    GLuint fs = compile(GL_FRAGMENT_SHADER, FS);
+    GLuint fs = compile(GL_FRAGMENT_SHADER, srcFs);
     if (!fs) { a.DeleteShader(vs); return false; }
 
     m_program = a.CreateProgram();
@@ -323,7 +361,7 @@ void main() {
         char log[1024] = {0};
         GLsizei n = 0;
         a.GetProgramInfoLog(m_program, sizeof(log), &n, log);
-        m_error = std::string("program link failed: ") + log;
+        m_error = describe() + ": program link failed: " + log;
         return false;
     }
 
@@ -355,16 +393,39 @@ void main() {
     return true;
 }
 
-bool GlBackend::init(GetProcFn getProc) {
+bool GlBackend::init(GetProcFn getProc, Profile profile) {
     if (m_ready) return true;
     m_error.clear();
     if (!loadFunctions(getProc)) return false;
+    // The context already exists (the host made it current), so the reported
+    // versions decide the shader dialect: a GLSL ES string always says "ES".
+    const std::string gl = queryString(GL_VERSION);
+    const std::string glsl = queryString(GL_SHADING_LANGUAGE_VERSION);
+    switch (profile) {
+        case Profile::OpenGLES: m_es = true; break;
+        case Profile::DesktopGL: m_es = false; break;
+        case Profile::Auto:
+            m_es = gl.rfind("OpenGL ES", 0) == 0 || glsl.find("ES") != std::string::npos;
+            break;
+    }
     // A previous attempt may have died halfway through createPipeline():
     // drop whatever GL objects it managed to create before starting over.
     shutdown();
     if (!createPipeline()) return false;
     m_ready = true;
     return true;
+}
+
+std::string GlBackend::queryString(unsigned name) const {
+    if (!m_api || !m_api->GetString) return std::string();
+    const GLubyte* s = m_api->GetString(static_cast<GLenum>(name));
+    return s ? std::string(reinterpret_cast<const char*>(s)) : std::string();
+}
+
+std::string GlBackend::describe() const {
+    std::string s = queryString(GL_VERSION);
+    if (s.empty()) s = m_es ? "OpenGL ES" : "OpenGL";
+    return s + " (GLSL " + queryString(GL_SHADING_LANGUAGE_VERSION) + ")";
 }
 
 int GlBackend::createTexture(const uint8_t* rgba, int w, int h) {
@@ -378,7 +439,9 @@ int GlBackend::createTexture(const uint8_t* rgba, int w, int h) {
     GLuint tex = 0;
     a.GenTextures(1, &tex);
     a.BindTexture(GL_TEXTURE_2D, tex);
-    a.TexImage2D(GL_TEXTURE_2D, 0, static_cast<GLint>(GL_RGBA), w, h, 0,
+    // Sized internalformat: ES 3.0 rejects the unsized GL_RGBA there, and
+    // RGBA8 is what both APIs would choose anyway.
+    a.TexImage2D(GL_TEXTURE_2D, 0, static_cast<GLint>(GL_RGBA8), w, h, 0,
                  GL_RGBA, GL_UNSIGNED_BYTE, rgba);
     a.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, static_cast<GLint>(GL_LINEAR));
     a.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, static_cast<GLint>(GL_LINEAR));
@@ -444,9 +507,10 @@ int GlBackend::createTextureA8(const uint8_t* alpha, int w, int h) {
     a.TexImage2D(GL_TEXTURE_2D, 0, static_cast<GLint>(GL_R8), w, h, 0,
                  GL_RED, GL_UNSIGNED_BYTE, alpha);
     a.PixelStorei(GL_UNPACK_ALIGNMENT, prevAlign);
-    const GLint swizzle[4] = {static_cast<GLint>(GL_ONE), static_cast<GLint>(GL_ONE),
-                              static_cast<GLint>(GL_ONE), static_cast<GLint>(GL_RED)};
-    a.TexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzle);
+    a.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_R, static_cast<GLint>(GL_ONE));
+    a.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_G, static_cast<GLint>(GL_ONE));
+    a.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, static_cast<GLint>(GL_ONE));
+    a.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, static_cast<GLint>(GL_RED));
     a.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, static_cast<GLint>(GL_LINEAR));
     a.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, static_cast<GLint>(GL_LINEAR));
     a.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, static_cast<GLint>(GL_CLAMP_TO_EDGE));
@@ -542,7 +606,13 @@ void GlBackend::render(const DrawList& list, int fbWidth, int fbHeight, bool fli
                            static_cast<float>(fbHeight), 0.0f, -1.0f, 1.0f);
 
     a.Enable(GL_BLEND);
-    a.BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    // Source-over, stated separately because the two channels do not follow the
+    // same rule: colour blends by the source alpha, while the destination alpha
+    // must accumulate as src + dst * (1 - src). Reaching for GL_SRC_ALPHA there
+    // too would square the source alpha and leave the frame's alpha below what
+    // SoftwareRenderer, which follows the definition, writes.
+    a.BlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE,
+                        GL_ONE_MINUS_SRC_ALPHA);
     a.Enable(GL_SCISSOR_TEST);
     a.Disable(GL_DEPTH_TEST);
     a.Disable(GL_CULL_FACE);

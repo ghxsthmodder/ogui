@@ -121,12 +121,16 @@ void fillTriangle(Framebuffer& fb, const Vertex& v0, const Vertex& v1,
             if (sa <= 0.0f) continue;
 
             uint8_t* d = fb.at(x, y);
-            // glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+            // glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA,
+            //                     GL_ONE, GL_ONE_MINUS_SRC_ALPHA)
             const float ia = 1.0f - sa;
-            d[0] = static_cast<uint8_t>(std::clamp(sr * sa + (d[0] / 255.0f) * ia, 0.0f, 1.0f) * 255.0f);
-            d[1] = static_cast<uint8_t>(std::clamp(sg * sa + (d[1] / 255.0f) * ia, 0.0f, 1.0f) * 255.0f);
-            d[2] = static_cast<uint8_t>(std::clamp(sb * sa + (d[2] / 255.0f) * ia, 0.0f, 1.0f) * 255.0f);
-            d[3] = static_cast<uint8_t>(std::clamp(sa + (d[3] / 255.0f) * ia, 0.0f, 1.0f) * 255.0f);
+            // Blending into an RGBA8 target rounds to nearest, so this does
+            // too: truncating left every blended pixel up to a unit below what
+            // the GPU writes, in colour and in alpha.
+            d[0] = static_cast<uint8_t>(std::clamp(sr * sa + (d[0] / 255.0f) * ia, 0.0f, 1.0f) * 255.0f + 0.5f);
+            d[1] = static_cast<uint8_t>(std::clamp(sg * sa + (d[1] / 255.0f) * ia, 0.0f, 1.0f) * 255.0f + 0.5f);
+            d[2] = static_cast<uint8_t>(std::clamp(sb * sa + (d[2] / 255.0f) * ia, 0.0f, 1.0f) * 255.0f + 0.5f);
+            d[3] = static_cast<uint8_t>(std::clamp(sa + (d[3] / 255.0f) * ia, 0.0f, 1.0f) * 255.0f + 0.5f);
         }
     }
 }

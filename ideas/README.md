@@ -865,6 +865,61 @@ compatibilidade e capacidade de manutenção.
 
 ------------------------------------------------------------------------
 
+### Fase 6 --- Portabilidade (GLES/EGL e Android)
+
+-   [x] `GlBackend` fala OpenGL ES 3.0 além de 3.3 core. `init(getProc,
+    profile)` aceita `Profile::Auto` (padrão), `DesktopGL` ou `OpenGLES`, e
+    `Auto` lê `GL_VERSION`/`GL_SHADING_LANGUAGE_VERSION` do contexto já
+    corrente, então o mesmo binário serve os dois. O custo real do port são
+    três pontos, todos dentro do backend: um corpo de shader com dois
+    cabeçalhos (`#version 300 es` + `precision highp float;` no fragmento,
+    `#version 330 core` no desktop), `GL_RGBA8` como internalformat tipado que o
+    ES exige no lugar de `GL_RGBA`, e o swizzle do atlas de glifos feito por
+    componente (`GL_TEXTURE_SWIZZLE_R/G/B/A`) porque o `GL_TEXTURE_SWIZZLE_RGBA`
+    agregado só existe no desktop. O resto do que o backend usa já era core do
+    ES 3.0. A biblioteca continua sem linkar GL: a tabela `Api` é resolvida
+    inteira pelo `getProc` do hospedeiro, o ramo `__ANDROID__` do
+    `defaultGetProc` procura `libGLESv2.so` e depois `eglGetProcAddress` e nunca
+    toca `libGL`, e `glBlendFunc` saiu da lista obrigatória por não ser mais
+    usado.
+-   [x] Alpha composto como source-over de verdade: `glBlendFunc` aplica
+    `SRC_ALPHA` ao canal alpha também, o que dá `αs² + αd(1−αs)` em vez de
+    `αs + αd(1−αs)`. Passou a `glBlendFuncSeparate(..., GL_ONE,
+    GL_ONE_MINUS_SRC_ALPHA)`. O `SoftwareRenderer` já seguia a definição, e foi
+    a primeira comparação real entre os dois que mostrou a diferença.
+-   [x] Teste de pixels em GL de verdade (`debug/tests/gl_test.cpp`): abre dois
+    contextos EGL headless na mesma máquina, um ES com
+    `EGL_CONTEXT_CLIENT_VERSION=3` e um desktop, desenha a cena do `golden` em
+    ambos e compara com o `SoftwareRenderer`; verifica a detecção
+    de perfil, que `render()` devolve os 19 pedaços de estado que tocou e que um
+    segundo frame é bit-idêntico. O layout da cena saiu de `golden_test.cpp`
+    para `debug/tests/golden_scene.hpp`, compartilhado pelos dois. A asserção de
+    pixels tolera raio de 1 pixel, porque o rasterizador CPU trata toda aresta
+    de triângulo como coberta e o GL aplica a regra do canto superior
+    esquerdo --- é a diferença de cobertura de borda, não de cor nem de lugar.
+    O executável do teste só é construído quando EGL e `libGLESv2` existem, e
+    **pula** (não falha) onde não há contexto possível. A correção de
+    arredondamento do `SoftwareRenderer`, cujo blend truncava em vez de
+    arredondar para o mais próximo, saiu do mesmo teste.
+-   [ ] Hospedeiro Android: `NativeActivity` com superfície EGL
+    (`eglCreateWindowSurface` sobre o `ANativeWindow`, no lugar do pbuffer que
+    o teste usa), um config EGL cujo formato de framebuffer o swap aceite, e
+    leitura dos layouts por `AAsset` em vez de sistema de arquivos.
+-   [ ] Toque no `InputState`: o estado hoje descreve um ponteiro só. Faltam os
+    ids de `AMotionEvent`, `ACTION_CANCEL` a devolver a captura, e os gestos que
+    o `Kernel` não sintetiza --- fling com inércia, pressionar-e-segurar, pinça.
+-   [ ] Entrada de texto pelo IME: `InputState::lastChar` chega de eventos de
+    teclado, e o NDK não expõe o método de entrada a código nativo --- um campo
+    de texto no Android precisa da ponte JNI para a `InputMethodManager`, dos
+    callbacks `onStartInput`/`onFinishInput` da `NativeActivity` e do texto
+    confirmado que por eles volta, para receber composing e mutações de seleção.
+    `Kernel::focusedWidget()` já diz a quem entregar.
+
+**Resultado esperado:** o mesmo `DrawList` renderiza em desktop GL, GLES 3.0 e
+CPU, com a portabilidade coberta por teste em vez de suposição.
+
+------------------------------------------------------------------------
+
 ## Critérios de conclusão
 
 Uma funcionalidade não deve ser considerada concluída apenas porque o

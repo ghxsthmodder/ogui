@@ -223,6 +223,32 @@ if(OGUI_BUILD_TESTS)
             OGUI_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/debug/tests/golden")
     endif()
 
+    # GlBackend on a real GL context, opened through EGL with no window system.
+    # The library never links GL, and still does not: only this test binary
+    # does, and it drops out of the build where EGL or GLESv2 are missing (the
+    # test itself also skips at run time when there is no usable driver).
+    set(OGUI_HAVE_EGL OFF)
+    if(UNIX AND NOT APPLE AND OGUI_USE_STATIC_STB)
+        include(CheckIncludeFileCXX)
+        check_include_file_cxx("EGL/egl.h" OGUI_HAS_EGL_HEADER)
+        check_include_file_cxx("GLES3/gl3.h" OGUI_HAS_GLES3_HEADER)
+        find_library(OGUI_EGL_LIBRARY NAMES EGL)
+        find_library(OGUI_GLES2_LIBRARY NAMES GLESv2)
+        if(OGUI_HAS_EGL_HEADER AND OGUI_HAS_GLES3_HEADER
+           AND OGUI_EGL_LIBRARY AND OGUI_GLES2_LIBRARY)
+            set(OGUI_HAVE_EGL ON)
+        endif()
+    endif()
+
+    if(OGUI_HAVE_EGL)
+        add_executable(ogui_gl_test debug/tests/gl_test.cpp)
+        target_link_libraries(ogui_gl_test PRIVATE ogui
+            ${OGUI_EGL_LIBRARY} ${OGUI_GLES2_LIBRARY} ${CMAKE_DL_LIBS})
+        target_include_directories(ogui_gl_test PRIVATE ${STB_DIR})
+    else()
+        message(STATUS "gl_test: EGL/GLESv2 unavailable - GlBackend pixel test not built")
+    endif()
+
     enable_testing()
     add_test(NAME parser COMMAND ogui_parser_test)
     add_test(NAME drawlist COMMAND ogui_drawlist_test)
@@ -253,6 +279,9 @@ if(OGUI_BUILD_TESTS)
     add_test(NAME examples COMMAND ogui_examples_test)
     if(TARGET ogui_golden_test)
         add_test(NAME golden COMMAND ogui_golden_test)
+    endif()
+    if(OGUI_HAVE_EGL)
+        add_test(NAME gl COMMAND ogui_gl_test)
     endif()
 endif()
 

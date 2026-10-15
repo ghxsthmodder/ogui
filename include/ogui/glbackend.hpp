@@ -10,16 +10,21 @@
 namespace ogui {
 
 // ------------------------------------------------------------------
-// GlBackend: renders a DrawList with OpenGL 3.3 core.
+// GlBackend: renders a DrawList with OpenGL 3.3 core or OpenGL ES 3.0.
 //
 // The library never links against GL: every entry point is resolved at
 // runtime through a host-supplied getter (wglGetProcAddress, glXGetProcAddress,
-// SDL_GL_GetProcAddress, glfwGetProcAddress, ...). Call init() once, after the
-// host has made its GL context current.
+// eglGetProcAddress, SDL_GL_GetProcAddress, glfwGetProcAddress, ...). Call
+// init() once, after the host has made its GL context current.
 // ------------------------------------------------------------------
 class GlBackend {
 public:
     using GetProcFn = void* (*)(const char* name);
+
+    // Which shader dialect the pipeline compiles for. The host created the
+    // context and always knows; Auto reads the reported GLSL version, which
+    // carries "ES" on every OpenGL ES implementation.
+    enum class Profile { Auto, DesktopGL, OpenGLES };
 
     GlBackend() = default;
     ~GlBackend();
@@ -27,11 +32,16 @@ public:
     GlBackend(const GlBackend&) = delete;
     GlBackend& operator=(const GlBackend&) = delete;
 
-    // Resolves GL entry points and builds the pipeline.
-    // getProc may be null on desktop (a platform default is used).
+    // Resolves GL entry points, picks the shader dialect and builds the
+    // pipeline.
+    // getProc may be null (a platform default is used: opengl32 on Windows,
+    // the OpenGL framework on macOS, libGL on X11, libGLESv2 plus
+    // eglGetProcAddress on Android).
     // Returns false and fills lastError() on failure.
-    bool init(GetProcFn getProc = nullptr);
+    bool init(GetProcFn getProc = nullptr, Profile profile = Profile::Auto);
     bool ready() const { return m_ready; }
+    // True once init() has settled on an OpenGL ES context.
+    bool isGLES() const { return m_es; }
     const std::string& lastError() const { return m_error; }
 
     // Uploads an RGBA8 image; returns a texture id (>0) or 0 on failure.
@@ -67,9 +77,14 @@ public:
 private:
     bool loadFunctions(GetProcFn getProc);
     bool createPipeline();
+    // glGetString, "" when the entry points are not resolved yet.
+    std::string queryString(unsigned name) const;
+    // "OpenGL ES 3.0 (GLSL 3.00 ES)" style label, for error messages.
+    std::string describe() const;
 
     std::string m_error;
     bool m_ready = false;
+    bool m_es = false;
 
     unsigned m_program = 0;
     unsigned m_vao = 0;

@@ -23,9 +23,10 @@ creates for you (`ogui::Host`, a built-in Win32/WGL window and event loop).
   optional `transition="0.2"` blending — no script required.
 * **Text** — UTF-8 end to end: atlas glyphs, word wrap, caret + selection,
   horizontal scrolling of long lines, clipboard integration.
-* **Two renderers for one DrawList** — `GlBackend` (OpenGL 3.3 core, every
-  entry point resolved at runtime, so the library never links against GL)
-  and `SoftwareRenderer` (pure CPU, for headless tests and screenshots).
+* **Two renderers for one DrawList** — `GlBackend` (OpenGL 3.3 core or
+  OpenGL ES 3.0, picked from the running context, every entry point resolved
+  at runtime, so the library never links against GL) and `SoftwareRenderer`
+  (pure CPU, for headless tests and screenshots).
 * **Scripting** — screens embed Lua 5.4 chunks (`<script>`); the engine
   owns the loop and calls the script's `ogui_on_load`/`ogui_on_show`/`ogui_on_update`/`ogui_on_click`/
   `ogui_on_event` hooks through the `ogui` API table: widget attributes,
@@ -84,7 +85,9 @@ creates for you (`ogui::Host`, a built-in Win32/WGL window and event loop).
 * C++20 compiler (GCC 10+, Clang 12+, MSVC 2022), CMake 3.16+
 * A system font (DejaVu, Liberation, ...). ogui looks in the usual
   directories for `sans` / `serif` / `mono`; see [Fonts](#fonts).
-* For the demo: OpenGL 3.3 core (WGL on Windows, GLX/EGL elsewhere).
+* For the demo: OpenGL 3.3 core or OpenGL ES 3.0 (WGL on Windows, GLX/EGL
+  elsewhere). The `gl` test needs EGL plus `libGLESv2` to build; without them
+  it is skipped, not failed.
 
 ## Building
 
@@ -126,7 +129,7 @@ Win32 + WGL demo directly (the project compiles the library sources itself).
 cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-bad,
                                         # custom-widget, kernel, unicode, screens,
                                         # scrollbar, script, properties, templates,
-                                        # examples, golden
+                                        # examples, golden, gl
 ```
 
 * `parser` — XML tokenizer, attributes, styles, error reporting.
@@ -176,6 +179,18 @@ cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-b
   (4/4/4 channel slack, 1% bad pixels allowed for FP rounding; it **skips**
   instead of failing when the resolved font files differ from the ones
   recorded in the matching `.meta`).
+* `gl` — renders the same scene (the layout `golden` uses, shared through
+  `debug/tests/golden_scene.hpp`) through `GlBackend` in a real GL context and
+  diffs it against the `SoftwareRenderer` frame. It creates two contexts over
+  EGL — an ES one with `EGL_CONTEXT_CLIENT_VERSION=3` and a desktop one — so
+  both shader dialects, `Profile::Auto` detection and the GLES-only paths
+  (sized `GL_RGBA8`, per-component texture swizzles) are actually executed, and
+  asserts that `render()` restores the GL state it touched and that a second
+  frame is bit-identical. The pixel assertion tolerates a one-pixel radius,
+  because `SoftwareRenderer` treats every triangle edge as covered while GL
+  applies the top-left rule; a shape in the wrong place or a colour off by more
+  than that still fails. It **skips** where EGL or `libGLESv2` are missing, and
+  where no context can be created (a machine with no software rasterizer).
 
 Regenerate the golden after an intentional visual change:
 
@@ -739,6 +754,38 @@ Alternatively add it to your build tree with `add_subdirectory(ogui)`.
 The exported target carries the include path; stb stays an implementation
 detail.
 
+### Porting to OpenGL ES / Android
+
+`GlBackend` runs on an ES 3.0 context: `init(getProc, profile)` takes
+`Profile::Auto` (default), `Profile::DesktopGL` or `Profile::OpenGLES`, and
+`Auto` reads `GL_VERSION`/`GL_SHADING_LANGUAGE_VERSION` from the context that is
+already current, so the same binary works on either. The two dialects differ in
+exactly three places, all handled inside the backend — the shaders are one body
+with a `#version 300 es` or `#version 330 core` header (plus the `precision`
+statement ES requires in a fragment shader), textures are created with the sized
+`GL_RGBA8` internalformat that ES demands, and the alpha-only glyph atlas sets
+its swizzle per component because the aggregate `GL_TEXTURE_SWIZZLE_RGBA` is
+desktop-only.
+
+The library links neither EGL nor GLES: `loadFunctions` resolves every entry
+point through the `getProc` you pass, and with `getProc == nullptr` the default
+resolver asks `opengl32.dll` and then `wglGetProcAddress` on Windows, `dlsym`s
+the OpenGL framework on macOS, and on Android (`__ANDROID__`) tries
+`libGLESv2.so` before falling back to `eglGetProcAddress` — never `libGL`, which
+does not exist there. A host on any other platform just supplies its own loader:
+
+```cpp
+backend.init([](const char* name) { return myContextGetProcAddress(name); });
+```
+
+What is **not** there yet is the Android host. `ogui::Host` is Win32/WGL, so an
+Android port must supply its own `NativeActivity`/`AWindow` + EGL window surface,
+feed `InputState` from `AMotionEvent` (multi-touch id, `ACTION_CANCEL`, and the
+fling/long-press gestures the kernel does not synthesize) and read layouts
+through `AAsset` rather than the filesystem; text input needs the IME, since
+`InputState::lastChar` arrives from key events today. That host is the next
+phase; the renderer it would use is already portable.
+
 ## Repository layout
 
 ```
@@ -792,3 +839,13 @@ thirdparty/lua    vendored Lua 5.4 interpreter sources (scripting)
   (no UIA/ATK/NSAccessibility), so screen readers cannot see the tree. The
   GL backend also draws text as glyphs, so nothing is exposed per widget.
 * `examples/screenshot.cpp` is a debugging aid, not a shipping renderer.
+* `SoftwareRenderer` and `GlBackend` agree on colour and geometry, not on edge
+  coverage: the CPU rasterizer treats every triangle edge as inside the
+  triangle, GL applies the top-left rule, so a pixel on a boundary is drawn by
+  one and not the other. That is what the one-pixel slack in the `gl` test
+  measures; it is invisible in a frame, and it means a golden image captured on
+  the CPU is not bit-exact on the GPU.
+* The ES 3.0 path is verified against a Mesa software (`llvmpipe`) context, the
+  only one this machine can make headlessly. It has not been run on a vendor
+  Android GPU driver, and there is no Android host yet — see
+  [Porting to OpenGL ES / Android](#porting-to-opengl-es--android).

@@ -1,9 +1,10 @@
 // ogui_golden_test.cpp : golden-image test for the software renderer.
 //
-// Renders a fixed layout through Kernel -> DrawList -> SoftwareRenderer and
-// compares the pixels against tests/golden/basic.png (dark theme) and
-// tests/golden/basic_light.png (light theme). The neutral colors come from
-// @tokens, so each theme's palette is pinned end to end.
+// Renders the shared scene (debug/tests/golden_scene.hpp) through
+// Kernel -> DrawList -> SoftwareRenderer and compares the pixels against
+// tests/golden/basic.png (dark theme) and tests/golden/basic_light.png (light
+// theme). The neutral colors come from @tokens, so each theme's palette is
+// pinned end to end.
 //
 //   OGUI_UPDATE_GOLDEN=1 ./ogui_golden_test     (re)generates the goldens
 //
@@ -16,6 +17,7 @@
 #include "ogui/xmlparser.hpp"
 #include "ogui/font.hpp"
 #include "ogui/software.hpp"
+#include "golden_scene.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -47,63 +49,14 @@
 
 namespace {
 
-constexpr int kW = 480;
-constexpr int kH = 500;
+constexpr int kW = oguitest::kSceneW;
+constexpr int kH = oguitest::kSceneH;
 constexpr int kSsaa = 2;
 
 // Per-channel slack for cross-compiler FP rounding, and the share of pixels
 // allowed to exceed it (antialiased edges move by a hair between builds).
 constexpr int kMaxChannelDelta = 4;
 constexpr double kMaxBadPixelRatio = 0.01;
-
-const char* kLayout = R"XML(<screen id="main">
-  <style name="primary" background="#4488ff" color="#ffffff" radius="6"/>
-  <style name="muted"   background="#3a3a3a" color="#cccccc" radius="6"/>
-
-  <panel id="bg" x="0" y="0" width="480" height="500" background="@screen"/>
-
-  <window id="win" x="16" y="16" width="448" height="244" title="golden" background="@surface"
-          border="@accent" borderWidth="1">
-    <column id="col">
-      <button id="b1" style="primary" text="Iniciar" x="12" y="12" width="150" height="38"
-              tooltip="Iniciar"/>
-      <button id="b2" style="muted"   text="Carregar" x="12" y="58" width="150" height="38"/>
-      <label id="l1" text="alinhado ao centro" x="12" y="58" width="424" height="26"
-             align="center" color="#66ee66"/>
-      <textinput id="t1" x="12" y="92" width="424" height="36" placeholder="Digite algo..."
-                 background="@window" color="@text" border="@accent" radius="6"/>
-      <label id="l2" wrap="true" x="12" y="136" width="260" height="0" color="#8fe"
-             text="Uma frase bem longa que o rasterizador quebra em varias linhas dentro de uma caixa estreita."/>
-    </column>
-  </window>
-
-  <group id="g1" x="16" y="268" width="448" height="80" background="@surface"
-         border="@accent" borderWidth="1">
-    <checkbox id="c1" text="Opcao" x="12" y="10" width="150" height="22" checked="true"/>
-    <separator id="s1" x="180" y="14" width="110" height="8" thickness="2" color="@borderStrong"/>
-    <progress id="p1" x="12" y="46" width="200" height="16" value="0.65" color="#66ee66"/>
-    <slider id="sl1" x="240" y="42" width="190" height="24" min="0" max="100" value="40"/>
-  </group>
-
-  <tabs id="tt" x="16" y="356" width="448" height="52" tabHeight="24" background="@window" active="0">
-    <tab label="Pagina A">
-      <label id="tl1" text="conteudo visivel" x="12" y="6" width="300" height="20" color="#66ee66"/>
-    </tab>
-    <tab label="Pagina B">
-      <label id="tl2" text="NAO PODE APARECER" x="12" y="6" width="300" height="20" color="#ff4444"/>
-    </tab>
-  </tabs>
-
-  <scrollview id="sv" x="16" y="416" width="448" height="72" background="@window"
-              border="@accent" borderWidth="1" scrollY="-40">
-    <label id="sv1" text="linha rolavel um (escondida)" x="12" y="8"
-           width="400" height="20" color="@text"/>
-    <label id="sv2" text="linha rolavel dois (no topo)" x="12" y="40"
-           width="400" height="20" color="#66ee66"/>
-    <label id="sv3" text="linha rolavel tres (recortada)" x="12" y="100"
-           width="400" height="20" color="#ff4444"/>
-  </scrollview>
-</screen>)XML";
 
 bool envEnabled(const char* name) {
     const char* v = std::getenv(name);
@@ -176,55 +129,10 @@ CompareResult compare(const uint8_t* got, int gw, int gh,
 
 namespace {
 
-// Build the scene under `theme`, drive input like a real host (hover the
-// tooltip-bearing button until the tooltip appears) and render to `out`.
+// Build the shared scene under `theme` and rasterize it with the CPU renderer.
 bool renderTheme(const ogui::Theme& theme, ogui::Framebuffer& out) {
-    ogui::setActiveTheme(theme);
-    ogui::XmlParser parser;
-    auto res = parser.parse(kLayout, &ogui::activeTheme());
-    if (!res.root) {
-        for (const auto& e : res.errors) std::cerr << "xml: " << e << "\n";
-        return false;
-    }
-
-    auto screen = std::make_shared<ogui::Screen>("main");
-    screen->widgets.push_back(res.root);
-    screen->width = static_cast<float>(kW);
-    screen->height = static_cast<float>(kH);
-
-    ogui::Kernel kernel;
-    kernel.init();
-    kernel.pushScreen(screen);
-
-    // Focused input with a selection: covers the caret and highlight paths.
-    if (auto* t = dynamic_cast<ogui::TextInput*>(kernel.findWidget("t1"))) {
-        t->setText("selecao");
-        t->setSelection(0, 4);
-        t->onFocus(true);
-    }
-
-    ogui::InputState st;
-    st.mouseButton = -1;
-    st.time = 0.0f;
-    kernel.frame(st);                       // first pass lays the tree out
-    if (auto* b1w = kernel.findWidget("b1")) {
-        const ogui::Offset2D o = b1w->absoluteOrigin();
-        st.mouseX = o.x + b1w->bounds().w * 0.5f;
-        st.mouseY = o.y + b1w->bounds().h * 0.5f;
-    }
-    kernel.frame(st);                       // pointer lands on the button
-    st.time = 1.0f;                         // past the 0.5s tooltip delay
-    kernel.frame(st);
-
-    const ogui::DrawList& dl = kernel.drawList();
-    if (dl.cmds.empty()) {
-        std::cerr << "golden_test: empty draw list\n";
-        return false;
-    }
-    if (!kernel.tooltipVisible()) {
-        std::cerr << "golden_test: tooltip never became visible\n";
-        return false;
-    }
+    oguitest::GoldenScene scene;
+    if (!scene.build(theme)) return false;
 
     ogui::SoftwareRenderer sr;
     sr.syncFonts();
@@ -233,7 +141,7 @@ bool renderTheme(const ogui::Theme& theme, ogui::Framebuffer& out) {
     ogui::Framebuffer big;
     big.resize(kW * kSsaa, kH * kSsaa);
     sr.clear(big, ogui::palette().screen);
-    sr.render(dl, big, kSsaa, nullptr);
+    sr.render(scene.drawList(), big, kSsaa, nullptr);
     ogui::SoftwareRenderer::downsample(big, out, kSsaa);
     return true;
 }
