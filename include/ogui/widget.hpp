@@ -252,6 +252,26 @@ public:
     virtual void onPointerUp(MouseButton btn);
     virtual void onPointerMove(const Offset2D& p);
     virtual void onPointerScroll(float dx, float dy);
+    // How many logical pixels one onPointerScroll unit brings the content *down*
+    // (0 when the widget does not scroll). A finger is not a wheel: it has to
+    // move the content exactly as far as it moved, so the kernel divides the
+    // finger's displacement by this number and hands the result to
+    // onPointerScroll -- one scrolling implementation, two kinds of input, and
+    // the inertia a flick leaves behind needs no new widget code either. The
+    // value is signed because the contract is with the finger, not with a
+    // wheel's history: a widget whose wheel runs the other way says so here.
+    virtual float scrollUnit() const;
+    // Asked of the pressed widget and then of each of its ancestors, once the
+    // finger has travelled further than the kernel's slop: return true to take
+    // the drag over as a content pan. The one that says yes gets the current
+    // capture released first, so a scroll is never also a click.
+    //
+    // This is a question and not a flag because only the widget knows what its
+    // drag is busy with: a thumb being dragged down a scrollbar, or a text
+    // caret being dragged through a selection, is a drag that must not become a
+    // scroll. Widgets that do not answer stay exactly as they were, which is why
+    // a text field selects under a finger and does not pan.
+    virtual bool wantsPan(float dx, float dy) const;
     virtual void onKeyDown(KeyCode key, uint32_t mods);
     virtual void onKeyUp(KeyCode key);
     // True if this widget wants the raw Tab key for itself (e.g. a text

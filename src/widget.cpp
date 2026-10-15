@@ -368,6 +368,14 @@ void Widget::onPointerScroll(float, float) {
     (void)this;
 }
 
+float Widget::scrollUnit() const {
+    return 0.0f;
+}
+
+bool Widget::wantsPan(float, float) const {
+    return false;
+}
+
 Offset2D Widget::childOffset() const {
     return Offset2D{0.0f, 0.0f};
 }

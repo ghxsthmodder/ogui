@@ -264,6 +264,8 @@ public:
         if (m_captured == w) m_captured = nullptr;
         if (m_pressed == w) m_pressed = nullptr;
         if (m_clickTarget == w) m_clickTarget = nullptr;
+        if (m_panTarget == w) { m_panTarget = nullptr; m_panActive = false; }
+        if (m_flingWidget == w) m_flingWidget = nullptr;
     }
     // Last pointer position in logical screen coordinates (for per-region
     // hover effects inside one widget, e.g. SpinBox buttons).
@@ -337,6 +339,14 @@ private:
     // Fold InputState::touches into the one pointer the tree sees, and keep a
     // host that reports both honest about which one moved.
     void applyTouchStream();
+    // The finger-pan state machine, called from update() with the pointer in
+    // logical units and the edges the frame produced.
+    void updatePan(const Offset2D& p, bool down, bool pressedEdge, bool releasedEdge);
+    // Carry the velocity a flick left behind, decaying, through onPointerScroll.
+    void advanceFling(float dt);
+    // Forget every pointer cache when the screen changes: the tree they were
+    // taken from may be gone with it.
+    void dropPointerState();
     // Swap the ScriptHost to the current screen's scripts (clear + load).
     void reloadScreenScripts();
     // modifier bitmask derived from the current key state (see ModBits).
@@ -379,11 +389,34 @@ private:
     bool m_touchDown = false;          // a finger is on the screen
     bool m_touchParked = false;        // the finger left; the mouse has not spoken
     bool m_touchCancelled = false;     // it left because the system took it
+    bool m_pointerIsTouch = false;     // the pointer the tree sees is a finger
     float m_touchX = 0.0f, m_touchY = 0.0f;
     float m_rawMouseX = 0.0f, m_rawMouseY = 0.0f;
     bool m_rawMouseDown = false;
     int m_rawMouseButton = -1;
     bool m_rawMouseKnown = false;
+
+    // ---- finger pan + the inertia it leaves behind ----
+    // A press that travels past kPanSlop is a drag of the content, not a press:
+    // the scrollable ancestor that answers wantsPan takes over, the captured
+    // widget is released without clicking, and every frame after that hands the
+    // finger's own displacement to onPointerScroll in scrollUnit() steps. On
+    // release the recent samples give the flick its velocity, and the same
+    // channel keeps carrying it, decaying, until it is slow enough to stop.
+    static constexpr float kPanSlop = 10.0f;        // logical units
+    static constexpr float kFlingStart = 120.0f;    // logical units/second
+    static constexpr float kFlingStop = 30.0f;      // logical units/second
+    static constexpr float kFlingTau = 0.32f;       // seconds to decay to 1/e
+    Widget* m_panTarget = nullptr;
+    Offset2D m_panStart{};        // where the press began
+    Offset2D m_panLast{};         // the previous frame's finger position
+    bool m_panActive = false;
+    struct FingerSample { float x = 0.0f, y = 0.0f, t = 0.0f; };
+    FingerSample m_samples[8];    // the last fractions of a second of travel
+    int m_sampleHead = 0;
+    int m_sampleCount = 0;
+    Widget* m_flingWidget = nullptr;
+    float m_flingVX = 0.0f, m_flingVY = 0.0f;
 
     // tooltip hover timing
     Widget* m_tipTarget = nullptr;

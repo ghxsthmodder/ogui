@@ -223,6 +223,12 @@ public:
     virtual Offset2D childOffset() const override { return Offset2D{0.0f, -m_scrollY}; }
     virtual bool wantsScroll() const override { return true; }
     virtual void onPointerScroll(float, float dy) override;
+    // A finger drags the body the way the wheel does; the scrollbar thumb and
+    // the title-bar move each keep their own drag.
+    virtual float scrollUnit() const override { return m_scrollStep; }
+    virtual bool wantsPan(float, float) const override {
+        return !m_barDrag && !m_dragging;
+    }
 
     // Overlay scrollbar on the body's right edge, draggable like the list
     // widgets' bars (claimsPoint keeps presses off the scrolled children).
@@ -294,6 +300,9 @@ public:
     virtual bool clipsChildren(Rect& outRect) const override;
     virtual bool wantsScroll() const override { return true; }
     virtual void onPointerScroll(float dx, float dy) override;
+    // Both axes follow the finger; only the scrollbar thumb drag vetoes.
+    virtual float scrollUnit() const override { return m_step; }
+    virtual bool wantsPan(float, float) const override { return !m_barDrag; }
     virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
     virtual void onPointerUp(MouseButton btn) override;
     virtual void onPointerMove(const Offset2D& p) override;
@@ -914,6 +923,9 @@ public:
     virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
     virtual void onPointerUp(MouseButton btn) override;
     virtual void onPointerScroll(float, float dy) override;
+    // A finger flicks the option list; the scrollbar thumb keeps its drag.
+    virtual float scrollUnit() const override { return m_rowH * 3.0f; }
+    virtual bool wantsPan(float, float) const override { return !m_barDrag; }
     virtual bool wantsScroll() const override { return true; }
     virtual void onKeyDown(KeyCode key, uint32_t mods) override;
     virtual void onDraw(Rasterizer& r) const override;
@@ -1092,6 +1104,12 @@ public:
     virtual void onPointerMove(const Offset2D& p) override;
     virtual void onPointerUp(MouseButton btn) override;
     virtual void onPointerScroll(float dx, float dy) override;
+    // The strip slides sideways under a finger; the overflow button and the
+    // strip drag each keep their own.
+    virtual float scrollUnit() const override { return 60.0f; }
+    virtual bool wantsPan(float, float) const override {
+        return m_scrollable && !m_stripDrag;
+    }
     virtual bool wantsScroll() const override { return m_scrollable; }
     virtual void onKeyDown(KeyCode key, uint32_t mods) override;
     virtual void onDraw(Rasterizer& r) const override;
@@ -1270,6 +1288,9 @@ public:
     void clear();
 
     virtual void onPointerScroll(float dx, float dy) override;
+    // Fingers read back through the log the way the wheel does.
+    virtual float scrollUnit() const override { return m_rowH * 3.0f; }
+    virtual bool wantsPan(float, float) const override { return true; }
     virtual void onDraw(Rasterizer& r) const override;
     virtual bool wantsScroll() const override { return true; }
 
@@ -1342,6 +1363,9 @@ public:
     virtual void onPointerUp(MouseButton btn) override;
     virtual void onPointerMove(const Offset2D& p) override;
     virtual void onPointerScroll(float dx, float dy) override;
+    // Rows scroll under a finger; the scrollbar thumb keeps its drag.
+    virtual float scrollUnit() const override { return m_rowH * 3.0f; }
+    virtual bool wantsPan(float, float) const override { return !m_barDrag; }
     virtual void onKeyDown(KeyCode key, uint32_t mods) override;
     virtual void onDraw(Rasterizer& r) const override;
     virtual bool wantsScroll() const override { return true; }
@@ -1473,6 +1497,9 @@ public:
     virtual void onPointerUp(MouseButton btn) override;
     virtual void onPointerMove(const Offset2D& p) override;
     virtual void onPointerScroll(float dx, float dy) override;
+    // The rows follow the finger.
+    virtual float scrollUnit() const override { return m_rowH * 3.0f; }
+    virtual bool wantsPan(float, float) const override { return true; }
     virtual void onKeyDown(KeyCode key, uint32_t mods) override;
     virtual void onChar(uint32_t ch) override;
     virtual void onFocus(bool focused) override;
@@ -1681,6 +1708,12 @@ public:
     virtual void onPointerUp(MouseButton btn) override;
     virtual void onPointerMove(const Offset2D& p) override;
     virtual void onPointerScroll(float dx, float dy) override;
+    // Rows scroll under a finger; the thumb drag and a column resize keep
+    // theirs.
+    virtual float scrollUnit() const override { return m_rowH * 3.0f; }
+    virtual bool wantsPan(float, float) const override {
+        return !m_barDrag && m_resizeCol < 0;
+    }
     virtual void onKeyDown(KeyCode key, uint32_t mods) override;
     virtual void onChar(uint32_t ch) override;
     virtual void onFocus(bool focused) override;
@@ -1865,6 +1898,9 @@ public:
     virtual void onPointerUp(MouseButton btn) override;
     virtual void onPointerMove(const Offset2D& p) override;
     virtual void onPointerScroll(float dx, float dy) override;
+    // The tree scrolls under a finger; the scrollbar thumb keeps its drag.
+    virtual float scrollUnit() const override { return m_rowH * 3.0f; }
+    virtual bool wantsPan(float, float) const override { return !m_barDrag; }
     virtual void onKeyDown(KeyCode key, uint32_t mods) override;
     virtual void onDraw(Rasterizer& r) const override;
     virtual void onTick(float dt) override;
@@ -2041,6 +2077,9 @@ public:
     virtual void onPointerUp(MouseButton btn) override;
     virtual void onPointerMove(const Offset2D& p) override;
     virtual void onPointerScroll(float dx, float dy) override;
+    // Rows scroll under a finger; the scrollbar thumb keeps its drag.
+    virtual float scrollUnit() const override { return m_rowH * 3.0f; }
+    virtual bool wantsPan(float, float) const override { return !m_barDrag; }
     virtual void onKeyDown(KeyCode key, uint32_t mods) override;
     virtual void onDraw(Rasterizer& r) const override;
     virtual bool wantsScroll() const override { return true; }
@@ -2430,6 +2469,9 @@ public:
     virtual void layout(float parentWidth, float parentHeight) override;
     virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
     virtual void onPointerScroll(float dx, float dy) override;
+    // The filtered result list follows the finger.
+    virtual float scrollUnit() const override { return m_rowH * 3.0f; }
+    virtual bool wantsPan(float, float) const override { return true; }
     virtual void onKeyDown(KeyCode key, uint32_t mods) override;
     virtual void onChar(uint32_t ch) override;
     virtual void onDraw(Rasterizer& r) const override;
@@ -2675,6 +2717,9 @@ public:
     virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
     virtual void onPointerUp(MouseButton btn) override;
     virtual void onPointerScroll(float, float dy) override;
+    // A long menu scrolls under a finger; the scrollbar thumb keeps its drag.
+    virtual float scrollUnit() const override { return m_rowH * 3.0f; }
+    virtual bool wantsPan(float, float) const override { return !m_barDrag; }
     virtual bool wantsScroll() const override { return true; }
     virtual void onDraw(Rasterizer& r) const override;
     virtual void onPopupDismissed() override { if (m_onDismiss) m_onDismiss(); }

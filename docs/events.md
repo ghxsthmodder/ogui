@@ -87,7 +87,10 @@ propagation existed behaves the same as before.
   handing a wheel step to every ancestor too would scroll the panel and its
   window and the screen at once. The one exception is deliberate: a scroll is
   offered to the *nearest ancestor that can scroll* (`wantsScroll`), which is a
-  hit-test rule that picks a single receiver, never a broadcast.
+  hit-test rule that picks a single receiver, never a broadcast. A finger's pan
+  keeps that shape: `Kernel::updatePan` walks the pressed widget and then its
+  ancestors until one answers `wantsPan`, releases the capture it took over, and
+  hands only that widget the displacement.
 * **Actions do not bubble.** `onclick="name"`, the widget's own id as an action
   name, and a `Kernel::bind` handler are resolved against the pressed widget
   only, so a click on a Save button never runs the enclosing panel's action.

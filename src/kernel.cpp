@@ -398,6 +398,15 @@ void Kernel::init() {
     m_touchCancelled = false;
     m_touchX = m_touchY = 0.0f;
     m_rawMouseKnown = false;
+    m_pointerIsTouch = false;
+
+    m_panTarget = nullptr;
+    m_panActive = false;
+    m_panStart = m_panLast = Offset2D{};
+    m_sampleHead = 0;
+    m_sampleCount = 0;
+    m_flingWidget = nullptr;
+    m_flingVX = m_flingVY = 0.0f;
 
     m_popup.reset();
     m_tipFade = 0.0f;
@@ -478,6 +487,7 @@ void Kernel::reloadScreenScripts() {
 void Kernel::pushScreen(std::shared_ptr<Screen> screen) {
     if (!screen) return;
     m_screenStack.push_back(screen);
+    dropPointerState();
     setFocus(*this, m_focus, nullptr);
     reloadScreenScripts();
     invalidate();
@@ -486,6 +496,7 @@ void Kernel::pushScreen(std::shared_ptr<Screen> screen) {
 void Kernel::popScreen() {
     if (m_screenStack.size() > 1) {
         m_screenStack.pop_back();
+        dropPointerState();
         setFocus(*this, m_focus, nullptr);
         reloadScreenScripts();
         invalidate();
@@ -504,10 +515,26 @@ void Kernel::switchScreen(std::shared_ptr<Screen> screen) {
             screen->scale = cur->scale;
         }
         m_screenStack.back() = screen;
+        dropPointerState();
         setFocus(*this, m_focus, nullptr);
         reloadScreenScripts();
         invalidate();
     }
+}
+
+// The tree the pointer was walking is gone: everything cached against it goes
+// with it. Focus has its own teardown (onFocus), a hover or a press does not,
+// and a flick outlives the frame that started it, so it is the one that would
+// otherwise keep scrolling a widget that no longer exists.
+void Kernel::dropPointerState() {
+    m_hovered = nullptr;
+    m_captured = nullptr;
+    m_pressed = nullptr;
+    m_pressButton = -1;
+    m_panTarget = nullptr;
+    m_panActive = false;
+    m_flingWidget = nullptr;
+    m_flingVX = m_flingVY = 0.0f;
 }
 
 void Kernel::setTheme(const Theme* theme) { m_theme = theme; invalidate(); }
@@ -684,6 +711,7 @@ void Kernel::applyTouchStream() {
         if (pick < 0) pick = 0;
         m_touchDown = true;
         m_touchParked = false;
+        m_pointerIsTouch = true;
         m_touchPrimary = m_input.touches[pick].id;
         m_touchX = m_input.touches[pick].x;
         m_touchY = m_input.touches[pick].y;
@@ -711,6 +739,7 @@ void Kernel::applyTouchStream() {
 
     if (m_touchParked && mouseSpoke) {
         m_touchParked = false;
+        m_pointerIsTouch = false;   // the mouse holds the pointer again
         return;
     }
     if (m_touchParked) {
@@ -724,11 +753,134 @@ void Kernel::applyTouchStream() {
     }
 }
 
+// A finger that has travelled past the slop was never pressing: it was pulling
+// the content. The scrollable ancestor that claims the direction takes the drag
+// over, the widget that had the capture is released without being clicked, and
+// from here on every frame hands the *pixel* displacement to onPointerScroll in
+// that widget's own scrollUnit() steps -- which is also what the flick's inertia
+// runs on, so a scrollable widget scrolls under a finger without new code.
+//
+// Only a finger does this. A mouse drag is a selection, a slider, a scrollbar
+// thumb, and the slop rule would take all of that away.
+void Kernel::updatePan(const Offset2D& p, bool down, bool pressedEdge,
+                       bool releasedEdge) {
+    if (pressedEdge) {
+        // A new press stops a scroll in flight, the way putting a finger down
+        // on a list stops it mid-flick.
+        m_flingWidget = nullptr;
+        m_flingVX = m_flingVY = 0.0f;
+        m_panStart = p;
+        m_panLast = p;
+        m_panActive = false;
+        m_panTarget = nullptr;
+        m_sampleHead = 0;
+        m_sampleCount = 0;
+    }
+
+    if (down) {
+        m_samples[m_sampleHead].x = p.x;
+        m_samples[m_sampleHead].y = p.y;
+        m_samples[m_sampleHead].t = m_input.time;
+        m_sampleHead = (m_sampleHead + 1) % 8;
+        if (m_sampleCount < 8) ++m_sampleCount;
+    }
+
+    if (!m_pointerIsTouch) return;
+
+    if (down && !m_panActive) {
+        const float dx = p.x - m_panStart.x, dy = p.y - m_panStart.y;
+        if (std::fabs(dx) <= kPanSlop && std::fabs(dy) <= kPanSlop) return;
+        // The pressed widget first, then every ancestor: the one that is
+        // actually scrolled by this direction and is not busy with its own drag
+        // wins.
+        for (Widget* w = m_pressed ? m_pressed : m_captured; w; w = w->parent()) {
+            if (w->scrollUnit() == 0.0f) continue;
+            if (!w->wantsPan(dx, dy)) continue;
+            m_panTarget = w;
+            m_panActive = true;
+            m_panLast = p;
+            if (m_captured) {
+                m_captured->onPointerUp(static_cast<MouseButton>(
+                    m_pressButton >= 0 ? m_pressButton : 0));
+            }
+            // Released, not clicked: the press became a scroll.
+            m_captured = nullptr;
+            m_pressed = nullptr;
+            m_pressButton = -1;
+            break;
+        }
+        if (!m_panActive) return;   // nothing claims this drag: keep pressing
+    }
+
+    if (m_panActive && down) {
+        const float dx = p.x - m_panLast.x, dy = p.y - m_panLast.y;
+        m_panLast = p;
+        const float unit = m_panTarget ? m_panTarget->scrollUnit() : 0.0f;
+        if (unit != 0.0f && (dx != 0.0f || dy != 0.0f)) {
+            m_panTarget->onPointerScroll(dx / unit, dy / unit);
+            m_dirty = true;
+        }
+    }
+
+    if (releasedEdge) {
+        if (!m_panActive || !m_panTarget) {
+            m_panActive = false;
+            return;
+        }
+        m_panActive = false;
+        // The velocity over the last fraction of a second, not over the whole
+        // drag: a flick is judged by how the finger was moving when it left, and
+        // a drag that slowed to a stop before lifting must not fly.
+        const int newest = (m_sampleHead + 7) % 8;
+        int first = newest;
+        for (int i = 1; i < m_sampleCount; ++i) {
+            const int j = (m_sampleHead + 8 - i) % 8;
+            if (m_samples[newest].t - m_samples[j].t > 0.1f) break;
+            first = j;
+        }
+        const FingerSample& a = m_samples[first];
+        const FingerSample& b = m_samples[newest];
+        const float span = b.t - a.t;
+        m_flingWidget = nullptr;
+        if (span > 1e-4f) {
+            m_flingVX = (b.x - a.x) / span;
+            m_flingVY = (b.y - a.y) / span;
+            const float speed = std::sqrt(m_flingVX * m_flingVX +
+                                          m_flingVY * m_flingVY);
+            if (speed >= kFlingStart) {
+                m_flingWidget = m_panTarget;
+                m_dirty = true;
+            }
+        }
+        m_panTarget = nullptr;
+    }
+}
+
+void Kernel::advanceFling(float dt) {
+    if (!m_flingWidget || dt <= 0.0f) return;
+    const float unit = m_flingWidget->scrollUnit();
+    if (unit == 0.0f) {
+        m_flingWidget = nullptr;
+        return;
+    }
+    // Exponential decay: fast at the start, easing into a stop, which is what a
+    // flick feels like; a constant friction would keep it crawling for seconds.
+    const float keep = std::exp(-dt / kFlingTau);
+    m_flingVX *= keep;
+    m_flingVY *= keep;
+    if (std::fabs(m_flingVX) < kFlingStop && std::fabs(m_flingVY) < kFlingStop) {
+        m_flingWidget = nullptr;
+        m_flingVX = m_flingVY = 0.0f;
+        return;
+    }
+    m_flingWidget->onPointerScroll(m_flingVX * dt / unit, m_flingVY * dt / unit);
+    m_dirty = true;
+}
+
 void Kernel::update() {
     applyTouchStream();
     auto screen = currentScreen();
     if (!screen || screen->widgets.empty()) return;
-
     // Redraw trigger #1: anything in the input except the clock changed
     // (the host advances `time` every frame even when idle).
     {
@@ -862,8 +1014,12 @@ void Kernel::update() {
     // While a button is down the capture owns the moves: dragging a slider
     // or a text selection past the widget's edge must keep feeding it (the
     // pointer is no longer "hovering" it there).
-    Widget* moveTarget = (popupHit && m_popup) ? popupHit
-                        : (m_captured ? m_captured : m_hovered);
+    updatePan(p, down, pressedEdge, releasedEdge);
+    Widget* moveTarget = m_panActive
+                             ? nullptr
+                             : ((popupHit && m_popup) ? popupHit
+                                                      : (m_captured ? m_captured
+                                                                    : m_hovered));
     if (moveTarget) moveTarget->onPointerMove(p);
 
     // Wheel events: the popup layer owns them while the pointer is inside
@@ -926,6 +1082,12 @@ void Kernel::update() {
         }
         m_prevKeys[k] = now;
     }
+
+    // A flick outlives the finger that started it: the inertia runs off this
+    // clock, not off input, so it keeps scrolling on frames where nothing moved.
+    // Last in the frame, after the input was read, so a hand landing on the
+    // screen stops the scroll in the very frame it lands.
+    advanceFling(dt);
 
     m_prevDown = down;
 }

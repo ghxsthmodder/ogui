@@ -917,8 +917,24 @@ compatibilidade e capacidade de manutenção.
     estado `hover:` pintado no último item tocado é a pior marca que um toque
     pode deixar. Numa máquina com os dois, o mouse recupera o ponteiro no
     primeiro movimento dele. Testes em `debug/tests/touch_test.cpp`.
--   [ ] Gestos que o `Kernel` ainda não sintetiza: pressionar-e-segurar, fling
-    com inércia depois do dedo sair e pinça (escala + rotação de dois dedos).
+-   [x] Pan e fling: um dedo que passa do *slop* --- dez unidades lógicas ---
+    deixa de ser um toque e vira um arrasto do conteúdo. O `Kernel` pergunta ao
+    widget pressionado e depois a cada ancestral (`wantsPan`), e o primeiro que
+    tem um `scrollUnit()` não-zero fica com o arrasto: quem estava com a
+    captura é liberado sem clicar, e cada quadro entrega o deslocamento em
+    *pixels do dedo* ao `onPointerScroll` daquele widget. Uma rolagem só, duas
+    origens de entrada, nenhum código novo por widget. Levantar o dedo no meio
+    do gesto vira a velocidade medida nos últimos 0,1 s, `advanceFling` a decai
+    até parar, e um dedo que volta para a rolagem em andamento no próprio
+    quadro em que pousa. Pergunta e não sinal é o ponto: o polegar de uma barra
+    de rolagem, ou uma seleção de texto sendo arrastada, são arrastos que não
+    podem virar rolagem --- por isso um campo de texto continua selecionando
+    sob o dedo, e quem fica com o arrasto é o ancestral rolável. Mouse não é
+    dedo: um arrasto dele continua sendo seleção, slider, thumb. Testes em
+    `debug/tests/touch_test.cpp`.
+-   [ ] Gestos que o `Kernel` ainda não sintetiza: pressionar-e-segurar --- que
+    é como um dedo abriria um `contextmenu` --- e pinça (escala e rotação de
+    dois dedos).
 -   [ ] Entrada de texto pelo IME: `InputState::lastChar` chega de eventos de
     teclado, e o NDK não expõe o método de entrada a código nativo --- um campo
     de texto no Android precisa da ponte JNI para a `InputMethodManager`, dos

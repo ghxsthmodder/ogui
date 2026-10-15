@@ -153,7 +153,12 @@ cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-b
   lifting, `touchCancelled` releases without clicking, no widget is left
   hovered after the last finger leaves, the mouse takes the pointer back when
   it moves on a machine that has both, and a mouse-only host behaves exactly
-  as before.
+  as before. Also the gestures folded onto the same pointer: the slop before a
+  drag becomes a pan, the scrollable widget that claims it — the pressed one
+  first, then its ancestors — takes the capture away without clicking, the
+  content tracks the finger in its own `scrollUnit()` steps, a thumb drag or a
+  text selection vetoes, a flick keeps scrolling and settles, a slow release
+  leaves no inertia, and a new finger stops a scroll in flight.
 * `unicode` — on-demand glyph baking (a late glyph never moves an early one),
   the fallback chain between faces, the `.notdef` placeholder, zero-advance
   combining marks, CJK line breaking with no stranded closing punctuation, and
@@ -622,6 +627,20 @@ state. A host that reports both is handled by whoever moves last: the mouse
 regains the pointer as soon as its fields change, and a finger takes it back
 when one lands.
 
+Past the kernel's 10-unit slop a finger stops being a press and becomes a pan
+(`Kernel::updatePan`): the pressed widget is asked, then each of its ancestors,
+and the first one that answers `wantsPan` with a non-zero `scrollUnit()` takes
+the drag over — the widget holding the capture is released without being
+clicked, and every later frame hands the finger's *pixel* displacement to that
+widget's `onPointerScroll` in its own step units. So a finger scrolls exactly
+what a wheel scrolls, with no new per-widget code, and the two rules that have
+to stay separate do: a scrollbar thumb being dragged, or a text caret being
+dragged through a selection, answers `wantsPan` with no and keeps its own drag.
+Lift the finger mid-swipe and the velocity over its last tenth of a second
+becomes a flick: `Kernel::advanceFling` decays it exponentially through the same
+`onPointerScroll` until it stops, and putting a finger back down stops it. A
+mouse drag is none of this — it is still a selection, a slider, a thumb.
+
 `Tab`/`Shift+Tab` walk the focusable widgets of the current screen in
 document order and wrap; `Kernel::focusNext(backwards)` exposes the same
 movement and `Kernel::setFocusWidget()` / `Widget::isFocusable()` /
@@ -803,11 +822,12 @@ backend.init([](const char* name) { return myContextGetProcAddress(name); });
 
 What is **not** there yet is the Android host. `ogui::Host` is Win32/WGL, so an
 Android port must supply its own `NativeActivity`/`AWindow` + EGL window surface,
-feed `InputState` from `AMotionEvent` (multi-touch id, `ACTION_CANCEL`, and the
-fling/long-press gestures the kernel does not synthesize) and read layouts
-through `AAsset` rather than the filesystem; text input needs the IME, since
-`InputState::lastChar` arrives from key events today. That host is the next
-phase; the renderer it would use is already portable.
+fill `InputState::touches` from `AMotionEvent` (pointer ids, `ACTION_CANCEL`) and
+read layouts through `AAsset` rather than the filesystem; the kernel already
+folds that list into its one pointer and already synthesizes the pan and the
+flick, so what is left on the gesture side is the long-press and the pinch. Text
+input needs the IME, since `InputState::lastChar` arrives from key events today.
+That host is the next phase; the renderer it would use is already portable.
 
 ## Repository layout
 
@@ -872,3 +892,9 @@ thirdparty/lua    vendored Lua 5.4 interpreter sources (scripting)
   only one this machine can make headlessly. It has not been run on a vendor
   Android GPU driver, and there is no Android host yet — see
   [Porting to OpenGL ES / Android](#porting-to-opengl-es--android).
+* Touch gestures stop at the pan and the flick. There is no long-press (so a
+  finger cannot open a `contextmenu`) and no pinch; `InputState` carries every
+  finger, so the kernel has what it needs to synthesize both, but no widget is
+  handed the gesture yet. Panning a text area with a finger is declined on
+  purpose: a `textinput`/`textarea` drag is a selection, and the enclosing
+  scrollable ancestor takes the drag instead.
