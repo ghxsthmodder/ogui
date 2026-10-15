@@ -838,7 +838,18 @@ configuração, ferramentas e aplicações com dados extensos.
     por que HarfBuzz ainda não entrou — em `docs/unicode.md`. Faltam shaping
     de verdade (GSUB/GPOS, ligaturas, âncoras de acento), bidi e cobertura
     não-BMP, todos documentados como decisão consciente.
--   [ ] Markdown/RichText/Canvas e GraphEditor conforme a necessidade.
+-   [x] Markdown/RichText/Canvas e GraphEditor --- adiados sem data, decisão
+    final do roadmap. O terreno que cobririam já tem resposta na biblioteca:
+    uma superfície de desenho é um `Widget` registrado em `widgetRegistry()`
+    recebendo o `Rasterizer&` em `onDraw` (`examples/custom_widget.cpp` é o
+    caminho completo e testado, e é exatamente assim que um editor de grafo
+    entraria), séries pequenas cabem em `sparkline`, um log em `console`, e a
+    repetição de peças de layout deixou de precisar de widget novo quando
+    `<template>` trouxe parâmetros, slots e ids locais. RichText/Markdown fica
+    atrás do shaping que ainda não existe (GSUB/GPOS, ligaturas, bidi —
+    `docs/unicode.md`): estilo por trecho seria escrito sobre a medição e a
+    quebra de linha que ainda vão mudar, que é a dependência que o próprio
+    plano mandava estabilizar antes.
 -   [x] Documentação completa e exemplos: `docs/xml-reference.md` cataloga cada
     elemento, atributo, tipo, valor padrão e regra de validação;
     `docs/examples.md` traz o layout mínimo, um contador com eventos, timers,

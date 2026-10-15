@@ -777,6 +777,12 @@ thirdparty/lua    vendored Lua 5.4 interpreter sources (scripting)
   and there is no bidirectional reordering — a mixed Latin/RTL line keeps
   logical order. `docs/unicode.md` records the evaluation and the trigger for
   adding it.
+* No Markdown/RichText, canvas or graph-editor element: the roadmap defers
+  them deliberately. A drawing surface is a `Widget` subclass registered in
+  `widgetRegistry()` and handed the `Rasterizer&` in `onDraw` — that is how a
+  canvas or a node editor enters the library — while `sparkline`, `console`
+  and `<template>` cover the smaller cases. Per-span styled text waits on the
+  shaping recorded in [`docs/unicode.md`](docs/unicode.md).
 * One screen size per `Screen`; window resizing and dpi reporting are the
   host's job (`screen->width/height/scale`). `ogui::Host` does both on Win32,
   and there is no per-monitor *on the fly* re-layout guarantee beyond the
