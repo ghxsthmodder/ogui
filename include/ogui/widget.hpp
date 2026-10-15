@@ -102,6 +102,18 @@ public:
         return it == m_rawAttrs.end() ? nullptr : &it->second;
     }
 
+    // ---- named properties ----
+    // The runtime, type-checked path to a widget's attributes (see
+    // ogui/properties.hpp): `property` reads the current value in canonical
+    // string form, `setProperty` validates and applies one, `propertyNames`
+    // lists what this class exposes. Values are the same attributes XML
+    // authors, so `button:setProperty("text", "Ok")` and
+    // `<button text="Ok"/>` end in the same place.
+    std::string property(const std::string& name, bool* found = nullptr) const;
+    bool setProperty(const std::string& name, const std::string& value,
+                     std::string* error = nullptr);
+    std::vector<std::string> propertyNames() const;
+
     // Direct click handler (set by the host or by Kernel::bind).
     void setClickHandler(Callback fn) { m_onClick = std::move(fn); }
     const Callback& clickHandler() const { return m_onClick; }

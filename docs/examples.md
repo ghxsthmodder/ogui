@@ -100,6 +100,65 @@ why the handler switches on `"inc"` / `"dec"`. `ogui.log` writes to
 `Kernel::addLog`, so a `<console>` widget on the same screen shows the trail
 without extra plumbing.
 
+## Driving properties by name
+
+`ogui.get`/`ogui.set` handle the handful of attributes every widget has, and
+anything else resolves through the typed property registry — the same table
+`Widget::setProperty` uses in C++. Values are strings at that boundary, so each
+declaration converts and validates them, and `ogui.props` reads the table back
+out:
+
+```lua
+-- What does this widget answer to? One line per property.
+for name, p in pairs(ogui.props("volume") or {}) do
+  ogui.log(name .. " (" .. p.type .. ") = " .. tostring(p.value) ..
+           (p.writable and "" or " [read-only]"))
+end
+
+-- Typed writes: numbers, colours (@token included), enums, booleans.
+ogui.set("volume", "value", 0.75)
+ogui.set("meter",  "barcolor", "@accent")
+ogui.set("title",  "align", "center")
+ogui.set("title",  "wrap", true)
+
+-- A spec the widget consumes instead of storing is write-only; the shape it
+-- resolved to reads back under its own name.
+ogui.set("layout", "columns", "120,1fr,40%")
+ogui.log(tostring(ogui.get("layout", "colcount")))   -- 3
+
+-- A value the property rejects raises, so pcall keeps the script alive.
+local ok, err = pcall(ogui.set, "volume", "value", "loud")
+if not ok then ogui.log(err) end   -- property 'value' expects number, got 'loud'
+```
+
+In C++ the same three calls are on the widget:
+
+```cpp
+if (auto* w = kernel.findWidget("title")) {
+    std::string error;
+    if (!w->setProperty("wrap", "true", &error)) kernel.addLog(error);
+    w->property("align");          // "center"
+    w->propertyNames();            // everything this class exposes, sorted
+}
+```
+
+Properties are declared per class and inherited along a declared base chain, so
+a `textarea` gets the `textinput` table plus the common one, and a subclass can
+re-declare a single name to change how it behaves. Host widgets join by
+declaring their own table:
+
+```cpp
+ogui::PropertyRegistry::instance().declare(typeid(Led), typeid(ogui::Widget), {
+    ogui::numberProp<Led>("level", [](const Led& l) { return l.level(); },
+                          [](Led& l, double v) { l.setLevel(v); return true; },
+                          "fill fraction, 0 to 1"),
+});
+```
+
+after which `ogui.set("led1", "level", 0.5)` works with no further glue.
+[`xml-reference.md`](xml-reference.md#typed-properties) has the type and error
+table.
+
 ## Text in other scripts
 
 Text is UTF-8 from the parser through the rasterizer, so a layout can carry

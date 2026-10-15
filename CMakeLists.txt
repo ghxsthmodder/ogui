@@ -85,6 +85,7 @@ add_library(ogui STATIC
     src/font.cpp
     src/imagemanager.cpp
     src/widget.cpp
+    src/properties.cpp
     src/widgets.cpp
     src/widgets_text.cpp
     src/widgets_container.cpp
@@ -197,6 +198,10 @@ if(OGUI_BUILD_TESTS)
     add_executable(ogui_script_test debug/tests/script_test.cpp)
     target_link_libraries(ogui_script_test PRIVATE ogui)
 
+    # Typed property registry: class chains, validation, round-trips, Lua API.
+    add_executable(ogui_properties_test debug/tests/properties_test.cpp)
+    target_link_libraries(ogui_properties_test PRIVATE ogui)
+
     # The documentation examples: layouts driven through a Kernel, plus every
     # fenced xml/lua block in docs/examples.md parsed and loaded.
     add_executable(ogui_examples_test debug/tests/examples_test.cpp)
@@ -239,6 +244,7 @@ if(OGUI_BUILD_TESTS)
     add_test(NAME screens COMMAND ogui_screens_test)
     add_test(NAME scrollbar COMMAND ogui_scrollbar_test)
     add_test(NAME script COMMAND ogui_script_test)
+    add_test(NAME properties COMMAND ogui_properties_test)
     add_test(NAME examples COMMAND ogui_examples_test)
     if(TARGET ogui_golden_test)
         add_test(NAME golden COMMAND ogui_golden_test)

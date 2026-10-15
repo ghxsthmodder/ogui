@@ -54,6 +54,13 @@ creates for you (`ogui::Host`, a built-in Win32/WGL window and event loop).
   every frame pays one walk of the tree per change instead of one per lookup;
   values are weak, so an id whose widget is gone comes back as `nullptr` rather
   than a dangling pointer.
+* **One catalogue of properties** — every attribute a class answers to by name is
+  declared once, typed and with a read/write pair (`PropertyRegistry`), so
+  `Widget::setProperty`, `ogui.get`/`ogui.set` and `ogui.props` share one
+  validator instead of each keeping its own ladder of casts; a bad value comes
+  back as a message naming what it expected, and a host widget declares its own
+  properties into the same registry (see
+  [`docs/xml-reference.md`](docs/xml-reference.md#typed-properties)).
 * **Unicode text** — UTF-8 everywhere, glyphs rasterized on demand into
   reserved atlas cells, a fallback chain across faces for scripts the
   requested family does not carry, a visible `.notdef` box for the ones
@@ -139,6 +146,12 @@ cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-b
   switches, all four hooks and the `ogui.*` widget API; error capture. Covers
   the bubbled `info` table, a container listener hearing its children, and
   `return false` stopping the walk.
+* `properties` — the typed property registry: base chains and per-class
+  overrides, host classes declaring their own, a write/read round-trip over
+  every one of the 1975 built-in properties that read and write, a walk of the
+  tag factory refusing any widget that reaches runtime without a table,
+  per-type value validation with its error text, and the Lua
+  `ogui.get`/`ogui.set` fallback plus `ogui.props`.
 * `examples` — runs `examples/hello.xml` and `examples/counter.xml` through a
   real `Kernel` (load/show hooks, a clicked button, a live binding) and then
   parses every fenced `xml`/`lua` block in `docs/examples.md`, so the docs

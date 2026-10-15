@@ -212,6 +212,64 @@ deliberately left out.
 | `hover:background`, `pressed:color`, … | per-state visual overlays (see Visual states & transitions) |
 | `transition` | seconds to blend visual-state changes |
 
+## Typed properties
+
+Everything that works on an attribute **by name** at runtime resolves through
+one registry (`include/ogui/properties.hpp`) instead of a second
+`dynamic_cast` ladder: `Widget::setProperty`, the Lua
+`ogui.get`/`ogui.set`/`ogui.props` and any tool that lists what a widget
+exposes. Each declaration carries a name, a type, a description, the canonical
+form of its default value and the read/write pair, and says which of the two it
+offers — `pressed` on a button and `count` on a combo box read but refuse
+writes.
+
+Values travel as strings, the form XML and Lua scripts use, and the declared
+type decides how they are converted and validated:
+
+| Type | Written as | Canonical read |
+|---|---|---|
+| `string` | any text, `""` clears | as authored |
+| `bool` | `true`/`false`/`1`/`0`/`yes`/`no`/`on`/`off` (any case) | `true` / `false` |
+| `number` | decimal, no trailing junk, no `nan`/`inf` | `%.6g` (`22`, `3.5`) |
+| `color` | `#rgb`/`#rgba`/`#rrggbb`/`#rrggbbaa` or `@token` | `#rrggbb` (+ alpha when not opaque) |
+| `enum` | one of the declared choices, case-insensitive | the choice as authored |
+
+A bad value never silently no-ops: the write returns `false` and the message
+says what was expected (`property 'width' expects number, got 'wide'`; an
+unknown name lists what the class does expose). In Lua the same message comes
+back as the error text, so `pcall(ogui.set, …)` catches it.
+
+Properties are declared per class and inherited along a declared base chain,
+most-derived declaration winning: a `window` gets `title` from `Window`,
+`bgcolor` from `Panel` and `tooltip` from `Widget`, and a `textarea` inherits
+the whole `textinput` table. `font` and `fontsize` are the base `Style` values;
+classes that draw from their own font field re-declare them so a write moves
+both, exactly as the parser does. Host widget classes join the same game:
+
+```cpp
+PropertyRegistry::instance().declare(typeid(Led), typeid(Widget), {
+    numberProp<Led>("level", [](const Led& l) { return l.level(); },
+                    [](Led& l, double v) { l.setLevel(v); return true; },
+                    "fill fraction, 0 to 1"),
+});
+```
+
+The XML parser keeps applying authored attributes through its own typed chain
+(it also handles geometry expressions, named styles and the legacy `font`
+pseudo-syntax); the registry is the runtime, name-based path to the same
+setters. All 61 classes the tag registry can build are declared — 1975
+read/write properties between them, and `debug/tests/properties_test.cpp`
+writes each one back onto itself and checks the value reads out unchanged, then
+walks the factory and refuses a tag whose class has no table.
+
+Two shapes fall out of that. A spec a widget does not keep a copy of is
+write-only and its resolved shape reads back separately: `columns="120,1fr"` on
+a `grid` is a `string` you can set but not get, `colcount` is the number it
+became. And a class that draws from its own fields, not from `Style`, shadows
+the inherited colour so the name means what is on screen: `background` on a
+`sparkline` or a `propertygrid` moves the fill it paints, leaving the base
+`Style` value alone.
+
 ## Ids and lookup
 
 `id` names a widget inside its screen: `Kernel::findWidget`,
@@ -501,8 +559,9 @@ API table `ogui` (all calls are safe on unknown ids):
 
 | Call | Effect |
 |---|---|
-| `ogui.set(id, attr, v)` | `attr`: `text`, `visible`, `enabled`, `focusable`, `checked`, `value`, `selected`, `tooltip`, `x`, `y`, `width`, `height` (geometry pins the spec to absolute so layout keeps the new values); on a `keybind`, `value` takes a combo string and errors when it does not parse |
-| `ogui.get(id, attr)` | same attrs; `text`/`tooltip` → string, `value`/`selected`/geometry → number (`value` → combo string on a `keybind`), `visible`/`enabled`/`focusable`/`checked` → boolean; unknown → `nil` |
+| `ogui.set(id, attr, v)` | `attr`: `text`, `visible`, `enabled`, `focusable`, `checked`, `value`, `selected`, `tooltip`, `x`, `y`, `width`, `height` (geometry pins the spec to absolute so layout keeps the new values); on a `keybind`, `value` takes a combo string and errors when it does not parse. Any other name falls through to the typed property registry (see Typed properties), so `ogui.set("lbl", "wrap", true)` and `ogui.set("btn", "radius", 8)` work; a value the property rejects raises `property 'wrap' expects true/false/1/0/yes/no/on/off, got 'perhaps'` |
+| `ogui.get(id, attr)` | same attrs; `text`/`tooltip` → string, `value`/`selected`/geometry → number (`value` → combo string on a `keybind`), `visible`/`enabled`/`focusable`/`checked` → boolean. Registry names come back typed: `number` → number, `bool` → boolean, the rest as strings; unknown → `nil` |
+| `ogui.props(id)` | table of every property the widget exposes, keyed by name: `{ type, value, default, description, writable }` — runtime discovery instead of guessing which attributes a class answers to; `value` is `nil` on a write-only property, and the whole table is `nil` for an unknown id |
 | `ogui.exists(id)` | widget lookup |
 | `ogui.click(id)` | fire the widget's C++ binding/handler |
 | `ogui.time()` | seconds since kernel start |

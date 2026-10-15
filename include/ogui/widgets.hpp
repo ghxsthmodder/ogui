@@ -61,6 +61,7 @@ public:
     int fontSize() const { return m_fontSize; }
     const Color& textColor() const { return m_textColor; }
     void setHAlign(Align a) { m_hAlign = a; }
+    Align hAlign() const { return m_hAlign; }
     void setVAlign(VertAlign v) { m_vAlign = v; }
 
     // Word wrap inside the widget bounds (single line when false).
@@ -177,6 +178,7 @@ public:
     virtual ~Panel() override;
 
     void setBgColor(const Color& col) { m_bgColor = col; }
+    Color bgColor() const { return m_bgColor; }
     void setBorderColor(const Color& col) { m_borderColor = col; }
     void setBorderWidth(float w) { m_borderWidth = w; }
     void setRadius(float r) { m_radius = r; }
@@ -208,6 +210,7 @@ public:
     void setTitle(const std::string& t) { m_title = t; }
     const std::string& title() const { return m_title; }
     void setTitleVisible(bool v) { m_titleVisible = v; }
+    bool titleVisible() const { return m_titleVisible; }
     float titleHeight() const { return m_titleVisible ? m_titleHeight : 0.0f; }
 
     // Positions children below the title bar.
@@ -277,6 +280,7 @@ public:
     void scrollBy(float dx, float dy);
     Offset2D scrollPosition() const { return m_offset; }
     void setScrollStep(float px) { m_step = px; }    // pixels per wheel notch
+    float scrollStep() const { return m_step; }
     const Rect& contentBounds() const { return m_contentBounds; }
 
     void setBgColor(const Color& col) { m_bgColor = col; }
@@ -326,6 +330,7 @@ public:
     virtual void setText(const std::string& text);
     const std::string& text() const { return m_text; }
     void setPlaceholder(const std::string& ph) { m_placeholder = ph; }
+    const std::string& placeholder() const { return m_placeholder; }
     void setBgColor(const Color& col) { m_bgColor = col; }
     void setFgColor(const Color& col) { m_fgColor = col; }
     void setBorderColor(const Color& col) { m_borderColor = col; }
@@ -418,6 +423,7 @@ public:
     // Horizontal placement of children narrower than the content width:
     // left keeps the authored x (indentation); center/right align them.
     void setChildAlign(Align a) { m_align = a; }
+    Align childAlign() const { return m_align; }
     virtual void layout(float parentWidth, float parentHeight) override;
 
 private:
@@ -432,6 +438,7 @@ public:
     // Vertical placement of children shorter than the tallest row member:
     // top keeps the authored y; middle/bottom align them.
     void setChildValign(VertAlign a) { m_valign = a; }
+    VertAlign childValign() const { return m_valign; }
     // wrap="true": children that do not fit the row width continue on the
     // next line; the row grows in height to hold the extra lines.
     void setWrap(bool w) { m_wrap = w; }
@@ -459,8 +466,11 @@ public:
     virtual ~Grid() override;
 
     void setCols(const std::string& spec);
+    int colCount() const { return static_cast<int>(m_tracks.size()); }
     void setGap(float px) { m_gap = px >= 0.0f ? px : 0.0f; }
+    float gap() const { return m_gap; }
     void setRowHeight(float px) { m_rowH = px; }   // <= 0: auto
+    float rowHeight() const { return m_rowH; }
 
     virtual void layout(float parentWidth, float parentHeight) override;
 
@@ -480,6 +490,7 @@ public:
     Group();
     virtual ~Group() override;
     void setGroupName(const std::string& name) { m_groupName = name; }
+    const std::string& groupName() const { return m_groupName; }
     void setBgColor(const Color& col) { m_bgColor = col; }
     void setBorderColor(const Color& col) { m_borderColor = col; }
     void setBorderWidth(float w) { m_borderWidth = w; }
@@ -571,6 +582,7 @@ public:
     float value() const { return m_value; }
     void setBgColor(const Color& col) { m_bgColor = col; }
     void setBarColor(const Color& col) { m_barColor = col; }
+    Color barColor() const { return m_barColor; }
     void setBorderColor(const Color& col) { m_borderColor = col; }
     void setBorderWidth(float w) { m_borderWidth = w; }
     void setRadius(float r) { m_radius = r; }
@@ -657,13 +669,16 @@ public:
     void setRange(float lo, float hi);
     void setStep(float s) { m_step = s > 0.0f ? s : 1.0f; }
     void setDecimals(int d) { m_decimals = d < 0 ? 0 : d; }
+    int decimals() const { return m_decimals; }
     void setValue(float v);
     float value() const { return m_value; }
     float minimum() const { return m_min; }
     float maximum() const { return m_max; }
     void setWrap(bool w) { m_wrap = w; }
     void setPrefix(const std::string& p) { m_prefix = p; }
+    const std::string& prefix() const { return m_prefix; }
     void setSuffix(const std::string& s) { m_suffix = s; }
+    const std::string& suffix() const { return m_suffix; }
     // Fires only when the value actually moves (button or key).
     void setOnChanged(ValueCallback cb) { m_onChanged = std::move(cb); }
 
@@ -721,6 +736,7 @@ public:
     std::string value() const;                        // current option text
     void setValue(const std::string& v);              // selects a matching option
     void setWrap(bool w) { m_wrap = w; }
+    bool wrap() const { return m_wrap; }
     void setOnChanged(OptionCallback cb) { m_onChanged = std::move(cb); }
 
     void setBgColor(const Color& col) { m_bgColor = col; }
@@ -811,6 +827,7 @@ public:
     virtual ~Splitter() override;
 
     void setVertical(bool v) { m_vertical = v; }   // vertical == divider is a vertical bar
+    bool isVertical() const { return m_vertical; }
     void setSplit(float frac);
     float split() const { return m_split; }
     void setHandleSize(float px) { m_handle = px > 2.0f ? px : 2.0f; }
@@ -1050,6 +1067,7 @@ public:
     // "scrolling" mode: instead of truncating behind a "..." button, the
     // header is a draggable/wheel-scrollable strip showing every tab.
     void setScrollable(bool s) { m_scrollable = s; if (!s) m_stripX = 0.0f; }
+    bool scrollable() const { return m_scrollable; }
     float stripOffset() const { return m_stripX; }
     void setFontFamily(const std::string& family) { m_fontFamily = family; }
     void setFontSize(int size) { m_fontSize = size; }
@@ -1238,6 +1256,7 @@ public:
     virtual ~Console() override;
 
     void setMaxLines(int n) { m_maxLines = n < 1 ? 1 : n; trim(); }
+    int maxLines() const { return m_maxLines; }
     void setRowHeight(float h) { if (h > 0.0f) m_rowH = h; }
     void setFontFamily(const std::string& f) { m_fontFam = f; }
     void setFontSize(int s) { m_fontSize = s; }
@@ -1433,12 +1452,19 @@ public:
     int errorIndex() const { return m_errorIndex; }
 
     void setRowHeight(float px) { m_rowH = px; }
+    float rowHeight() const { return m_rowH; }
     void setGroupColor(const Color& c) { m_groupColor = c; }
+    Color groupColor() const { return m_groupColor; }
     void setLabelColor(const Color& c) { m_labelColor = c; }
+    Color labelColor() const { return m_labelColor; }
     void setValueColor(const Color& c) { m_valueColor = c; }
+    Color valueColor() const { return m_valueColor; }
     void setBgColor(const Color& c) { m_bg = c; }
+    Color bgColor() const { return m_bg; }
     void setBorderColor(const Color& c) { m_border = c; }
+    Color borderColor() const { return m_border; }
     void setHighlightColor(const Color& c) { m_highlight = c; }
+    Color highlightColor() const { return m_highlight; }
     void setFontFamily(const std::string& f) { m_fontFam = f; }
     void setFontSize(int s) { m_fontSize = s; }
 
@@ -1623,6 +1649,7 @@ public:
     int sortColumn() const { return m_sortCol; }
     bool sortAscending() const { return m_sortAsc; }
     void setSortable(bool s) { m_sortable = s; }
+    bool sortable() const { return m_sortable; }
     void sortBy(int col);                     // toggle direction on re-click
 
     // Editing state (for tests / hosts).
@@ -1630,14 +1657,18 @@ public:
     std::string editingText() const { return m_editText; }
 
     void setRowHeight(float px) { m_rowH = px; }
+    float rowHeight() const { return m_rowH; }
     void setHeaderHeight(float px) { m_headH = px; }
+    float headerHeight() const { return m_headH; }
     void setFontFamily(const std::string& f) { m_fontFam = f; }
     void setFontSize(int s) { m_fontSize = s; }
     void setBgColor(const Color& c) { m_bg = c; }
     void setHeaderBgColor(const Color& c) { m_headerBg = c; }
+    Color headerBgColor() const { return m_headerBg; }
     void setBorderColor(const Color& c) { m_border = c; }
     void setTextColor(const Color& c) { m_text = c; }
     void setHighlightColor(const Color& c) { m_highlight = c; }
+    Color highlightColor() const { return m_highlight; }
     bool isSelectedVisual() const override { return m_selected >= 0; }
     void applyVisualColor(const std::string& prop, const Color& v) override {
         if (prop == "background") setBgColor(v);
@@ -1787,7 +1818,9 @@ public:
     void setOnChanged(ChangedCallback cb) { m_onChanged = std::move(cb); }
 
     void setRowHeight(float px) { m_rowH = px; }
+    float rowHeight() const { return m_rowH; }
     void setIndent(float px) { m_indent = px; }
+    float indent() const { return m_indent; }
     // When on (default) the tree sizes itself to its visible rows: collapse a
     // node and the whole widget shrinks to the height of the remaining top
     // level labels instead of keeping the authored box. Turn it off to hold a
@@ -1800,7 +1833,9 @@ public:
     void setBorderColor(const Color& c) { m_border = c; }
     void setTextColor(const Color& c) { m_text = c; }
     void setHighlightColor(const Color& c) { m_highlight = c; }
+    Color highlightColor() const { return m_highlight; }
     void setAccentColor(const Color& c) { m_accent = c; }
+    Color accentColor() const { return m_accent; }
     bool isSelectedVisual() const override { return m_selected >= 0; }
     void applyVisualColor(const std::string& prop, const Color& v) override {
         if (prop == "background") setBgColor(v);
@@ -1811,8 +1846,10 @@ public:
     // unchanged): folder/file icons, a per-node checkbox, and dotted guide
     // lines connecting each node to its parent.
     void setShowIcons(bool on) { m_showIcons = on; }
+    bool showIcons() const { return m_showIcons; }
     void setShowChecks(bool on) { m_showChecks = on; }
     void setShowGuides(bool on) { m_showGuides = on; }
+    bool showGuides() const { return m_showGuides; }
     bool showChecks() const { return m_showChecks; }
     int checkedCount() const;
     // Comma-joined labels of the checked nodes (empty when none).
@@ -1972,19 +2009,26 @@ public:
     int sortColumn() const { return m_sortCol; }
     bool sortAscending() const { return m_sortAsc; }
     void setSortable(bool s) { m_sortable = s; }
+    bool sortable() const { return m_sortable; }
     void sortBy(int col);                  // toggle direction on re-click
 
     void setRowHeight(float px) { m_rowH = px; }
+    float rowHeight() const { return m_rowH; }
     void setHeaderHeight(float px) { m_headH = px; }
+    float headerHeight() const { return m_headH; }
     void setIndent(float px) { m_indent = px; }
+    float indent() const { return m_indent; }
     void setFontFamily(const std::string& f) { m_fontFam = f; }
     void setFontSize(int s) { m_fontSize = s; }
     void setBgColor(const Color& c) { m_bg = c; }
     void setHeaderBgColor(const Color& c) { m_headerBg = c; }
+    Color headerBgColor() const { return m_headerBg; }
     void setBorderColor(const Color& c) { m_border = c; }
     void setTextColor(const Color& c) { m_text = c; }
     void setHighlightColor(const Color& c) { m_highlight = c; }
+    Color highlightColor() const { return m_highlight; }
     void setAccentColor(const Color& c) { m_accent = c; }
+    Color accentColor() const { return m_accent; }
     bool isSelectedVisual() const override { return m_selected >= 0; }
     void applyVisualColor(const std::string& prop, const Color& v) override {
         if (prop == "background") setBgColor(v);
@@ -2115,6 +2159,7 @@ public:
     void setCount(int c) { m_count = c; }
     int count() const { return m_count; }
     void setRemovable(bool r) { m_removable = r; }
+    bool removable() const { return m_removable; }
     void setBgColor(const Color& c) { m_bgColor = c; }
     void setFgColor(const Color& c) { m_fgColor = c; }
     void setBorderColor(const Color& c) { m_borderColor = c; }
@@ -2205,9 +2250,13 @@ public:
     int current() const { return m_current; }
     void setOnSelected(SegmentCallback cb) { m_onSelected = std::move(cb); }
     void setTextColor(const Color& c) { m_textColor = c; }
+    Color textColor() const { return m_textColor; }
     void setDimColor(const Color& c) { m_dimColor = c; }
+    Color dimColor() const { return m_dimColor; }
     void setAccentColor(const Color& c) { m_accentColor = c; }
+    Color accentColor() const { return m_accentColor; }
     void setFontSize(int s) { m_fontSize = s; }
+    int fontSize() const { return m_fontSize; }
     bool isSelectedVisual() const override { return m_current >= 0; }
     void applyVisualColor(const std::string& prop, const Color& v) override {
         if (prop == "color") m_textColor = v;
@@ -2356,15 +2405,19 @@ public:
     std::string history(int i) const;         // 0 = newest
     void clearHistory();
     void setMaxHistory(int n) { m_maxHistory = n < 0 ? 0 : n; trimHistory(); }
+    int maxHistory() const { return m_maxHistory; }
 
     void setPlaceholder(const std::string& p) { m_placeholder = p; }
+    const std::string& placeholder() const { return m_placeholder; }
     void setTextColor(const Color& c) { m_textColor = c; }
     void setDimColor(const Color& c) { m_dimColor = c; }
     void setAccentColor(const Color& c) { m_accentColor = c; }
     void setHighlightColor(const Color& c) { m_highlightColor = c; }
     void setBgColor(const Color& c) { m_bgColor = c; }
     void setRowHeight(float h) { if (h > 0.0f) m_rowH = h; }
+    float rowHeight() const { return m_rowH; }
     void setHeaderHeight(float h) { m_headH = h < 0.0f ? 0.0f : h; }
+    float headerHeight() const { return m_headH; }
     void setFontFamily(const std::string& f) { m_fontFam = f; }
     void setFontSize(int s) { m_fontSize = s; }
     void applyVisualColor(const std::string& prop, const Color& v) override {
@@ -2429,8 +2482,11 @@ public:
     virtual ~Spinner() override;
 
     void setText(const std::string& t) { m_text = t; }
+    const std::string& text() const { return m_text; }
     void setVariant(const std::string& v);   // "glyph" | "blocks"
+    const char* variant() const { return m_blocks ? "blocks" : "glyph"; }
     void setSpeed(float hz) { m_speed = hz > 0.0f ? hz : 8.0f; }
+    float speed() const { return m_speed; }
     void setFgColor(const Color& c) { m_fgColor = c; }
 
     virtual void onTick(float dt) override;
@@ -2506,6 +2562,7 @@ public:
     void setExclusive(bool e) { m_exclusive = e; }
     bool exclusive() const { return m_exclusive; }
     void setGap(float g) { m_gap = g >= 0.0f ? g : 0.0f; }
+    float gap() const { return m_gap; }
 
     virtual void layout(float parentWidth, float parentHeight) override;
 
@@ -2525,6 +2582,7 @@ public:
     virtual ~Modal() override;
 
     void setTitle(const std::string& t) { m_title = t; }
+    const std::string& title() const { return m_title; }
     void setOpen(bool o);
     bool isOpen() const { return m_open; }
     void setPanelSize(float w, float h) { m_panelW = w; m_panelH = h; }
@@ -2557,11 +2615,16 @@ public:
     virtual ~Sparkline() override;
 
     void setValues(const std::string& csv);   // ';'- or ','-separated floats
+    const std::vector<float>& values() const { return m_values; }
     void addSample(float v);
     void setMaxSamples(int n) { if (n > 1) m_max = static_cast<size_t>(n); }
+    int maxSamples() const { return static_cast<int>(m_max); }
     void setLabel(const std::string& l) { m_label = l; }
+    const std::string& label() const { return m_label; }
     void setLineColor(const Color& c) { m_lineColor = c; }
+    Color lineColor() const { return m_lineColor; }
     void setBgColor(const Color& c) { m_bgColor = c; }
+    Color bgColor() const { return m_bgColor; }
 
     virtual void onDraw(Rasterizer& r) const override;
 
@@ -2813,8 +2876,11 @@ public:
     void setValue(const std::string& v) { m_value = v; }
     const std::string& value() const { return m_value; }
     void setPlaceholder(const std::string& p) { m_placeholder = p; }
+    const std::string& placeholder() const { return m_placeholder; }
     void setStartPath(const std::string& p) { m_start = p; }
+    const std::string& startPath() const { return m_start; }
     void setFilter(const std::string& ext) { m_filter = ext; }
+    const std::string& filter() const { return m_filter; }
     void setOnChanged(std::function<void(const std::string&)> cb) {
         m_onChanged = std::move(cb);
     }

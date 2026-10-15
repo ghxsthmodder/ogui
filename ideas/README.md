@@ -667,9 +667,36 @@ especificadas antes da implementação.
 
 ### Fase 1 --- Base confiável
 
--   [ ] Sistema de propriedades tipadas. *(parcial: cada widget tipa os
-    próprios atributos no parser e mantém os brutos acessíveis; não há um
-    registro único de propriedades com get/set por nome)*
+-   [x] Sistema de propriedades tipadas: `ogui/properties.hpp` traz um
+    `PropertyDef` (nome, tipo, descrição, valor padrão canônico, choices para
+    enum, par read/write com `canRead()`/`canWrite()`) e um `PropertyRegistry`
+    indexado por `std::type_info` com cadeia de base *declarada* — `window`
+    herda de `panel` que herda de `widget`, `textarea` herda de `textinput`, e a
+    declaração mais derivada de um nome vence. Tipos: `string`, `bool`,
+    `number`, `color`, `enum`; a conversão é sempre por string (a forma que XML
+    e Lua falam) e um valor inválido devolve mensagem do que era esperado
+    (`property 'width' expects number, got 'wide'`, nome desconhecido lista os
+    que existem, read-only recusa em vez de fingir). A fachada é
+    `Widget::property`/`setProperty`/`propertyNames` mais as funções livres
+    `widgetProperty`/`setWidgetProperty`/`widgetPropertyNames`; `ogui.get` e
+    `ogui.set` caem no registro para qualquer nome que não tenham tratado, e
+    `ogui.props(id)` devolve `{type, value, default, description, writable}` por
+    propriedade. Widgets do host declaram a própria tabela com `declare()` e
+    `numberProp`/`boolProp`/`stringProp`/`colorProp`. As 61 classes que o
+    `widgetRegistry()` sabe criar estão tabeladas — 1975 propriedades que lêem e
+    escrevem entre elas, cada uma testada no round-trip de escrever a própria
+    leitura de volta, e o teste ainda varre o fábrica e falha se uma tag chegar
+    ao runtime sem tabela. Espec que o widget não guarda é write-only e a forma
+    resolvida lê-se por outro nome (`columns` → `colcount`); classe que desenha
+    com campos próprios sombreia a cor herdada para o nome significar o que está
+    na tela (`background` em `sparkline`/`propertygrid`). O parser
+    continua aplicando os atributos autorados pela sua própria cadeia tipada —
+    ele também resolve geometria (`%`, `fill`, âncoras), estilos nomeados e a
+    sintaxe legada `font sans 20` — e escreve nos mesmos setters, então XML e
+    registro chegam ao mesmo lugar. Ficam de fora deste item: a marcação de
+    quais propriedades afetam layout/desenho/estado e a definição do conjunto
+    animável (`ogui.tween` ainda lista `value`/`x`/`y`/`width`/`height` à mão).
+    Testes em `properties`, documentação em `docs/xml-reference.md#typed-properties`.
 -   [x] Eventos tipados e regras de propagação: `EventKind`
     (`click`/`change`/`submit`/`focus`/`blur`) com um `Event` carregando `target`,
     `currentTarget`, `point`, `source`, `handled`; `Kernel::dispatchEvent` visita

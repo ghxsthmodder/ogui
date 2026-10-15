@@ -6,6 +6,7 @@
 // unwind into the engine.
 #include "ogui/script.hpp"
 #include "ogui/kernel.hpp"
+#include "ogui/properties.hpp"
 #include "ogui/widget.hpp"
 #include "ogui/widgets.hpp"
 #include "ogui/xmlparser.hpp"
@@ -185,6 +186,37 @@ int keyFromName(const char* s) {
     return -1;
 }
 
+// Names the hard-coded branches above do not know go to the property
+// registry, which speaks strings; these two convert at the Lua boundary.
+void pushProperty(lua_State* L, const PropertyDef& def, const std::string& v) {
+    switch (def.type) {
+        case PropertyType::Number: {
+            double n = 0.0;
+            if (parseNumber(v, n)) lua_pushnumber(L, n);
+            else lua_pushnil(L);
+            break;
+        }
+        case PropertyType::Bool:
+            lua_pushboolean(L, v == "true");
+            break;
+        case PropertyType::String:
+        case PropertyType::Color:
+        case PropertyType::Enum:
+            lua_pushstring(L, v.c_str());
+            break;
+    }
+}
+
+std::string luaValueText(lua_State* L, int idx) {
+    if (lua_type(L, idx) == LUA_TBOOLEAN)
+        return lua_toboolean(L, idx) ? "true" : "false";
+    if (lua_type(L, idx) == LUA_TNUMBER)
+        return formatNumber(lua_tonumber(L, idx));
+    size_t len = 0;
+    const char* s = lua_tolstring(L, idx, &len);
+    return s ? std::string(s, len) : std::string();
+}
+
 int l_get(lua_State* L) {
     const char* id = luaL_checkstring(L, 1);
     const char* attr = luaL_checkstring(L, 2);
@@ -218,7 +250,10 @@ int l_get(lua_State* L) {
     } else if (geomGet(w, attr, num)) {
         lua_pushnumber(L, num);
     } else {
-        lua_pushnil(L);
+        const auto& reg = PropertyRegistry::instance();
+        const PropertyDef* def = reg.find(*w, attr);
+        if (!def || !def->canRead()) lua_pushnil(L);
+        else pushProperty(L, *def, def->read(*w));
     }
     return 1;
 }
@@ -265,12 +300,50 @@ int l_set(lua_State* L) {
         const char* s = luaL_checklstring(L, 3, &len);
         w->setTooltip(std::string(s, len));
         ok = true;
-    } else {
+    } else if (!std::strcmp(attr, "x") || !std::strcmp(attr, "y") ||
+               !std::strcmp(attr, "width") || !std::strcmp(attr, "height")) {
         ok = geomSet(w, attr, luaL_checknumber(L, 3), k);
+    } else {
+        std::string error;
+        if (!setWidgetProperty(*w, attr, luaValueText(L, 3), &error))
+            return luaL_error(L, "ogui.set: %s", error.c_str());
+        ok = true;
     }
     if (!ok)
         luaL_error(L, "ogui.set: widget \"%s\" has no attribute \"%s\"", id, attr);
     lua_pushboolean(L, 1);
+    return 1;
+}
+
+// ogui.props(id) -> { name = {type, value, default, description, writable} }
+// Everything the widget exposes by name, so a script can discover a widget's
+// attributes at runtime instead of guessing which of them exist.
+int l_props(lua_State* L) {
+    const char* id = luaL_checkstring(L, 1);
+    Kernel* k = kernelOf(L);
+    Widget* w = k ? k->findWidget(id) : nullptr;
+    if (!w) { lua_pushnil(L); return 1; }
+
+    lua_newtable(L);
+    for (const PropertyDef* def : PropertyRegistry::instance().list(*w)) {
+        lua_newtable(L);
+        lua_pushstring(L, propertyTypeName(def->type));
+        lua_setfield(L, -2, "type");
+        // A write-only property (a spec the widget keeps no copy of) has no
+        // current value to report.
+        if (def->canRead())
+            pushProperty(L, *def, def->read(*w));
+        else
+            lua_pushnil(L);
+        lua_setfield(L, -2, "value");
+        lua_pushstring(L, def->defaultValue.c_str());
+        lua_setfield(L, -2, "default");
+        lua_pushstring(L, def->description.c_str());
+        lua_setfield(L, -2, "description");
+        lua_pushboolean(L, def->canWrite());
+        lua_setfield(L, -2, "writable");
+        lua_setfield(L, -2, def->name.c_str());
+    }
     return 1;
 }
 
@@ -1025,6 +1098,7 @@ const luaL_Reg oguiLib[] = {
     {"items",      l_items},
     {"list",       l_list},
     {"prop",       l_prop},
+    {"props",      l_props},
     {"cmd",        l_cmd},
     {"tween",      l_tween},
     {"tweenStop",  l_tweenstop},

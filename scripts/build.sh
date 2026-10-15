@@ -24,6 +24,7 @@ LIB_SRCS=(
     src/font.cpp
     src/imagemanager.cpp
     src/widget.cpp
+    src/properties.cpp
     src/widgets.cpp
     src/widgets_text.cpp
     src/widgets_container.cpp
