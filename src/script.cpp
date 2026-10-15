@@ -3,7 +3,9 @@
 // The Kernel owns one ScriptHost; parsed <script> elements route here via
 // XmlParser::setScriptHandler. All Lua entry points use lua_pcall, so
 // script errors are captured into errors() + Kernel::addLog and never
-// unwind into the engine.
+// unwind into the engine. Coming the other way, a raise from these bindings
+// longjmps over this very stack, so a binding may only raise once the frame
+// holds nothing a destructor would have freed.
 #include "ogui/script.hpp"
 #include "ogui/kernel.hpp"
 #include "ogui/properties.hpp"
@@ -15,6 +17,7 @@
 
 #include <fstream>
 #include <sstream>
+#include <cstdarg>
 #include <cstring>
 #include <iterator>
 #include <string>
@@ -49,6 +52,20 @@ ScriptHost* hostOf(lua_State* L) {
 Kernel* kernelOf(lua_State* L) {
     ScriptHost* h = hostOf(L);
     return h ? h->kernel() : nullptr;
+}
+
+// The message luaL_error would raise, left on top of the Lua stack instead of
+// jumped with. An error inside a script longjmps, which unwinds the C++ frames
+// between the raise and the enclosing lua_pcall without running destructors,
+// so no heap object may be alive on them: build the text here, return, and let
+// the caller jump once the objects it owned are gone.
+void pushLuaError(lua_State* L, const char* fmt, ...) {
+    luaL_where(L, 1);
+    va_list ap;
+    va_start(ap, fmt);
+    lua_pushvfstring(L, fmt, ap);
+    va_end(ap);
+    lua_concat(L, 2);
 }
 
 // ---- ogui.* bindings ------------------------------------------------------
@@ -305,9 +322,17 @@ int l_set(lua_State* L) {
                !std::strcmp(attr, "width") || !std::strcmp(attr, "height")) {
         ok = geomSet(w, attr, luaL_checknumber(L, 3), k);
     } else {
-        std::string error;
-        if (!setWidgetProperty(*w, attr, luaValueText(L, 3), &error))
-            return luaL_error(L, "ogui.set: %s", error.c_str());
+        // The scope is the fix: the jump below unwinds this frame without
+        // running destructors, so the message must be Lua's own by then.
+        bool rejected = false;
+        {
+            std::string error;
+            if (!setWidgetProperty(*w, attr, luaValueText(L, 3), &error)) {
+                pushLuaError(L, "ogui.set: %s", error.c_str());
+                rejected = true;
+            }
+        }
+        if (rejected) return lua_error(L);
         ok = true;
     }
     if (!ok)
@@ -490,14 +515,23 @@ int l_items(lua_State* L) {
     auto* os = dynamic_cast<OptionSpin*>(w);
     if (!lb && !os)
         return luaL_error(L, "ogui.items: widget \"%s\" has no item list", id);
-    std::vector<std::string> items;
+    // Stringify every entry onto the Lua stack first: luaL_tolstring raises
+    // for a value it cannot convert, and the jump would skip the destructor of
+    // a half-filled vector.
     const lua_Integer n = luaL_len(L, 2);
-    items.reserve(static_cast<size_t>(n));
     for (lua_Integer i = 1; i <= n; ++i) {
         lua_rawgeti(L, 2, i);
-        items.push_back(luaL_tolstring(L, -1, nullptr));  // also stringifies
-        lua_pop(L, 2);   // the tolstring pushes its own copy
+        luaL_tolstring(L, -1, nullptr);
+        lua_remove(L, -2);   // keep the string, drop the original value
     }
+    std::vector<std::string> items;
+    items.reserve(static_cast<size_t>(n));
+    for (lua_Integer i = 1; i <= n; ++i) {
+        size_t len = 0;
+        const char* s = lua_tolstring(L, static_cast<int>(i - n - 1), &len);
+        items.emplace_back(s, len);
+    }
+    lua_pop(L, static_cast<int>(n));
     if (lb) lb->setItems(std::move(items));
     else os->setOptions(std::move(items));
     if (k) k->invalidate();
@@ -555,6 +589,24 @@ int l_list(lua_State* L) {
     return 1;
 }
 
+// A ';' separated list, as ogui.prop's add takes for an enum's options. Lives
+// apart so the strings it allocates leave with a normal return, never with a
+// jump out of l_prop.
+std::vector<std::string> splitOptions(const std::string& text) {
+    std::vector<std::string> out;
+    size_t start = 0;
+    while (start <= text.size()) {
+        const size_t semi = text.find(';', start);
+        if (semi == std::string::npos) {
+            if (start < text.size()) out.push_back(text.substr(start));
+            break;
+        }
+        if (semi > start) out.push_back(text.substr(start, semi - start));
+        start = semi + 1;
+    }
+    return out;
+}
+
 // ogui.prop(id, op, ...) — PropertyGrid model access.
 //   count            -> number of items
 //   get(name)        -> value string (nil when the name is unknown)
@@ -596,31 +648,27 @@ int l_prop(lua_State* L) {
         return 1;
     }
     if (!std::strcmp(op, "set")) {
+        const char* name = luaL_checkstring(L, 3);
         size_t len = 0;
         const char* v = luaL_checklstring(L, 4, &len);
-        lua_pushboolean(L, pg->setValue(luaL_checkstring(L, 3),
-                                        std::string(v, len)));
+        lua_pushboolean(L, pg->setValue(name, std::string(v, len)));
     } else if (!std::strcmp(op, "add")) {
+        // Read every argument before the item exists: a luaL_check* that raises
+        // would jump past the shared_ptr and the strings it already holds.
+        size_t nameLen = 0, kindLen = 0, valueLen = 0, groupLen = 0, optsLen = 0;
+        const char* name = luaL_checklstring(L, 3, &nameLen);
+        const char* kind = luaL_optlstring(L, 4, "text", &kindLen);
+        const char* value = luaL_optlstring(L, 5, "", &valueLen);
+        const char* group = luaL_optlstring(L, 6, "", &groupLen);
+        const char* opts = lua_isnoneornil(L, 7)
+                               ? nullptr
+                               : luaL_checklstring(L, 7, &optsLen);
         auto item = std::make_shared<PropertyItem>();
-        item->setName(luaL_checkstring(L, 3));
-        item->setKind(PropertyItem::kindFromName(luaL_optstring(L, 4, "text")));
-        item->setValue(luaL_optstring(L, 5, ""));
-        item->setGroup(luaL_optstring(L, 6, ""));
-        if (!lua_isnoneornil(L, 7)) {
-            const std::string opts = luaL_checkstring(L, 7);
-            std::vector<std::string> list;
-            size_t start = 0;
-            while (start <= opts.size()) {
-                const size_t semi = opts.find(';', start);
-                if (semi == std::string::npos) {
-                    if (start < opts.size()) list.push_back(opts.substr(start));
-                    break;
-                }
-                if (semi > start) list.push_back(opts.substr(start, semi - start));
-                start = semi + 1;
-            }
-            item->setOptions(list);
-        }
+        item->setName(std::string(name, nameLen));
+        item->setKind(PropertyItem::kindFromName(std::string(kind, kindLen)));
+        item->setValue(std::string(value, valueLen));
+        item->setGroup(std::string(group, groupLen));
+        if (opts) item->setOptions(splitOptions(std::string(opts, optsLen)));
         pg->addItem(item);
         lua_pushboolean(L, 1);
     } else if (!std::strcmp(op, "remove")) {

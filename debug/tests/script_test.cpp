@@ -327,6 +327,18 @@ int main() {
             assert(ogui.get("os", "selected") == 2)
             assert(ogui.items("os", {}) == true)
             assert(not pcall(ogui.items, "tip", {"no"}))   -- label: no items
+            -- a __tostring that hands back a non-string raises after some rows
+            -- are already converted; the list keeps what it had
+            assert(not pcall(ogui.items, "lb", {"ok",
+                       setmetatable({}, {__tostring = function() return {} end})}))
+            assert(ogui.list("lb", "count") == 3)
+            -- the message a rejected write raises is the one luaL_error writes,
+            -- call position included
+            local _, em = pcall(ogui.items, "tip", {"no"})
+            assert(em == 'ogui.items: widget "tip" has no item list', em)
+            local function badset() return ogui.set("tip", "wrap", "perhaps") end
+            local _, sm = pcall(badset)
+            assert(sm:find("^lists:%d+: ogui%.set:.*expects"), sm)
             -- ogui.list: incremental virtual-list mutation
             assert(ogui.list("lb", "count") == 3)
             ogui.list("lb", "insert", -1, "omega")          -- appends
@@ -361,6 +373,10 @@ int main() {
             local t = ogui.prop("pg", "list")
             assert(t.mode == "a" and t.visible == "true")
             assert(ogui.prop("pg", "remove", "mode"))
+            -- every argument is checked before the item is built, so a bad one
+            -- raises without half-adding it
+            assert(not pcall(ogui.prop, "pg", "add", "x", "enum", "a", "G", {1}))
+            assert(ogui.prop("pg", "count") == 2)
             assert(ogui.prop("pg", "selected") == -1)
             ogui.prop("pg", "select", 0)
             assert(ogui.prop("pg", "selected") == 0)

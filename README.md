@@ -250,7 +250,12 @@ OGUI_UPDATE_GOLDEN=1 ./build/ogui_golden_test
 ```
 
 The suite is also what runs under AddressSanitizer, and that is how the font
-lifetimes were checked: the whole library and every test in one ASAN tree.
+lifetimes were checked: the whole library and every test in one ASAN tree. It
+catches a second class of bug specific to Lua, too: an `ogui.*` call that raises
+leaves the C++ frames below it by longjmp, which does not run destructors, so a
+binding may not `luaL_error` while its frame still owns a string or a vector —
+`src/script.cpp` copies the message onto the Lua stack and jumps only after the
+objects that carried it are out of scope.
 
 ```sh
 cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug \
