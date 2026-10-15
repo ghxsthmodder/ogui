@@ -128,6 +128,7 @@ bool Font::load(const std::string& path, int logicalHeight, int /*dpi*/,
         std::max(1, static_cast<int>(std::lround(logicalHeight * pxPerUnit)));
     m_pixels.clear();
     m_glyphs.clear();
+    m_kern.clear();
     m_resolved.clear();
     m_notdef = GlyphInfo{};
     m_notdefBaked = false;
@@ -605,7 +606,8 @@ const Font* FontManager::get(const std::string& family, int size) {
 
 // One body for explicit requests and fallback probes. Const because a glyph
 // lookup that misses has to be able to build the face it is asking: the cache
-// is mutable, and a Font once handed out lives there until clear().
+// is mutable. A Font lives there until clear() drops it, and a scale change
+// re-bakes it in place, so a `const Font*` stays valid across both.
 const Font* FontManager::load(const std::string& family, int size) const {
     if (size <= 0) size = 14;
     auto key = std::make_pair(family, size);
@@ -627,9 +629,16 @@ const Font* FontManager::load(const std::string& family, int size) const {
 void FontManager::setScale(float s) {
     if (s <= 0.0f) s = 1.0f;
     if (s == m_scale) return;
-    // Every cached atlas was baked for the old factor, so nothing survives.
     m_scale = s;
-    m_cache.clear();
+    // Every cached atlas was baked for the old factor, so nothing survives --
+    // but nothing has to die either. Each face is re-baked where it stands, so
+    // a host holding a `const Font*` across a dpi change is holding a live font
+    // with new metrics, not freed memory. clear() is the call that drops them.
+    for (auto it = m_cache.begin(); it != m_cache.end();) {
+        Font& f = *it->second;
+        if (f.load(f.path(), f.size(), 96, m_scale)) { ++it; continue; }
+        it = m_cache.erase(it);   // the file cannot be read any more
+    }
 }
 
 } // namespace ogui

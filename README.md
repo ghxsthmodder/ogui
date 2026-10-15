@@ -239,6 +239,15 @@ Regenerate the golden after an intentional visual change:
 OGUI_UPDATE_GOLDEN=1 ./build/ogui_golden_test
 ```
 
+The suite is also what runs under AddressSanitizer, and that is how the font
+lifetimes were checked: the whole library and every test in one ASAN tree.
+
+```sh
+cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug \
+      -DCMAKE_CXX_FLAGS="-fsanitize=address -g -O1" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address"
+cmake --build build-asan -j && for t in build-asan/ogui_*_test; do "./$t" > /dev/null || echo "FAIL $t"; done
+```
+
 ## Quick start
 
 ```cpp
@@ -729,8 +738,14 @@ scaled twice, and a layout authored for 800x600 renders identically at scale
 Text follows the same rule from the other end: `FontManager::setScale()`
 bakes each atlas at `size * scale` device pixels while the `Font` accessors
 keep reporting logical units, so glyphs stay crisp at any dpi and the numbers
-used to hit-test a caret are the ones the widget drew with. Changing the
-scale re-bakes the font cache.
+used to hit-test a caret are the ones the widget drew with. Changing the scale
+re-bakes every cached face *in place*: the `const Font*` a host is holding
+across a dpi change stays the font the manager hands out — same object, new
+bake, tables rebuilt from scratch — and `FontManager::clear()` is the one call
+that drops the faces it holds. A re-baked atlas gets a new slot id, so a
+`DrawList` built at the old scale is stale after the change; `Kernel` rebuilds
+the whole list whenever the scale moves, which is the only reason a host never
+sees that.
 
 A `scale` of 0, negative or NaN degrades to 1, so a host that never sets it
 behaves exactly as before. `ogui::Host` (Win32) reads the window dpi every

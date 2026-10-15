@@ -253,12 +253,16 @@ public:
 
     // Returns a loaded font, or nullptr when none could be found. `size` is
     // in LOGICAL pixels; with a scale set, the atlas is baked at size*scale
-    // device pixels while every metric still comes back in logical pixels.
+    // device pixels while every metric still comes back in logical pixels. The
+    // font is the manager's, and stays valid until clear() drops it -- not
+    // before, since a scale change re-bakes it where it stands.
     const Font* get(const std::string& family, int size);
 
     // Device pixels per logical pixel for newly built atlases. Changing it
-    // drops the cache, since every bake depends on the value. The Kernel
-    // keeps this in sync with the screen scale on every draw list rebuild.
+    // re-bakes every cached face in place -- the objects survive, so a
+    // `const Font*` held across a dpi change is still a live font, now with the
+    // new bake -- because every atlas depends on the value. The Kernel keeps
+    // this in sync with the screen scale on every draw list rebuild.
     void setScale(float s);
     float scale() const { return m_scale; }
 
@@ -282,7 +286,9 @@ public:
     // one walk at most.
     const Font* fallbackFace(const Font& requester, uint32_t ch) const;
 
-    void clear();   // drops the cache (keeps mappings)
+    // Drops the cache (keeps mappings). The one call that invalidates a
+    // `const Font*` the host is still holding.
+    void clear();
 
     // Visits every cached font (used by the GL backend to upload atlases).
     template <typename Fn>

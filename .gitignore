@@ -1,6 +1,7 @@
 # build artefacts
 build/
 build-win/
+build-asan/
 build-android*/
 build-apk/
 debug/build-win-objs/

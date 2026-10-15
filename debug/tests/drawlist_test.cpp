@@ -367,6 +367,48 @@ static void testScaledFontMetrics() {
     fm.setScale(1.0f);
 }
 
+// A scale change re-bakes every cached face where it stands, so a font a host
+// is holding stays the font the manager hands out: same object, new bake, and
+// tables rebuilt from scratch instead of carried over from the last one.
+static void testFontSurvivesScaleChange() {
+    FontManager& fm = FontManager::instance();
+    fm.setScale(1.0f);
+    const Font* held = fm.get("sans", 16);
+    if (!held) {
+        std::cout << "  (no system font found; skipping font lifetime checks)\n";
+        return;
+    }
+    const std::string path = held->path();
+    const float logical = held->measure("hello world");
+
+    fm.setScale(3.0f);
+    CHECK(fm.get("sans", 16) == held);            // the very same object
+    CHECK(held->pxPerUnit() > 2.9f);              // re-baked at the new factor
+    CHECK(held->loaded() && held->atlasWidth() > 0);
+    CHECK(std::fabs(held->measure("hello world") - logical) < 1.0f);
+    CHECK(held->indexFromX("hello world", 40.0f) > 0);   // and still editable
+
+    // Back down: a pair whose kerning rounds to nothing at 1x must not keep the
+    // 3x value left in the table, so every printable pair is compared against a
+    // face loaded fresh at this scale.
+    fm.setScale(1.0f);
+    CHECK(held->pxPerUnit() == 1.0f);
+    Font fresh;
+    CHECK(fresh.load(path, 16, 96, 1.0f));
+    int pairs = 0;
+    for (uint32_t a = 32; a <= 126; ++a) {
+        for (uint32_t b = 32; b <= 126; ++b) {
+            const float got = held->kern(a, b);
+            const float want = fresh.kern(a, b);
+            if (got != 0.0f || want != 0.0f) ++pairs;
+            CHECK(std::fabs(got - want) < 1e-3f);
+        }
+    }
+    if (pairs == 0)
+        std::cout << "  (this face carries no ASCII kern pairs; table reset unchecked)\n";
+    CHECK(std::fabs(held->measure("hello world") - logical) < 1.0f);
+}
+
 static void testIndexFromXAndMeasureRange() {
     FontManager& fm = FontManager::instance();
     const Font* f = fm.get("sans", 16);
@@ -477,6 +519,7 @@ int main() {
     testTextMetrics();
     testScaleEmission();
     testScaledFontMetrics();
+    testFontSurvivesScaleChange();
     testIndexFromXAndMeasureRange();
     testTextWrapLayout();
     testLayoutDraw();
