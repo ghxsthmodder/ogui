@@ -98,6 +98,8 @@ add_library(ogui STATIC
     src/kernel.cpp
     src/xmlparser.cpp
     src/glbackend.cpp
+    src/androidinput.cpp
+    src/androidhost.cpp
     src/tween.cpp
     src/host.cpp
     src/script.cpp
@@ -107,6 +109,13 @@ add_library(ogui STATIC
 # link-time dependency is added on purpose.
 if(UNIX AND NOT APPLE)
     target_link_libraries(ogui PRIVATE ${CMAKE_DL_LIBS})
+endif()
+
+# The Android host is the opposite case: an app on a phone links libEGL,
+# libGLESv3 and libandroid (the surface, the asset archive, the input getters),
+# and links them forward so the app target does not have to know that.
+if(ANDROID)
+    target_link_libraries(ogui PUBLIC EGL GLESv3 android log)
 endif()
 
 target_include_directories(ogui PUBLIC
@@ -166,6 +175,35 @@ if(OGUI_BUILD_EXAMPLES)
     endif()
 endif()
 
+# ---- Android application --------------------------------------------------
+# A shared library, not an executable: NativeActivity dlopen()s it, and the
+# activity's own process belongs to the system. Built even with examples off,
+# because on this platform the app *is* the example -- the other five targets
+# are console programs with no console here.
+if(ANDROID)
+    if(NOT DEFINED CMAKE_ANDROID_NDK)
+        message(FATAL_ERROR
+            "ANDROID is set without CMAKE_ANDROID_NDK: configure with "
+            "-DCMAKE_TOOLCHAIN_FILE=<ndk>/build/cmake/android.toolchain.cmake")
+    endif()
+    add_library(oggui_app SHARED
+        examples/android_main.cpp
+        ${CMAKE_ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c)
+    # native_app_glue is upstream C, and its own -Wall findings are not ours to fix.
+    set_source_files_properties(
+        ${CMAKE_ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c
+        PROPERTIES COMPILE_OPTIONS "-w")
+    target_include_directories(oggui_app PRIVATE
+        ${CMAKE_ANDROID_NDK}/sources/android/native_app_glue)
+    target_link_libraries(oggui_app PRIVATE ogui)
+    # -static-libstdc++: the SDK does not ship a libc++ the app may link against
+    # (c++_shared would have to be packaged and loaded by hand), and a debug APK
+    # that needs libc++_shared.so in lib/<abi>/ is a debug APK that does not start.
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_link_options(oggui_app PRIVATE -static-libstdc++ -static-libgcc)
+    endif()
+endif()
+
 # ---- Tests ---------------------------------------------------------------
 if(OGUI_BUILD_TESTS)
     add_executable(ogui_parser_test debug/tests/parser_test.cpp)
@@ -187,6 +225,11 @@ if(OGUI_BUILD_TESTS)
 
     add_executable(ogui_touch_test debug/tests/touch_test.cpp)
     target_link_libraries(ogui_touch_test PRIVATE ogui)
+
+    # What an Android motion or key event means, tested without a phone: the
+    # rules are plain data in AndroidInputBridge, only the getters need a device.
+    add_executable(ogui_android_test debug/tests/android_test.cpp)
+    target_link_libraries(ogui_android_test PRIVATE ogui)
 
     # Every byte the library opens goes through one seam: a host that owns the
     # names (an APK's AAssetManager) and a host that owns none.
@@ -291,6 +334,7 @@ if(OGUI_BUILD_TESTS)
     add_test(NAME properties COMMAND ogui_properties_test)
     add_test(NAME templates COMMAND ogui_templates_test)
     add_test(NAME examples COMMAND ogui_examples_test)
+    add_test(NAME android COMMAND ogui_android_test)
     if(TARGET ogui_golden_test)
         add_test(NAME golden COMMAND ogui_golden_test)
     endif()
@@ -329,6 +373,7 @@ endforeach()
 install(FILES
     include/ogui/api.hpp
     include/ogui/assets.hpp
+    include/ogui/androidhost.hpp
     include/ogui/clipboard.hpp
     include/ogui/drawlist.hpp
     include/ogui/font.hpp

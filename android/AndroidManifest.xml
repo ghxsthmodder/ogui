@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- AndroidManifest.xml : the demo, as the system sees it.
+
+     There is no Java here. android.app.NativeActivity is a framework class:
+     it creates the activity, loads liboggui_app.so and calls its android_main,
+     which is the whole of the app's entry point. android:hasCode="false" says
+     so out loud: no classes.dex is looked for, and the APK is the native
+     library plus the assets the asset reader opens by name.
+
+     configChanges keeps a rotation from recreating the activity: the window
+     then arrives as a new ANativeWindow through APP_CMD_INIT_WINDOW and the
+     EGL context the host already built (the GPU's font atlases with it)
+     survives, which is exactly what releaseWindow() and setWindow() were split
+     for. Without it, every rotation tears the process down and starts over. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="dev.ogui.demo"
+    android:versionCode="1"
+    android:versionName="0.1">
+
+    <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="36" />
+
+    <!-- GLES 3.0 is what GlBackend compiles its shader for; a device without
+         it cannot run the demo at all, so it is required rather than hoped. -->
+    <uses-feature android:glEsVersion="0x00030000" android:required="true" />
+    <supports-screens android:anyDensity="true" />
+
+    <application
+        android:allowBackup="false"
+        android:hasCode="false"
+        android:label="ogui"
+        android:supportsRtl="true">
+        <activity
+            android:name="android.app.NativeActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|navigation|density|uiMode"
+            android:exported="true"
+            android:label="ogui">
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="oggui_app" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

@@ -11,17 +11,28 @@
 #include "ogui/kernel.hpp"
 #include "ogui/xmlparser.hpp"
 #include "ogui/widgets.hpp"
+#include "ogui/assets.hpp"
 
 #include <algorithm>
-#include <fstream>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 
 namespace gallery {
+
+// Through ogui::readFile(), not an ifstream: the same demo has to read its
+// screens off the disk on a desktop and out of the APK on a phone, and the
+// host's asset reader is what decides which one it is. nullopt is the missing
+// file the callers already report.
+inline std::optional<std::string> text(const std::string& path) {
+    auto bytes = ogui::readFile(path);
+    if (!bytes) return std::nullopt;
+    return std::string(bytes->begin(), bytes->end());
+}
 
 // Ordered {title, path} manifest read from manifest.xml: <manifest> with one
 // <screen title="..." path="..."/> per gallery group. Editing the file adds
@@ -30,12 +41,9 @@ namespace gallery {
 inline std::vector<std::pair<std::string, std::string>> manifest(
         const std::string& file = "manifest.xml") {
     std::vector<std::pair<std::string, std::string>> list;
-    std::ifstream f(file);
-    if (f.good()) {
-        std::stringstream ss;
-        ss << f.rdbuf();
+    if (auto contents = text(file)) {
         ogui::XmlParser p;
-        auto res = p.parse(ss.str());
+        auto res = p.parse(*contents);
         if (res.root) {
             for (const auto& c : res.root->children()) {
                 if (!c) continue;
@@ -64,12 +72,10 @@ inline void applyManifestTheme(const std::string& file = "manifest.xml") {
     static bool applied = false;
     if (applied) return;
     applied = true;
-    std::ifstream f(file);
-    if (!f.good()) return;
-    std::stringstream ss;
-    ss << f.rdbuf();
+    auto contents = text(file);
+    if (!contents) return;
     ogui::XmlParser p;
-    auto res = p.parse(ss.str());
+    auto res = p.parse(*contents);
     if (!res.root) return;
     const std::string* t = res.root->rawAttribute("theme");
     if (!t || t->empty()) return;
@@ -170,14 +176,12 @@ inline Gallery loadAll(float width, float height) {
     g.light = activeThemeIsLight();
     ogui::XmlParser parser;
     for (const auto& [title, path] : manifest()) {
-        std::ifstream f(path);
-        if (!f.good()) {
+        auto contents = text(path);
+        if (!contents) {
             std::cerr << "gallery: layout not found: " << path << "\n";
             continue;
         }
-        std::stringstream ss;
-        ss << f.rdbuf();
-        auto res = parser.parse(ss.str(), &ogui::activeTheme());
+        auto res = parser.parse(*contents, &ogui::activeTheme());
         if (!res.root) {
             std::cerr << "gallery: parse failed: " << path << "\n";
             for (const auto& e : res.errors) std::cerr << "  - " << e << "\n";

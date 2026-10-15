@@ -1,0 +1,429 @@
+// androidhost.cpp -- the ANativeWindow/EGL/AAsset side of ogui.
+//
+// Everything here is Android-only by necessity: the display, the surface, the
+// asset archive and the input event getters do not exist anywhere else. What
+// does not need a phone -- which finger the tree sees, what a cancellation is,
+// what key a key code means -- is in androidinput.cpp and is tested there.
+//
+// Off Android the class keeps its promises by refusing cleanly, the way the
+// desktop Host does off Windows, so one source tree builds for both.
+#include "ogui/androidhost.hpp"
+#include "ogui/assets.hpp"
+#include "ogui/glbackend.hpp"
+
+#include <cstdint>
+
+#ifdef __ANDROID__
+
+#include <android/asset_manager.h>
+#include <android/configuration.h>
+#include <android/input.h>
+#include <android/native_activity.h>
+#include <android/native_window.h>
+#include <android/log.h>
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
+#include <GLES3/gl3.h>
+
+#include <cstdarg>
+#include <ctime>
+#include <vector>
+
+namespace {
+
+void loge(const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    __android_log_vprint(ANDROID_LOG_ERROR, "ogui", fmt, ap);
+    va_end(ap);
+}
+
+double monoSeconds() {
+    timespec ts{};
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return static_cast<double>(ts.tv_sec) + ts.tv_nsec * 1e-9;
+}
+
+const char* eglName(EGLint e) {
+    switch (e) {
+    case EGL_SUCCESS:           return "EGL_SUCCESS";
+    case EGL_NOT_INITIALIZED:   return "EGL_NOT_INITIALIZED";
+    case EGL_BAD_ACCESS:        return "EGL_BAD_ACCESS";
+    case EGL_BAD_ALLOC:         return "EGL_BAD_ALLOC";
+    case EGL_BAD_ATTRIBUTE:     return "EGL_BAD_ATTRIBUTE";
+    case EGL_BAD_CONFIG:        return "EGL_BAD_CONFIG";
+    case EGL_BAD_CONTEXT:       return "EGL_BAD_CONTEXT";
+    case EGL_BAD_CURRENT_SURFACE: return "EGL_BAD_CURRENT_SURFACE";
+    case EGL_BAD_DISPLAY:       return "EGL_BAD_DISPLAY";
+    case EGL_BAD_MATCH:         return "EGL_BAD_MATCH";
+    case EGL_BAD_NATIVE_PIXMAP: return "EGL_BAD_NATIVE_PIXMAP";
+    case EGL_BAD_NATIVE_WINDOW: return "EGL_BAD_NATIVE_WINDOW";
+    case EGL_BAD_PARAMETER:     return "EGL_BAD_PARAMETER";
+    case EGL_BAD_SURFACE:       return "EGL_BAD_SURFACE";
+    default:                    return "an EGL error";
+    }
+}
+
+// The config an Android window can be drawn into. The one whose
+// EGL_NATIVE_VISUAL_ID *is* the window's pixel format is the one to take: the
+// compositor then copies instead of converting, and eglCreateWindowSurface
+// answers instead of EGL_BAD_MATCH.
+EGLConfig pickConfig(EGLDisplay dpy, ANativeWindow* win, std::string& err) {
+    const EGLint attribs[] = {
+        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT_KHR,
+        EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8,
+        EGL_NONE};
+    EGLConfig found[16];
+    EGLint n = 0;
+    if (!eglChooseConfig(dpy, attribs, found, 16, &n) || n < 1) {
+        err = "no renderable config for this window (EGL " +
+              std::string(eglName(eglGetError())) + ")";
+        return nullptr;
+    }
+    const int32_t want = ANativeWindow_getFormat(win);
+    for (EGLint i = 0; i < n; ++i) {
+        EGLint visual = 0;
+        eglGetConfigAttrib(dpy, found[i], EGL_NATIVE_VISUAL_ID, &visual);
+        if (want > 0 && visual == want) return found[i];
+    }
+    // Nothing lines up: ask the window for the format the config does render,
+    // which is the other half of the same handshake.
+    EGLint visual = 0;
+    eglGetConfigAttrib(dpy, found[0], EGL_NATIVE_VISUAL_ID, &visual);
+    ANativeWindow_setBuffersGeometry(win, 0, 0, visual);
+    return found[0];
+}
+
+bool motionAction(int32_t raw, ogui::AndroidAction& out) {
+    switch (raw & AMOTION_EVENT_ACTION_MASK) {
+    case AMOTION_EVENT_ACTION_DOWN:         out = ogui::AndroidAction::Down;         return true;
+    case AMOTION_EVENT_ACTION_POINTER_DOWN: out = ogui::AndroidAction::PointerDown;  return true;
+    case AMOTION_EVENT_ACTION_MOVE:         out = ogui::AndroidAction::Move;         return true;
+    case AMOTION_EVENT_ACTION_UP:           out = ogui::AndroidAction::Up;           return true;
+    case AMOTION_EVENT_ACTION_POINTER_UP:   out = ogui::AndroidAction::PointerUp;    return true;
+    case AMOTION_EVENT_ACTION_CANCEL:       out = ogui::AndroidAction::Cancel;       return true;
+    default: return false;   // a hover, a wheel, a button state: not a finger
+    }
+}
+
+} // namespace
+
+namespace ogui {
+
+AndroidHost::~AndroidHost() { destroy(); }
+
+bool AndroidHost::create(ANativeActivity* activity) {
+    if (m_display) return true;
+    if (!activity) { m_error = "no ANativeActivity"; return false; }
+    m_activity = activity;
+
+    EGLDisplay dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    if (dpy == EGL_NO_DISPLAY) {
+        m_error = "eglGetDisplay failed";
+        loge("%s", m_error.c_str());
+        return false;
+    }
+    EGLint major = 0, minor = 0;
+    if (!eglInitialize(dpy, &major, &minor)) {
+        m_error = std::string("eglInitialize: ") + eglName(eglGetError());
+        loge("%s", m_error.c_str());
+        return false;
+    }
+    m_display = dpy;
+    if (!eglBindAPI(EGL_OPENGL_ES_API)) {
+        m_error = std::string("eglBindAPI(ES): ") + eglName(eglGetError());
+        loge("%s", m_error.c_str());
+        return false;
+    }
+    m_startSeconds = monoSeconds();
+    return true;
+}
+
+void AndroidHost::destroy() {
+    if (m_display) {
+        // The backend frees its GL objects, which only works while a context is
+        // current -- so the surface goes last, not first.
+        if (m_surface) makeCurrent();
+        if (m_gl) {
+            if (m_context) makeCurrent();
+            m_gl->shutdown();
+            delete m_gl;
+            m_gl = nullptr;
+        }
+        m_glReady = false;
+        releaseWindow();
+        if (m_context) {
+            eglMakeCurrent(static_cast<EGLDisplay>(m_display), EGL_NO_SURFACE,
+                           EGL_NO_SURFACE, EGL_NO_CONTEXT);
+            eglDestroyContext(static_cast<EGLDisplay>(m_display),
+                              static_cast<EGLContext>(m_context));
+            m_context = nullptr;
+        }
+        eglTerminate(static_cast<EGLDisplay>(m_display));
+        m_display = nullptr;
+    }
+    m_config = nullptr;
+    m_window = nullptr;
+    m_width = m_height = 0;
+    // The reader we installed points at this activity's archive; leaving it in
+    // place would hand a dangling AAssetManager to the next readFile().
+    if (m_activity) setAssetReader(nullptr);
+    m_activity = nullptr;
+    m_input.reset();
+}
+
+bool AndroidHost::setWindow(ANativeWindow* window) {
+    if (!m_display) { m_error = "create() before setWindow()"; return false; }
+    if (!window) { m_error = "no window"; return false; }
+    auto dpy = static_cast<EGLDisplay>(m_display);
+    if (m_surface) releaseWindow();
+
+    EGLConfig cfg = pickConfig(dpy, window, m_error);
+    if (!cfg) { loge("%s", m_error.c_str()); return false; }
+
+    if (!m_context || m_config != static_cast<void*>(cfg)) {
+        if (m_context) {
+            eglMakeCurrent(dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+            eglDestroyContext(dpy, static_cast<EGLContext>(m_context));
+            m_context = nullptr;
+            // The pipeline was built for the context that is about to go.
+            delete m_gl;
+            m_gl = nullptr;
+            m_glReady = false;
+        }
+        m_config = cfg;
+        const EGLint ctxAttribs[] = {EGL_CONTEXT_CLIENT_VERSION, 3, EGL_NONE};
+        EGLContext ctx = eglCreateContext(dpy, cfg, EGL_NO_CONTEXT, ctxAttribs);
+        if (ctx == EGL_NO_CONTEXT) {
+            m_error = std::string("eglCreateContext(ES 3): ") +
+                      eglName(eglGetError());
+            loge("%s", m_error.c_str());
+            return false;
+        }
+        m_context = ctx;
+    }
+
+    EGLSurface surf = eglCreateWindowSurface(dpy, cfg, window, nullptr);
+    if (surf == EGL_NO_SURFACE) {
+        // A window that kept its own format anyway: insist on the config's.
+        EGLint visual = 0;
+        eglGetConfigAttrib(dpy, cfg, EGL_NATIVE_VISUAL_ID, &visual);
+        ANativeWindow_setBuffersGeometry(window, 0, 0, visual);
+        surf = eglCreateWindowSurface(dpy, cfg, window, nullptr);
+    }
+    if (surf == EGL_NO_SURFACE) {
+        m_error = std::string("eglCreateWindowSurface: ") +
+                  eglName(eglGetError());
+        loge("%s", m_error.c_str());
+        return false;
+    }
+    m_surface = surf;
+    m_window = window;
+
+    if (!makeCurrent()) return false;
+    eglQuerySurface(dpy, surf, EGL_WIDTH, &m_width);
+    eglQuerySurface(dpy, surf, EGL_HEIGHT, &m_height);
+
+    if (!m_gl) m_gl = new GlBackend();
+    if (!m_glReady) {
+        // No getter: the backend's own Android loader tries libGLESv2 and then
+        // eglGetProcAddress, which is the whole of what a phone offers.
+        if (!m_gl->init(nullptr, GlBackend::Profile::OpenGLES)) {
+            m_error = "GlBackend: " + m_gl->lastError();
+            loge("%s", m_error.c_str());
+            return false;
+        }
+        m_glReady = true;
+    }
+    return true;
+}
+
+void AndroidHost::releaseWindow() {
+    if (!m_display) return;
+    auto dpy = static_cast<EGLDisplay>(m_display);
+    if (m_surface) {
+        eglMakeCurrent(dpy, EGL_NO_SURFACE, EGL_NO_SURFACE,
+                       static_cast<EGLContext>(m_context));
+        eglDestroySurface(dpy, static_cast<EGLSurface>(m_surface));
+        m_surface = nullptr;
+    }
+    m_window = nullptr;
+    m_width = m_height = 0;
+}
+
+bool AndroidHost::hasWindow() const { return m_surface != nullptr; }
+
+bool AndroidHost::makeCurrent() {
+    auto dpy = static_cast<EGLDisplay>(m_display);
+    if (!eglMakeCurrent(dpy, static_cast<EGLSurface>(m_surface),
+                        static_cast<EGLSurface>(m_surface),
+                        static_cast<EGLContext>(m_context))) {
+        m_error = std::string("eglMakeCurrent: ") + eglName(eglGetError());
+        return false;
+    }
+    return true;
+}
+
+float AndroidHost::elapsed() const {
+    return static_cast<float>(monoSeconds() - m_startSeconds);
+}
+
+float AndroidHost::dpiScale() const {
+    if (!m_activity || !m_activity->assetManager) return 1.0f;
+    AConfiguration* cfg = AConfiguration_new();
+    if (!cfg) return 1.0f;
+    AConfiguration_fromAssetManager(cfg, m_activity->assetManager);
+    const int32_t d = AConfiguration_getDensity(cfg);
+    AConfiguration_delete(cfg);
+    // The density buckets, not the raw dpi: Screen::scale is pixels per logical
+    // unit, and a layout authored in those units then measures out the same
+    // physical size on every bucket. An unknown bucket draws at 1.0.
+    switch (d) {
+    case ACONFIGURATION_DENSITY_LOW:     return 0.75f;
+    case ACONFIGURATION_DENSITY_MEDIUM:  return 1.0f;
+    case ACONFIGURATION_DENSITY_TV:      return 1.3333f;
+    case ACONFIGURATION_DENSITY_HIGH:    return 1.5f;
+    case ACONFIGURATION_DENSITY_XHIGH:   return 2.0f;
+    case ACONFIGURATION_DENSITY_XXHIGH:  return 3.0f;
+    case ACONFIGURATION_DENSITY_XXXHIGH: return 4.0f;
+    default:                             return 1.0f;
+    }
+}
+
+bool AndroidHost::installAssetReader() {
+    AAssetManager* am = m_activity ? m_activity->assetManager : nullptr;
+    if (!am) { m_error = "the activity carries no AAssetManager"; return false; }
+    setAssetReader([am](const std::string& name)
+                       -> std::optional<std::vector<uint8_t>> {
+        AAsset* a = AAssetManager_open(am, name.c_str(), AASSET_MODE_BUFFER);
+        // Declined, not empty: a name the archive does not have still belongs
+        // to the filesystem, and readFile() falls through to it.
+        if (!a) return std::nullopt;
+        const off64_t len = AAsset_getLength64(a);
+        std::vector<uint8_t> out;
+        if (len > 0) {
+            out.resize(static_cast<size_t>(len));
+            if (AAsset_read(a, out.data(), out.size()) !=
+                static_cast<int>(out.size()))
+                out.clear();
+        }
+        AAsset_close(a);
+        return out;
+    });
+    return true;
+}
+
+bool AndroidHost::onInputEvent(AInputEvent* event, InputState& io) {
+    if (!event) return false;
+    switch (AInputEvent_getType(event)) {
+    case AINPUT_EVENT_TYPE_MOTION: {
+        AndroidAction action;
+        const int32_t raw = AMotionEvent_getAction(event);
+        if (!motionAction(raw, action)) return false;
+        const int index = (raw & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >>
+                          AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT;
+        const size_t count = AMotionEvent_getPointerCount(event);
+        std::vector<AndroidPointer> pts;
+        pts.reserve(count);
+        for (size_t i = 0; i < count; ++i)
+            pts.push_back({AMotionEvent_getPointerId(event, i),
+                           AMotionEvent_getX(event, i),
+                           AMotionEvent_getY(event, i)});
+        m_input.onMotion(io, action, index, pts.data(),
+                         static_cast<int>(count));
+        return true;
+    }
+    case AINPUT_EVENT_TYPE_KEY: {
+        const int32_t a = AKeyEvent_getAction(event);
+        if (a != AKEY_EVENT_ACTION_DOWN && a != AKEY_EVENT_ACTION_UP)
+            return false;
+        m_input.onKey(io, AKeyEvent_getKeyCode(event),
+                      a == AKEY_EVENT_ACTION_DOWN,
+                      (AKeyEvent_getFlags(event) & AKEY_EVENT_FLAG_LONG_PRESS)
+                          != 0);
+        return true;
+    }
+    default:
+        return false;
+    }
+}
+
+bool AndroidHost::present(Kernel& kernel) {
+    if (!m_surface) { m_error = "no window to present"; return false; }
+    auto dpy = static_cast<EGLDisplay>(m_display);
+    if (!makeCurrent()) return false;
+
+    glViewport(0, 0, m_width, m_height);
+    glClearColor(m_clearR, m_clearG, m_clearB, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    // flipY stays off: the draw list's y=0 is the top of the screen and GL's y=0
+    // is the bottom of the framebuffer, which is the pair the default
+    // projection already lines up.
+    m_gl->render(kernel.drawList(), m_width, m_height, false);
+
+    if (!eglSwapBuffers(dpy, static_cast<EGLSurface>(m_surface))) {
+        const EGLint e = eglGetError();
+        m_error = std::string("eglSwapBuffers: ") + eglName(e);
+        // A surface the window manager took back is the common case and is
+        // recoverable: drop it so the app re-creates it on the next
+        // APP_CMD_INIT_WINDOW instead of spinning on a dead swap.
+        if (e == EGL_BAD_SURFACE) releaseWindow();
+        loge("%s", m_error.c_str());
+        return false;
+    }
+    return true;
+}
+
+void AndroidHost::showKeyboard() {
+    if (m_activity)
+        ANativeActivity_showSoftInput(m_activity,
+                                      ANATIVEACTIVITY_SHOW_SOFT_INPUT_FORCED);
+}
+
+void AndroidHost::hideKeyboard() {
+    if (m_activity) ANativeActivity_hideSoftInput(m_activity, 0);
+}
+
+void AndroidHost::setClearColor(float r, float g, float b) {
+    m_clearR = r; m_clearG = g; m_clearB = b;
+}
+
+} // namespace ogui
+
+#else   // !__ANDROID__ -- the host is declared everywhere and opens nowhere else
+
+namespace ogui {
+
+AndroidHost::~AndroidHost() = default;
+
+bool AndroidHost::create(ANativeActivity*) {
+    m_error = "AndroidHost requires Android";
+    return false;
+}
+void AndroidHost::destroy() {}
+bool AndroidHost::setWindow(ANativeWindow*) {
+    m_error = "AndroidHost requires Android";
+    return false;
+}
+void AndroidHost::releaseWindow() {}
+bool AndroidHost::hasWindow() const { return false; }
+float AndroidHost::elapsed() const { return 0.0f; }
+float AndroidHost::dpiScale() const { return 1.0f; }
+bool AndroidHost::installAssetReader() {
+    m_error = "AndroidHost requires Android";
+    return false;
+}
+bool AndroidHost::onInputEvent(AInputEvent*, InputState&) { return false; }
+bool AndroidHost::present(Kernel&) {
+    m_error = "AndroidHost requires Android";
+    return false;
+}
+void AndroidHost::showKeyboard() {}
+void AndroidHost::hideKeyboard() {}
+void AndroidHost::setClearColor(float r, float g, float b) {
+    m_clearR = r; m_clearG = g; m_clearB = b;
+}
+} // namespace ogui
+
+#endif  // __ANDROID__

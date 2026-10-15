@@ -3,10 +3,12 @@
 GUIs for OpenGL applications, described in XML.
 
 ogui is a small retained-mode UI library: you author a screen as an XML
-document, ogui turns it into a widget tree, feeds your mouse/keyboard into
+document, ogui turns it into a widget tree, feeds your mouse/keyboard/touch into
 it, and hands you back a `DrawList` of 2D geometry. Rendering happens either
 into a window owned by your host (`Kernel` + `GlBackend`) or one the library
-creates for you (`ogui::Host`, a built-in Win32/WGL window and event loop).
+creates for you (`ogui::Host`, a built-in Win32/WGL window and event loop, or
+`ogui::AndroidHost`, a `NativeActivity` + EGL surface — see
+[The Android host](#the-android-host)).
 
 * **XML layouts** — `<window>`, `<column>`, `<button>`, `<tabs>`, ... with
   named styles, authored in a text editor and hot-reloaded by re-parsing.
@@ -17,7 +19,10 @@ creates for you (`ogui::Host`, a built-in Win32/WGL window and event loop).
   screen composes instead of repeating itself
   (see [`docs/xml-reference.md`](docs/xml-reference.md#templates-components)).
 * **Input dispatch** — hover, capture (drag), focus, key routing, modifiers,
-  click bindings, hover tooltips.
+  click bindings, hover tooltips, and the same pointer from a finger: every
+  touch of the event is carried, the kernel picks the one a gesture belongs to,
+  a drag over a scrollable widget becomes a pan and a flick, and `CANCEL`
+  releases without clicking.
 * **Visual states** — declarative `hover:`/`pressed:`/`focus:`/`checked:`/
   `selected:`/`disabled:` overlays on colors, border width and radius, with
   optional `transition="0.2"` blending — no script required.
@@ -88,6 +93,9 @@ creates for you (`ogui::Host`, a built-in Win32/WGL window and event loop).
 * For the demo: OpenGL 3.3 core or OpenGL ES 3.0 (WGL on Windows, GLX/EGL
   elsewhere). The `gl` test needs EGL plus `libGLESv2` to build; without them
   it is skipped, not failed.
+* Only for the APK (`./scripts/build.sh android`): an Android NDK (r30 tested)
+  and an SDK with `build-tools` + a `platforms/android-*`, and a JDK for
+  `apksigner`. Everything else builds and tests without any of it.
 
 ## Building
 
@@ -98,6 +106,10 @@ creates for you (`ogui::Host`, a built-in Win32/WGL window and event loop).
 # Windows demo.exe cross-compiled with mingw (static, no DLL hell)
 # -> written to debug/demo.exe together with the XML screens it loads
 ./scripts/build.sh win
+
+# Android APK, cross-compiled with the NDK, aligned and debug-signed
+# -> build-apk/ogui-demo-debug.apk   (needs ANDROID_NDK / ANDROID_SDK, see below)
+./scripts/build.sh android
 
 # Remove build trees
 ./scripts/build.sh clean
@@ -129,7 +141,7 @@ Win32 + WGL demo directly (the project compiles the library sources itself).
 cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-bad,
                                         # custom-widget, kernel, unicode, screens,
                                         # scrollbar, script, properties, templates,
-                                        # examples, golden, gl, touch, asset
+                                        # examples, golden, gl, touch, asset, android
 ```
 
 * `parser` — XML tokenizer, attributes, styles, error reporting.
@@ -209,6 +221,17 @@ cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-b
   name it declines falls through to the filesystem, a name nobody has is
   reported as a missing file rather than an empty one, and with no reader
   installed the library reads the same files it always did.
+* `android` — what a motion or key event *means*, tested without a phone: the
+  first finger becomes the pointer, a second joins without reordering the list,
+  the lifted one leaves its neighbours alone, a cancel releases without
+  clicking, more fingers than the state holds are not sent, an event with no
+  pointers at all clears the screen, and the window taking them back clears
+  everything. Plus the keyboard: Android key codes arrive in the library's own
+  language, modifiers are keys like any other, auto-repeat keeps typing,
+  shift and caps lock change only the letters, and the IME and the keys share
+  one character queue. Those rules are plain data in `AndroidInputBridge`; only
+  the getters need a device, so the semantics are covered here and the shell
+  that calls the getters is ten lines of it.
 
 Regenerate the golden after an intentional visual change:
 
@@ -656,6 +679,13 @@ set with `focusable` and `accessible`. `Enter`/`Space` activate a focused
 `button` through `Kernel::clickWidget()` — the same path a mouse release
 takes — while a `keybind` mid-capture keeps the keys for itself.
 
+A host translates its platform's event language into `KeyCode` and fills
+`keyDown[]`; `AndroidInputBridge::onKey()` is that translation for the
+`AKeyEvent` codes, and it also synthesizes `lastChar` from the code plus the
+shift/caps state, because the NDK exposes no unicode getter on a key event. Text
+that arrives already composed — a soft keyboard, an input connection — goes
+through `commitText()` and lands in the same one-code-point-per-frame queue.
+
 ## Events and propagation
 
 Five semantic events — `click`, `change`, `submit`, `focus`, `blur` — are typed
@@ -858,17 +888,75 @@ does not exist there. A host on any other platform just supplies its own loader:
 backend.init([](const char* name) { return myContextGetProcAddress(name); });
 ```
 
-What is **not** there yet is the Android host. `ogui::Host` is Win32/WGL, so an
-Android port must supply its own `NativeActivity`/`AWindow` + EGL window surface
-and fill `InputState::touches` from `AMotionEvent` (pointer ids,
-`ACTION_CANCEL`); the kernel already folds that list into its one pointer and
-already synthesizes the pan and the flick, so what is left on the gesture side
-is the long-press and the pinch. Reading the layouts is no longer one of the
-missing pieces — `setAssetReader()` puts `AAsset` behind the same call the
-desktop takes off the filesystem (see [Where the bytes come from](#where-the-bytes-come-from)).
-Text input needs the IME, since `InputState::lastChar` arrives from key events
-today. That host is the next phase; the renderer and the loaders it would use
-are already portable.
+### The Android host
+
+The host that was missing is `AndroidHost` (`include/ogui/androidhost.hpp`): a
+`NativeActivity` window, an EGL window surface, the touch stream, the asset
+reader and the frame. Build the demo with it:
+
+```sh
+ANDROID_NDK=/opt/android-ndk-r30 ANDROID_SDK=/opt/android-sdk ./scripts/build.sh android
+# -> build-apk/ogui-demo-debug.apk, aligned and signed with the debug key
+```
+
+`build.sh android` cross-compiles `oggui_app` for every ABI in `ANDROID_ABIS`
+(default `arm64-v8a`, one CMake tree per ABI, `-DANDROID_STL=c++_static`), strips
+what the dynamic linker never asks for, stages the screens the demo loads under
+`assets/`, links `android/AndroidManifest.xml` with `aapt2`, appends the `.so`s
+stored — uncompressed, because `extractNativeLibs` is false and the loader mmaps
+them straight out of the archive — then `zipalign -p 4`, `apksigner sign`,
+`apksigner verify`. No Gradle and no Java: `android.app.NativeActivity` is a
+framework class, so the manifest says `android:hasCode="false"` and the APK is
+one library plus its assets. `ANDROID_API` (default 24) and
+`ANDROID_DEBUG_KEYSTORE` are the other knobs; the debug key is generated with
+`keytool` on first use if `~/.android/debug.keystore` is not there.
+
+For your own app the CMake side is one toolchain invocation:
+
+```sh
+cmake -S . -B build-android -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
+      -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24
+```
+
+and `find_package(ogui)` links `EGL`, `GLESv3`, `android` and `log` for you —
+the library still links no GL of any kind on every other platform.
+
+Two splits make the interesting half of it testable without a phone:
+
+* **`AndroidInputBridge` versus the device getters.** Which finger the tree
+  sees, that a lift drops by id and not by index, that `ACTION_CANCEL` is not a
+  release, what an Android key code means and which character a key types — all
+  plain data over `InputState`, inside the library, covered by the `android`
+  test. `AndroidHost::onInputEvent()` is the thin shell that reads
+  `AMotionEvent`/`AKeyEvent` and hands that data over.
+* **The EGL context versus the window surface.** A `NativeActivity` has no
+  window when it is created, and a window's pixel format is the only thing that
+  tells EGL which config to choose. So the config and the ES 3 context are made
+  with the first `ANativeWindow` (`setWindow()`, with one
+  `ANativeWindow_setBuffersGeometry` retry after `EGL_BAD_MATCH`) and survive
+  `releaseWindow()` — which is what keeps the GPU font atlases alive across
+  pause, resume and rotation, and `configChanges` in the manifest is what lets
+  rotation take that route instead of tearing the process down.
+
+`present()` renders with `flipY = false`: the draw list's `y = 0` is the top of
+the screen and a window framebuffer's `y = 0` is its bottom, which cancel out.
+`dpiScale()` reads the density bucket off the `AAssetManager` configuration, and
+the font manager searches `/system/fonts` for the faces that are actually there
+(`Roboto-Regular`, `RobotoMono-Regular`, `DroidSansMono`, `NotoSerif-Regular`,
+`DroidSerif-Regular`) before falling through to the desktop candidates.
+`examples/android_main.cpp` is the whole app: the gallery demo, `fit()` on the
+device size, one frame per input event and per `APP_CMD_REDRAW_NEEDED`, and a
+hand-drained `ALooper_pollOnce` loop with a 16 ms budget while a window is up
+(`ALooper_pollAll` is documented as obsoleted: it "may ignore wakes").
+
+What it does not do is the soft keyboard's text. NDK r30 ships no
+`AInputConnection` header, so a pure-NDK composing-text path is not available;
+the host shows and hides the input method (`showKeyboard()`/`hideKeyboard()`)
+and translates key events, which covers a hardware keyboard, and
+`AndroidInputBridge::commitText()` is the seam a Java-side input connection
+would call to put a soft keyboard's text — composing updates included — into the
+same character queue the keys already use. `ACTION_SCROLL` and hover events are
+not translated either: nothing here to check them against.
 
 ## Repository layout
 
@@ -876,9 +964,11 @@ are already portable.
 include/ogui/     public headers (api, kernel, widgets, xmlparser, ...)
 src/              library implementation
 examples/         demo.cpp (headless), demo_win32.cpp (WGL gallery host),
+                  android_main.cpp (NativeActivity gallery host),
                   gallery.hpp (multi-screen loader), screenshot.cpp,
                   validate.cpp (ogui_validate), custom_widget.cpp,
                   hello.xml + counter.xml (the docs' runnable examples)
+android/          AndroidManifest.xml for the demo APK (no Java)
 layouts/          extra gallery screens (text, selection, data, containers)
 assets/           files the demo loads at runtime (checker.png for <image>)
 manifest.xml      gallery screen list (edit to add/remove screens)
@@ -887,7 +977,7 @@ debug/            test package: demo.exe, its XML screens (synced by
                   folder whole via SFTP to test on Windows
 debug/tests/      unit tests + debug/tests/golden/ (golden image + meta)
 cmake/            CMake package config template
-scripts/build.sh  host / win / clean
+scripts/build.sh  host / win / android / clean
 thirdparty/stb    vendored stb_truetype + stb_image[_write]
 thirdparty/lua    vendored Lua 5.4 interpreter sources (scripting)
 ```
@@ -931,11 +1021,15 @@ thirdparty/lua    vendored Lua 5.4 interpreter sources (scripting)
   the CPU is not bit-exact on the GPU.
 * The ES 3.0 path is verified against a Mesa software (`llvmpipe`) context, the
   only one this machine can make headlessly. It has not been run on a vendor
-  Android GPU driver, and there is no Android host yet — see
-  [Porting to OpenGL ES / Android](#porting-to-opengl-es--android).
+  Android GPU driver, and the APK has not been installed on a device — see
+  [The Android host](#the-android-host).
 * Touch gestures stop at the pan and the flick. There is no long-press (so a
   finger cannot open a `contextmenu`) and no pinch; `InputState` carries every
   finger, so the kernel has what it needs to synthesize both, but no widget is
   handed the gesture yet. Panning a text area with a finger is declined on
   purpose: a `textinput`/`textarea` drag is a selection, and the enclosing
   scrollable ancestor takes the drag instead.
+* On Android the soft keyboard can be shown but its text has nowhere to go:
+  the NDK exposes no `AInputConnection`, so composing input needs a Java-side
+  input connection feeding `AndroidInputBridge::commitText()`. Key events are
+  translated, so a hardware keyboard types today.

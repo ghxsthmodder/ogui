@@ -521,6 +521,11 @@ FontManager::FontManager() {
     const char* sysRoot = std::getenv("SystemRoot");
     std::string win = sysRoot ? std::string(sysRoot) : std::string("C:\\Windows");
     m_dirs.push_back(win + "\\Fonts");
+#elif defined(__ANDROID__)
+    // One flat, world-readable directory, and no per-user font folder to look
+    // in. A layout name given to setFontPath() can also be a name inside the
+    // APK, which is what the asset reader answers for.
+    m_dirs.push_back("/system/fonts");
 #else
     m_dirs.push_back("/usr/share/fonts");
     m_dirs.push_back("/usr/local/share/fonts");
@@ -574,13 +579,16 @@ std::string FontManager::resolve(const std::string& family) const {
     std::vector<std::string> candidates;
     if (family == "serif") {
         candidates = {"DejaVuSerif.ttf", "FreeSerif.ttf", "LiberationSerif-Regular.ttf",
-                      "Times_New_Roman.ttf", "times.ttf"};
+                      "Times_New_Roman.ttf", "times.ttf",
+                      "NotoSerif-Regular.ttf", "DroidSerif-Regular.ttf"};
     } else if (family == "mono" || family == "monospace") {
         candidates = {"DejaVuSansMono.ttf", "FreeMono.ttf", "LiberationMono-Regular.ttf",
-                      "consola.ttf", "cour.ttf"};
+                      "consola.ttf", "cour.ttf",
+                      "RobotoMono-Regular.ttf", "DroidSansMono.ttf"};
     } else {   // sans (default)
         candidates = {"DejaVuSans.ttf", "FreeSans.ttf", "LiberationSans-Regular.ttf",
-                      "arial.ttf", "segoeui.ttf", "Ubuntu-R.ttf"};
+                      "arial.ttf", "segoeui.ttf", "Ubuntu-R.ttf",
+                      "Roboto-Regular.ttf", "DroidSans.ttf"};
     }
 
     for (const auto& dir : m_dirs) {

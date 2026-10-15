@@ -901,11 +901,31 @@ compatibilidade e capacidade de manutenção.
     **pula** (não falha) onde não há contexto possível. A correção de
     arredondamento do `SoftwareRenderer`, cujo blend truncava em vez de
     arredondar para o mais próximo, saiu do mesmo teste.
--   [ ] Hospedeiro Android: `NativeActivity` com superfície EGL
-    (`eglCreateWindowSurface` sobre o `ANativeWindow`, no lugar do pbuffer que
-    o teste usa) e um config EGL cujo formato de framebuffer o swap aceite.
-    Falta só o hospedeiro: os layouts já entram por `AAsset` pela costura de
-    leitura de assets, e o toque já cabe em `InputState`.
+-   [x] Hospedeiro Android: `NativeActivity` com superfície EGL real
+    (`eglCreateWindowSurface` sobre o `ANativeWindow`, no lugar do pbuffer que o
+    teste usa). O `AndroidHost` cria a superfície, o contexto ES 3 e o
+    `GlBackend` no primeiro `APP_CMD_INIT_WINDOW` --- um config só pode
+    concordar com o formato de pixels da janela, e uma `NativeActivity` não tem
+    janela nenhuma quando nasce, então config e contexto são escolhidos com a
+    primeira janela e sobrevivem ao `releaseWindow()`: os atlas de fonte na GPU
+    atravessam pausa, retomada e rotação, e o `configChanges` do manifest é o
+    que deixa a rotação seguir esse caminho em vez de demolir o processo. A
+    outra metade da separação é a entrada: as *regras* --- qual dedo a árvore
+    vê, que um levantar remove por id e não por índice, que `ACTION_CANCEL` não
+    é um release, o que cada `AKeyEvent` significa e que caractere ele digita
+    --- moram em `AndroidInputBridge`, sobre dados planos, e são testadas no
+    host (`debug/tests/android_test.cpp`); o `onInputEvent()` do hospedeiro é só
+    quem chama os getters do `AMotionEvent`, que só existem num telefone. Os
+    layouts entram por `AAsset` pela costura de assets, a densidade vira
+    `dpiScale()`, `/system/fonts` entra na busca de fontes, e
+    `./scripts/build.sh android` produz um APK assinado com a chave de debug e
+    verificado por `apksigner`: sem Gradle e sem Java (`android:hasCode="false"`),
+    a `liboggui_app.so` armazenada sem comprimir porque o carregador a faz
+    `mmap` direto do arquivo, e uma etapa de `strip` antes de empacotar porque a
+    biblioteca sem desbastar é dez vezes o que o vinculador precisa. **Nunca foi
+    instalado num aparelho**: o que foi provado aqui é que compila para
+    `arm64-v8a`, que o APK é bem-formado e assinado, e que as regras de entrada
+    fazem o que dizem.
 -   [x] Toque no `InputState`: a lista de dedos entra pelo estado
     (`touches[]` com o id do `AMotionEvent` e a posição em pixels de
     dispositivo, `touchCount`, `touchCancelled`) e o `Kernel` a dobra no único
@@ -953,10 +973,15 @@ compatibilidade e capacidade de manutenção.
     lazy do `treeview`), que listam pastas em vez de ler um nome. Testes em
     `debug/tests/asset_test.cpp`.
 -   [ ] Entrada de texto pelo IME: `InputState::lastChar` chega de eventos de
-    teclado, e o NDK não expõe o método de entrada a código nativo --- um campo
-    de texto no Android precisa da ponte JNI para a `InputMethodManager`, dos
-    callbacks `onStartInput`/`onFinishInput` da `NativeActivity` e do texto
-    confirmado que por eles volta, para receber composing e mutações de seleção.
+    teclado, e o NDK r30 não expõe cabeçalho de `AInputConnection` nenhum --- um
+    campo de texto no Android precisa da ponte JNI para a `InputMethodManager`,
+    dos callbacks `onStartInput`/`onFinishInput` e do texto confirmado que por
+    eles volta, para receber composing e mutações de seleção. Isso pede Java no
+    pacote, e o host de hoje é `android:hasCode="false"`. O que já está pronto
+    é o destino: `AndroidInputBridge::commitText()` coloca numa fila de
+    caracteres qualquer texto já composto, `deliverChar()` o entrega um por
+    quadro, e o `android_main.cpp` mostra e esconde o teclado conforme o foco é
+    um `textinput`. Falta quem chame `commitText()`.
     `Kernel::focusedWidget()` já diz a quem entregar.
 
 **Resultado esperado:** o mesmo `DrawList` renderiza em desktop GL, GLES 3.0 e
