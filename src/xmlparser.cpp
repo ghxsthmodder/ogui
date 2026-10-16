@@ -707,6 +707,12 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
     if (!w) return;
 
     auto get = [&](const char* key) -> const std::string* {
+        if (m_traceAttributes) {
+            auto& names = m_tracedAttributes[tag];
+            if (std::find(names.begin(), names.end(), key) == names.end()) {
+                names.emplace_back(key);
+            }
+        }
         auto it = attrs.find(key);
         return it == attrs.end() ? nullptr : &it->second;
     };
@@ -1594,6 +1600,20 @@ void XmlParser::addError(const std::string& msg) const {
 
 void XmlParser::addWarning(const std::string& msg) const {
     if (m_result) m_result->warnings.push_back(where() + ": " + msg);
+}
+
+std::vector<std::string> XmlParser::tracedTags() const {
+    std::vector<std::string> out;
+    out.reserve(m_tracedAttributes.size());
+    for (const auto& [tag, names] : m_tracedAttributes) out.push_back(tag);
+    return out;
+}
+
+std::vector<std::string> XmlParser::tracedAttributes(
+    const std::string& tag) const {
+    auto it = m_tracedAttributes.find(tag);
+    return it == m_tracedAttributes.end() ? std::vector<std::string>{}
+                                          : it->second;
 }
 
 XmlParser::ParseResult XmlParser::parse(const std::string& xml, const Theme* theme) {

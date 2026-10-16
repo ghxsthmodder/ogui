@@ -73,6 +73,22 @@ public:
         std::string body;   // raw markup between <template> and </template>
     };
 
+    // ---- vocabulary tracing ----------------------------------------------
+    // Off by default, and free while it stays off. When on, every attribute
+    // name applyAttributes() asks about is remembered under the element's tag,
+    // whether or not that element carried it -- which is what makes the whole
+    // authored vocabulary visible from one parse. The XML attribute names and
+    // the property registry are the two halves of one contract; a test reads
+    // this instead of keeping a list of names by hand, so a `get("...")` that
+    // no property declares fails the suite rather than quietly widening the
+    // gap between what a layout can write and what a script can read.
+    void setAttributeTrace(bool on) { m_traceAttributes = on; }
+    void clearAttributeTrace() { m_tracedAttributes.clear(); }
+    // Tags seen so far, alphabetically.
+    std::vector<std::string> tracedTags() const;
+    // Every name asked about for `tag`, first-seen order, duplicates dropped.
+    std::vector<std::string> tracedAttributes(const std::string& tag) const;
+
 private:
     std::string m_text;
     const Theme* m_theme = nullptr;
@@ -202,6 +218,10 @@ private:
                                        const std::map<std::string, std::string>& attrs);
 
     std::shared_ptr<Widget> m_root = nullptr;
+
+    // Vocabulary trace, filled only while setAttributeTrace(true) (see it).
+    bool m_traceAttributes = false;
+    std::map<std::string, std::vector<std::string>> m_tracedAttributes;
 
     // Active result being filled (points into the ParseResult returned by
     // parse()/parseFile()).

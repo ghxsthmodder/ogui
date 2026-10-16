@@ -266,10 +266,14 @@ setters. It is also the parser's referee: `checkWidgetProperty()` answers the
 same question a write would, without applying anything, which is what lets
 `applyAttributes()` report `height="abc"` as an error after the fact (see
 [Error reporting](#error-reporting)). All 61 classes the tag registry can build
-are declared — 1975 read/write properties between them, and
+are declared — 2755 properties between them, 2723 of which both read and write,
+and
 `debug/tests/properties_test.cpp`
 writes each one back onto itself and checks the value reads out unchanged, then
-walks the factory and refuses a tag whose class has no table.
+walks the factory and refuses a tag whose class has no table, and finally turns
+on `XmlParser::setAttributeTrace()`, parses one element per tag and refuses an
+attribute name the parser asked about that no property of the class it built
+declares.
 
 Two shapes fall out of that. A spec a widget does not keep a copy of is
 write-only and its resolved shape reads back separately: `columns="120,1fr"` on
@@ -788,12 +792,14 @@ colour, and the widget looks like an intentional flat dark rectangle. The check
 costs nothing at runtime (it runs while parsing) and turns those into a lint hit
 for `ogui_validate` and for the `errors` a host already receives.
 
-What stays silent, on purpose: a name no property exposes (`thumbcolor`, `active`)
-— those attributes are still the parser's private vocabulary and reporting them
-would call valid authoring a mistake — the relative geometry forms (`width="50%"`,
+What stays silent, on purpose: the relative geometry forms (`width="50%"`,
 `height="fill"`) that a number type does not describe, and a value that only the
 widget's own setter can reject (a `keybind` naming no entry), which is caught when
-the widget is built rather than by the registry.
+the widget is built rather than by the registry. Nothing else is silent: every
+attribute name `applyAttributes()` asks about is a declared property of the class
+it was asking about, and `debug/tests/properties_test.cpp` proves that by tracing
+the parser (`XmlParser::setAttributeTrace()`) over one element per tag rather than
+by keeping a list of names.
 
 `ogui_validate` (built from `examples/validate.cpp`) is the command-line driver
 for that reporting — it parses files or a whole `manifest.xml`, prints each

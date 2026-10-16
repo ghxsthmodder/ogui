@@ -203,9 +203,11 @@ cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-b
   `return false` stopping the walk.
 * `properties` — the typed property registry: base chains and per-class
   overrides, host classes declaring their own, a write/read round-trip over
-  every one of the 1975 built-in properties that read and write, a walk of the
-  tag factory refusing any widget that reaches runtime without a table,
-  per-type value validation with its error text, the side-effect-free
+  every one of the 2723 built-in properties that read and write, a walk of the
+  tag factory refusing any widget that reaches runtime without a table, the
+  trace-driven check that every attribute name the XML parser asks about is a
+  declared property of the class it built, per-type value validation with its
+  error text, the side-effect-free
   `checkWidgetProperty()` the XML parser screens attributes with, and the Lua
   `ogui.get`/`ogui.set` fallback plus `ogui.props`.
 * `templates` — reusable components: parameter defaults and instance

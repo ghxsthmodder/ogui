@@ -353,6 +353,7 @@ public:
 
     // `transition="0.2"`: seconds to blend between state values (#15).
     void setVisualTransition(float seconds) { m_transDur = seconds < 0 ? 0 : seconds; }
+    float visualTransition() const { return m_transDur; }
 
     uint8_t visualStateBits() const;
     void refreshVisualState();

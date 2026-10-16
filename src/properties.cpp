@@ -487,6 +487,66 @@ std::vector<std::string> splitList(const std::string& text, char sep) {
     return out;
 }
 
+// ---- composite single-string attributes ----------------------------------
+// `anchor` and `shadow` pack several numbers into one authored value. The
+// parser reads the same shapes, so a registry write and an XML attribute land
+// in the same fields and `ogui.get` reads them back in the form XML accepts.
+
+// left/right/top/bottom, in the order the Widget stores the bits.
+bool anchorToken(const std::string& token, uint8_t& bit) {
+    if (token == "l" || token == "left")   { bit = Widget::AnchorLeft; return true; }
+    if (token == "r" || token == "right")  { bit = Widget::AnchorRight; return true; }
+    if (token == "t" || token == "top")    { bit = Widget::AnchorTop; return true; }
+    if (token == "b" || token == "bottom") { bit = Widget::AnchorBottom; return true; }
+    return false;
+}
+
+std::string formatAnchor(uint8_t bits) {
+    std::string out;
+    const std::pair<uint8_t, const char*> named[] = {
+        {Widget::AnchorLeft, "left"}, {Widget::AnchorRight, "right"},
+        {Widget::AnchorTop, "top"}, {Widget::AnchorBottom, "bottom"}};
+    for (const auto& [bit, name] : named) {
+        if (!(bits & bit)) continue;
+        if (!out.empty()) out += ",";
+        out += name;
+    }
+    return out;
+}
+
+uint8_t parseAnchor(const std::string& text) {
+    uint8_t bits = 0;
+    std::string tok;
+    auto flush = [&bits, &tok]() {
+        uint8_t bit = 0;
+        if (anchorToken(tok, bit)) bits |= bit;
+        tok.clear();
+    };
+    for (const char c : text) {
+        if (c == ',' || c == ' ' || c == ';' || c == '|') { flush(); continue; }
+        tok.push_back(static_cast<char>(
+            std::tolower(static_cast<unsigned char>(c))));
+    }
+    flush();
+    return bits;
+}
+
+// "blur" | "blur,dy" | "blur,dx,dy" -- the order the parser has always taken.
+std::vector<float> parseNumberList(const std::string& text) {
+    std::vector<float> out;
+    std::string tok;
+    auto flush = [&out, &tok]() {
+        double v = 0.0;
+        if (!tok.empty() && parseNumber(tok, v)) out.push_back(static_cast<float>(v));
+        tok.clear();
+    };
+    for (const char c : text) {
+        if (c == ',' || c == ' ' || c == ';' || c == '|') { flush(); continue; }
+        tok.push_back(c);
+    }
+    flush();
+    return out;
+}
 // ---- geometry -------------------------------------------------------
 
 enum GeomField { GeomX, GeomY, GeomW, GeomH };
@@ -732,6 +792,94 @@ std::vector<PropertyDef> widgetProps() {
                 return true;
             },
             "font family name"),
+        // ---- the names only XML spelled, until now -----------------------
+        // An author writes `bind`, `disabled` and `aria-label`; the widget
+        // keeps one binding, one enabled flag and one accessible name. Both
+        // spellings resolve to that field here, so a script reading the value
+        // back sees what the layout wrote and the parser's value check has an
+        // opinion about them too.
+        stringProp<Widget>("bind", [](const Widget& w) { return w.binding(); },
+                           [](Widget& w, const std::string& v) {
+                               w.setBinding(v);
+                               return true;
+                           },
+                           "alias of `onclick`"),
+        boolProp<Widget>(
+            "disabled", [](const Widget& w) { return !w.isEnabled(); },
+            [](Widget& w, bool v) {
+                w.setEnabled(!v);
+                return true;
+            },
+            "opposite of `enabled`: true makes the widget inert"),
+        stringProp<Widget>(
+            "aria-label", [](const Widget& w) { return w.accessibleName(); },
+            [](Widget& w, const std::string& v) {
+                w.setAccessibleName(v);
+                return true;
+            },
+            "alias of `accessible`"),
+        numberProp<Widget>(
+            "transition", [](const Widget& w) { return w.visualTransition(); },
+            [](Widget& w, double v) {
+                w.setVisualTransition(static_cast<float>(v));
+                return true;
+            },
+            "seconds the state colours blend over"),
+        stringProp<Widget>(
+            "anchor", [](const Widget& w) { return formatAnchor(w.anchor()); },
+            [](Widget& w, const std::string& v) {
+                const uint8_t bits = parseAnchor(v);
+                // An empty value is the state the read answers with: no edge
+                // pinned. Anything else that names no edge is a typo.
+                if (!bits && !v.empty()) return false;
+                w.setAnchor(bits);
+                return true;
+            },
+            "edges pinned against the parent: left,right,top,bottom"),
+        stringProp<Widget>(
+            "shadow",
+            [](const Widget& w) {
+                const Style& st = w.style();
+                if (st.shadowBlur <= 0.0f) return std::string();
+                std::string out = formatNumber(st.shadowBlur);
+                if (st.shadowDy != 0.0f || st.shadowDx != 0.0f) {
+                    out += "," + formatNumber(st.shadowDy);
+                }
+                if (st.shadowDx != 0.0f) out += "," + formatNumber(st.shadowDx);
+                return out;
+            },
+            [](Widget& w, const std::string& v) {
+                const std::vector<float> nums = parseNumberList(v);
+                Style st = w.style();
+                if (nums.empty()) {
+                    // "" is how an unshadowed widget reads back; a value with
+                    // numbers in it that yielded none is not.
+                    if (!v.empty()) return false;
+                    st.shadowBlur = st.shadowDx = st.shadowDy = 0.0f;
+                    w.applyStyle(st);
+                    return true;
+                }
+                st.shadowBlur = nums[0];
+                st.shadowDy = nums.size() >= 2 ? nums[1] : 0.0f;
+                st.shadowDx = nums.size() >= 3 ? nums[2] : 0.0f;
+                w.applyStyle(st);
+                return true;
+            },
+            "drop shadow as `blur`, `blur,dy` or `blur,dx,dy`"),
+        stringProp<Widget>(
+            "gradientdirection",
+            [](const Widget& w) {
+                return std::string(w.style().gradientHorizontal ? "horizontal"
+                                                                : "vertical");
+            },
+            [](Widget& w, const std::string& v) {
+                Style st = w.style();
+                st.gradientHorizontal = equalIgnoreCase(v, "horizontal");
+                w.applyStyle(st);
+                return true;
+            },
+            "which way the `gradient` ramp runs",
+            {"horizontal", "vertical"}),
     };
     return props;
 }
@@ -968,6 +1116,13 @@ std::vector<PropertyDef> toggleswitchProps() {
                 return true;
             },
             "alias of state"),
+        boolProp<ToggleSwitch>(
+            "on", [](const ToggleSwitch& t) { return t.state(); },
+            [](ToggleSwitch& t, bool v) {
+                t.setState(v);
+                return true;
+            },
+            "alias of `checked`"),
     };
 }
 
@@ -1040,6 +1195,14 @@ std::vector<PropertyDef> sliderProps() {
                 return true;
             },
             "high end of the range"),
+        // The thumb colour has no Style field: Slider draws from its own.
+        colorProp<Slider>(
+            "thumbcolor", [](const Slider& s) { return s.thumbColor(); },
+            [](Slider& s, const Color& c) {
+                s.setThumbColor(c);
+                return true;
+            },
+            "colour of the draggable thumb"),
     };
 }
 
@@ -1073,6 +1236,13 @@ std::vector<PropertyDef> rangesliderProps() {
                 return true;
             },
             "high end of the range"),
+        colorProp<RangeSlider>(
+            "thumbcolor", [](const RangeSlider& r) { return r.thumbColor(); },
+            [](RangeSlider& r, const Color& c) {
+                r.setThumbColor(c);
+                return true;
+            },
+            "colour of both thumbs"),
     };
 }
 
@@ -1120,6 +1290,35 @@ std::vector<PropertyDef> spinboxProps() {
                 return true;
             },
             "text drawn after the number"),
+        numberProp<SpinBox>(
+            "step", [](const SpinBox& s) { return s.step(); },
+            [](SpinBox& s, double v) {
+                s.setStep(static_cast<float>(v));
+                return true;
+            },
+            "amount each click or arrow key moves"),
+        boolProp<SpinBox>(
+            "wrap", [](const SpinBox& s) { return s.wrap(); },
+            [](SpinBox& s, bool v) {
+                s.setWrap(v);
+                return true;
+            },
+            "continue at the other end past the range"),
+        colorProp<SpinBox>(
+            "buttoncolor", [](const SpinBox& s) { return s.buttonColor(); },
+            [](SpinBox& s, const Color& c) {
+                s.setButtonColor(c);
+                return true;
+            },
+            "fill of the two arrow buttons"),
+        // <spinbox text="Qty"> is the shorthand for its prefix.
+        stringProp<SpinBox>(
+            "text", [](const SpinBox& s) { return s.prefix(); },
+            [](SpinBox& s, const std::string& v) {
+                s.setPrefix(v);
+                return true;
+            },
+            "alias of `prefix`"),
     };
 }
 
@@ -1140,6 +1339,35 @@ std::vector<PropertyDef> optionspinProps() {
                 return true;
             },
             "cycle past the first/last option"),
+        colorProp<OptionSpin>(
+            "buttoncolor", [](const OptionSpin& o) { return o.buttonColor(); },
+            [](OptionSpin& o, const Color& c) {
+                o.setButtonColor(c);
+                return true;
+            },
+            "fill of the two arrow buttons"),
+        numberProp<OptionSpin>(
+            "index", [](const OptionSpin& o) { return o.index(); },
+            [](OptionSpin& o, double v) {
+                o.setIndex(static_cast<int>(v));
+                return true;
+            },
+            "position of the selected option"),
+        stringProp<OptionSpin>(
+            "options",
+            [](const OptionSpin& o) { return joinList(o.options(), ','); },
+            [](OptionSpin& o, const std::string& v) {
+                std::vector<std::string> opts;
+                for (auto& part : splitList(v, ',')) {
+                    const size_t a = part.find_first_not_of(" \t");
+                    if (a == std::string::npos) continue;
+                    const size_t b = part.find_last_not_of(" \t");
+                    opts.push_back(part.substr(a, b - a + 1));
+                }
+                o.setOptions(std::move(opts));
+                return true;
+            },
+            "`,`-separated choices"),
     };
 }
 
@@ -1186,6 +1414,27 @@ std::vector<PropertyDef> statusbarProps() {
                 return true;
             },
             "text in the right slot"),
+        colorProp<StatusBar>(
+            "dimcolor", [](const StatusBar& s) { return s.dimColor(); },
+            [](StatusBar& s, const Color& c) {
+                s.setDimColor(c);
+                return true;
+            },
+            "colour of the centre and right segments"),
+        numberProp<StatusBar>(
+            "size", [](const StatusBar& s) { return s.fontSize(); },
+            [](StatusBar& s, double v) {
+                s.setFontSize(static_cast<int>(v));
+                return true;
+            },
+            "alias of `fontsize` for this widget"),
+        stringProp<StatusBar>(
+            "text", [](const StatusBar& s) { return s.left(); },
+            [](StatusBar& s, const std::string& v) {
+                s.setLeft(v);
+                return true;
+            },
+            "alias of `left`"),
     };
 }
 
@@ -1206,6 +1455,43 @@ std::vector<PropertyDef> tabsProps() {
                 return true;
             },
             "scroll the header strip instead of truncating it"),
+        // `active` is the index the header strip shows as selected; layouts
+        // have always named it that, scripts `selected`.
+        numberProp<Tabs>(
+            "active", [](const Tabs& t) { return t.active(); },
+            [](Tabs& t, double v) {
+                t.setActive(static_cast<int>(v));
+                return true;
+            },
+            "alias of `selected`"),
+        colorProp<Tabs>(
+            "headercolor", [](const Tabs& t) { return t.headerColor(); },
+            [](Tabs& t, const Color& c) {
+                t.setHeaderColor(c);
+                return true;
+            },
+            "fill behind the header strip"),
+        colorProp<Tabs>(
+            "tabcolor", [](const Tabs& t) { return t.tabColor(); },
+            [](Tabs& t, const Color& c) {
+                t.setTabColor(c);
+                return true;
+            },
+            "fill of an inactive tab"),
+        colorProp<Tabs>(
+            "activecolor", [](const Tabs& t) { return t.activeColor(); },
+            [](Tabs& t, const Color& c) {
+                t.setActiveColor(c);
+                return true;
+            },
+            "fill of the selected tab"),
+        colorProp<Tabs>(
+            "accent", [](const Tabs& t) { return t.accentColor(); },
+            [](Tabs& t, const Color& c) {
+                t.setAccentColor(c);
+                return true;
+            },
+            "underline of the selected tab"),
     };
 }
 
@@ -1221,6 +1507,34 @@ std::vector<PropertyDef> comboboxProps() {
         boolProp<ComboBox>(
             "open", [](const ComboBox& c) { return c.popupOpen(); }, nullptr,
             "while the dropdown is showing"),
+        numberProp<ComboBox>(
+            "rowheight", [](const ComboBox& c) { return c.rowHeight(); },
+            [](ComboBox& c, double v) {
+                c.setRowHeight(static_cast<float>(v));
+                return true;
+            },
+            "height of one option row"),
+        colorProp<ComboBox>(
+            "accent", [](const ComboBox& c) { return c.arrowColor(); },
+            [](ComboBox& c, const Color& v) {
+                c.setArrowColor(v);
+                return true;
+            },
+            "colour of the dropdown arrow"),
+        colorProp<ComboBox>(
+            "highlight", [](const ComboBox& c) { return c.highlightColor(); },
+            [](ComboBox& c, const Color& v) {
+                c.setHighlightColor(v);
+                return true;
+            },
+            "fill behind the hovered option"),
+        colorProp<ComboBox>(
+            "panel", [](const ComboBox& c) { return c.panelColor(); },
+            [](ComboBox& c, const Color& v) {
+                c.setPanelColor(v);
+                return true;
+            },
+            "fill of the dropdown list"),
     };
 }
 
@@ -1233,6 +1547,20 @@ std::vector<PropertyDef> listboxProps() {
         stringProp<ListBox>(
             "value", [](const ListBox& l) { return l.selectedLabel(); }, nullptr,
             "text of the selected row"),
+        numberProp<ListBox>(
+            "rowheight", [](const ListBox& l) { return l.rowHeight(); },
+            [](ListBox& l, double v) {
+                l.setRowHeight(static_cast<float>(v));
+                return true;
+            },
+            "height of one row"),
+        colorProp<ListBox>(
+            "highlight", [](const ListBox& l) { return l.highlightColor(); },
+            [](ListBox& l, const Color& c) {
+                l.setHighlightColor(c);
+                return true;
+            },
+            "fill behind the selected row"),
     };
 }
 
@@ -1252,6 +1580,13 @@ std::vector<PropertyDef> listitemProps() {
                 return true;
             },
             "value the row carries"),
+        stringProp<ListItem>(
+            "text", [](const ListItem& l) { return l.label(); },
+            [](ListItem& l, const std::string& v) {
+                l.setLabel(v);
+                return true;
+            },
+            "alias of `label`"),
     };
 }
 
@@ -1292,6 +1627,20 @@ std::vector<PropertyDef> treeitemProps() {
                 return true;
             },
             "checkbox state of the node"),
+        stringProp<TreeItem>(
+            "text", [](const TreeItem& t) { return t.label(); },
+            [](TreeItem& t, const std::string& v) {
+                t.setLabel(v);
+                return true;
+            },
+            "alias of `label`"),
+        boolProp<TreeItem>(
+            "file", [](const TreeItem& t) { return !t.folder(); },
+            [](TreeItem& t, bool v) {
+                t.setFolder(!v);
+                return true;
+            },
+            "opposite of `folder`: a leaf with no children"),
     };
 }
 
@@ -1356,6 +1705,21 @@ std::vector<PropertyDef> treeviewProps() {
                 return true;
             },
             "tint of the toggles, checks and guide lines"),
+        boolProp<TreeView>(
+            "autoheight", [](const TreeView& t) { return t.autoHeight(); },
+            [](TreeView& t, bool v) {
+                t.setAutoHeight(v);
+                return true;
+            },
+            "grow to fit every row instead of scrolling"),
+        // `dir` is a command, not a stored value: it fills the tree from disk.
+        stringProp<TreeView>(
+            "dir", nullptr,
+            [](TreeView& t, const std::string& v) {
+                t.loadDirectory(v);
+                return true;
+            },
+            "loads the tree from a directory (write-only)"),
     };
     addAll(props,
            fontProps<TreeView>(&TreeView::setFontFamily, &TreeView::setFontSize));
@@ -1434,6 +1798,20 @@ std::vector<PropertyDef> keybindProps() {
         boolProp<Keybind>(
             "capturing", [](const Keybind& k) { return k.capturing(); }, nullptr,
             "while it is recording a key press"),
+        stringProp<Keybind>(
+            "placeholder", [](const Keybind& k) { return k.placeholder(); },
+            [](Keybind& k, const std::string& v) {
+                k.setPlaceholder(v);
+                return true;
+            },
+            "caption shown while no key is bound"),
+        numberProp<Keybind>(
+            "size", [](const Keybind& k) { return k.fontSize(); },
+            [](Keybind& k, double v) {
+                k.setFontSize(static_cast<int>(v));
+                return true;
+            },
+            "alias of `fontsize` for this widget"),
     };
 }
 
@@ -1493,6 +1871,41 @@ std::vector<PropertyDef> commandpaletteProps() {
                 return true;
             },
             "height of the search field"),
+        numberProp<CommandPalette>(
+            "size", [](const CommandPalette& p) { return p.fontSize(); },
+            [](CommandPalette& p, double v) {
+                p.setFontSize(static_cast<int>(v));
+                return true;
+            },
+            "alias of `fontsize` for this widget"),
+        stringProp<CommandPalette>(
+            "filter", [](const CommandPalette& p) { return p.query(); },
+            [](CommandPalette& p, const std::string& v) {
+                p.setQuery(v);
+                return true;
+            },
+            "alias of `query`"),
+        colorProp<CommandPalette>(
+            "dimcolor", [](const CommandPalette& p) { return p.dimColor(); },
+            [](CommandPalette& p, const Color& c) {
+                p.setDimColor(c);
+                return true;
+            },
+            "colour of a row's hint text"),
+        colorProp<CommandPalette>(
+            "accent", [](const CommandPalette& p) { return p.accentColor(); },
+            [](CommandPalette& p, const Color& c) {
+                p.setAccentColor(c);
+                return true;
+            },
+            "colour of the match highlight"),
+        colorProp<CommandPalette>(
+            "highlight", [](const CommandPalette& p) { return p.highlightColor(); },
+            [](CommandPalette& p, const Color& c) {
+                p.setHighlightColor(c);
+                return true;
+            },
+            "fill behind the cursor row"),
     };
     addAll(props, fontProps<CommandPalette>(&CommandPalette::setFontFamily,
                                            &CommandPalette::setFontSize));
@@ -1513,6 +1926,13 @@ std::vector<PropertyDef> consoleProps() {
                 return true;
             },
             "line cap; oldest lines are dropped"),
+        numberProp<Console>(
+            "rowheight", [](const Console& c) { return c.rowHeight(); },
+            [](Console& c, double v) {
+                c.setRowHeight(static_cast<float>(v));
+                return true;
+            },
+            "height of one text line"),
     };
 }
 
@@ -1565,6 +1985,31 @@ std::vector<PropertyDef> splitterProps() {
                 return true;
             },
             "vertical divider (two panes side by side)"),
+        stringProp<Splitter>(
+            "orientation",
+            [](const Splitter& s) {
+                return std::string(s.isVertical() ? "vertical" : "horizontal");
+            },
+            [](Splitter& s, const std::string& v) {
+                s.setVertical(!equalIgnoreCase(v, "horizontal"));
+                return true;
+            },
+            "stacked (vertical) or side-by-side (horizontal) panes",
+            {"vertical", "horizontal"}),
+        numberProp<Splitter>(
+            "handlesize", [](const Splitter& s) { return s.handleSize(); },
+            [](Splitter& s, double v) {
+                s.setHandleSize(static_cast<float>(v));
+                return true;
+            },
+            "thickness of the draggable divider"),
+        colorProp<Splitter>(
+            "handlecolor", [](const Splitter& s) { return s.handleColor(); },
+            [](Splitter& s, const Color& c) {
+                s.setHandleColor(c);
+                return true;
+            },
+            "colour of the divider"),
     };
 }
 
@@ -1707,6 +2152,13 @@ std::vector<PropertyDef> accordionsectionProps() {
                 return true;
             },
             "height of the header strip"),
+        stringProp<AccordionSection>(
+            "text", [](const AccordionSection& s) { return s.header(); },
+            [](AccordionSection& s, const std::string& v) {
+                s.setHeader(v);
+                return true;
+            },
+            "alias of `header`"),
     };
 }
 
@@ -1721,6 +2173,13 @@ std::vector<PropertyDef> tabProps() {
                 return true;
             },
             "text on the header button"),
+        stringProp<Tab>(
+            "text", [](const Tab& t) { return t.label(); },
+            [](Tab& t, const std::string& v) {
+                t.setLabel(v);
+                return true;
+            },
+            "alias of `label`"),
     };
 }
 
@@ -1740,6 +2199,13 @@ std::vector<PropertyDef> combooptionProps() {
                 return true;
             },
             "value the option carries"),
+        stringProp<ComboOption>(
+            "text", [](const ComboOption& o) { return o.label(); },
+            [](ComboOption& o, const std::string& v) {
+                o.setLabel(v);
+                return true;
+            },
+            "alias of `label`"),
     };
 }
 
@@ -1752,6 +2218,13 @@ std::vector<PropertyDef> crumbitemProps() {
                 return true;
             },
             "text of this segment"),
+        stringProp<CrumbItem>(
+            "text", [](const CrumbItem& c) { return c.label(); },
+            [](CrumbItem& c, const std::string& v) {
+                c.setLabel(v);
+                return true;
+            },
+            "alias of `label`"),
     };
 }
 
@@ -1778,6 +2251,34 @@ std::vector<PropertyDef> commandactionProps() {
                 return true;
             },
             "shortcut printed at the right edge"),
+        stringProp<CommandAction>(
+            "text", [](const CommandAction& a) { return a.name(); },
+            [](CommandAction& a, const std::string& v) {
+                a.setName(v);
+                return true;
+            },
+            "alias of `name`"),
+        stringProp<CommandAction>(
+            "label", [](const CommandAction& a) { return a.name(); },
+            [](CommandAction& a, const std::string& v) {
+                a.setName(v);
+                return true;
+            },
+            "alias of `name`"),
+        stringProp<CommandAction>(
+            "desc", [](const CommandAction& a) { return a.hint(); },
+            [](CommandAction& a, const std::string& v) {
+                a.setHint(v);
+                return true;
+            },
+            "alias of `hint`"),
+        stringProp<CommandAction>(
+            "shortcut", [](const CommandAction& a) { return a.key(); },
+            [](CommandAction& a, const std::string& v) {
+                a.setKey(v);
+                return true;
+            },
+            "alias of `key`"),
     };
 }
 
@@ -1824,6 +2325,13 @@ std::vector<PropertyDef> tablecolumnProps() {
             },
             "marquee for text wider than the column",
             {"none", "automatic", "onmouseenter"}),
+        stringProp<TableColumn>(
+            "text", [](const TableColumn& c) { return c.label(); },
+            [](TableColumn& c, const std::string& v) {
+                c.setLabel(v);
+                return true;
+            },
+            "alias of `label`"),
     };
 }
 
@@ -1928,6 +2436,13 @@ std::vector<PropertyDef> treetablenodeProps() {
                 return true;
             },
             "whether the children are shown"),
+        stringProp<TreeTableNode>(
+            "text", [](const TreeTableNode& n) { return n.label(); },
+            [](TreeTableNode& n, const std::string& v) {
+                n.setLabel(v);
+                return true;
+            },
+            "alias of `label`"),
     };
 }
 
@@ -2001,6 +2516,15 @@ std::vector<PropertyDef> treetableProps() {
         boolProp<TreeTable>(
             "sortascending", [](const TreeTable& t) { return t.sortAscending(); },
             nullptr, "direction of the current sort"),
+        // Like <tree dir=...>, `expanded` on a treetable is an action: it
+        // opens every node rather than remembering a flag.
+        boolProp<TreeTable>(
+            "expanded", nullptr,
+            [](TreeTable& t, bool v) {
+                if (v) t.expandAll();
+                return true;
+            },
+            "true opens every node (write-only)"),
     };
     addAll(props, fontProps<TreeTable>(&TreeTable::setFontFamily, &TreeTable::setFontSize));
     return props;
@@ -2053,6 +2577,20 @@ std::vector<PropertyDef> propertyitemProps() {
                 return true;
             },
             "`;`-separated choices for an enum item"),
+        stringProp<PropertyItem>(
+            "label", [](const PropertyItem& p) { return p.name(); },
+            [](PropertyItem& p, const std::string& v) {
+                p.setName(v);
+                return true;
+            },
+            "alias of `name`"),
+        stringProp<PropertyItem>(
+            "group", [](const PropertyItem& p) { return p.group(); },
+            [](PropertyItem& p, const std::string& v) {
+                p.setGroup(v);
+                return true;
+            },
+            "alias of `category`"),
     };
 }
 
@@ -2159,6 +2697,13 @@ std::vector<PropertyDef> breadcrumbProps() {
                 return true;
             },
             "colour of the separators"),
+        numberProp<Breadcrumb>(
+            "size", [](const Breadcrumb& b) { return b.fontSize(); },
+            [](Breadcrumb& b, double v) {
+                b.setFontSize(static_cast<int>(v));
+                return true;
+            },
+            "alias of `fontsize` for this widget"),
     };
 }
 
@@ -2173,6 +2718,13 @@ std::vector<PropertyDef> menuProps() {
                 return true;
             },
             "caption on the bar"),
+        stringProp<Menu>(
+            "text", [](const Menu& m) { return m.label(); },
+            [](Menu& m, const std::string& v) {
+                m.setLabel(v);
+                return true;
+            },
+            "alias of `label`"),
     };
 }
 
@@ -2199,6 +2751,13 @@ std::vector<PropertyDef> menuitemProps() {
                 return true;
             },
             "draw a rule instead of a command"),
+        stringProp<MenuItem>(
+            "text", [](const MenuItem& m) { return m.label(); },
+            [](MenuItem& m, const std::string& v) {
+                m.setLabel(v);
+                return true;
+            },
+            "alias of `label`"),
     };
 }
 

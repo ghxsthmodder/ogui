@@ -683,10 +683,15 @@ especificadas antes da implementação.
     `ogui.props(id)` devolve `{type, value, default, description, writable}` por
     propriedade. Widgets do host declaram a própria tabela com `declare()` e
     `numberProp`/`boolProp`/`stringProp`/`colorProp`. As 61 classes que o
-    `widgetRegistry()` sabe criar estão tabeladas — 1975 propriedades que lêem e
-    escrevem entre elas, cada uma testada no round-trip de escrever a própria
-    leitura de volta, e o teste ainda varre o fábrica e falha se uma tag chegar
-    ao runtime sem tabela. Espec que o widget não guarda é write-only e a forma
+    `widgetRegistry()` sabe criar estão tabeladas — 2755 propriedades entre
+    elas, 2723 que lêem e escrevem, cada uma testada no round-trip de escrever a
+    própria leitura de volta, e o teste ainda varre o fábrica e falha se uma tag
+    chegar ao runtime sem tabela. Falha também se o parser perguntar por um nome
+    que nenhuma propriedade da classe construída declara: `setAttributeTrace()`
+    lembra cada `get()` feito por tag e `properties` monta um elemento por tag e
+    confere o rastro contra o registro, então não existe mais atributo autorável
+    silencioso (`thumbcolor`, `active`, `rowheight`) — ou a propriedade existe e
+    vale para XML, `ogui.set` e a lint de valor, ou o teste quebra. Espec que o widget não guarda é write-only e a forma
     resolvida lê-se por outro nome (`columns` → `colcount`); classe que desenha
     com campos próprios sombreia a cor herdada para o nome significar o que está
     na tela (`background` em `sparkline`/`propertygrid`). O parser
@@ -1026,9 +1031,13 @@ exemplo básico funciona. Sempre que aplicável, verificar:
     O CLI do `ogui_validate` também passou a reclamar de `--chdir` sem
     argumento e de opção inexistente, em vez de validar isso como nome de
     arquivo. Coberto por `parser_test`/`properties_test` e pelo bloco
-    expect-error de `docs/examples.md`. Falta ainda: um atributo que nenhuma
-    propriedade declara (`thumbcolor`, `active`) continua silencioso — é o
-    incremento de "name drift" entre XML e registry.)
+    expect-error de `docs/examples.md`. E nenhum nome autorado fica silencioso:
+    `XmlParser::setAttributeTrace()` grava cada `get()` que `applyAttributes()`
+    faz por tag, e `properties_test::testNameDrift()` monta um elemento por tag
+    do `widgetRegistry()` e exige que o nome perguntado seja propriedade
+    declarada da classe que o próprio parser construiu — um `get()` novo sem
+    propriedade correspondente quebra o teste em vez de alargar o buraco entre
+    o que uma layout escreve e o que um script lê.)
 -   [x] O ciclo de vida é seguro, inclusive após remoção de widgets ou
     troca de tela. (`debug/tests/lifetime_test.cpp`, coberto pelo ASAN:
     `forgetWidget` desce a árvore e limpa o tooltip, a troca de tela solta o

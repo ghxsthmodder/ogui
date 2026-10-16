@@ -1,7 +1,8 @@
 // ogui_properties_test.cpp : the typed property registry -- class chains and
 // overrides, the generic write/read round-trip over every built-in property,
 // per-type value validation, the side-effect-free value check the XML parser
-// runs its attributes through, and the Lua get/set/props surface.
+// runs its attributes through, the name drift between what a layout may
+// author and what the registry exposes, and the Lua get/set/props surface.
 #include "ogui/kernel.hpp"
 #include "ogui/properties.hpp"
 #include "ogui/script.hpp"
@@ -218,6 +219,36 @@ void testFactoryCoverage() {
         CHECK_MSG(!reg.list(*w).empty(), tag + " exposes no properties");
     }
     CHECK_MSG(tags > 50, "the factory only offered " + std::to_string(tags) + " tags");
+}
+
+void testNameDrift() {
+    // The parser and the registry describe one contract from two sides: what a
+    // layout may write, a script must be able to read and write back. Tracing
+    // says which attribute names applyAttributes() actually asks about, so this
+    // check needs no list kept by hand -- a `get("...")` no property declares
+    // for the widget being built fails here instead of widening the gap in
+    // silence (and a name that only some classes carry is judged per class,
+    // because the widget the parser built is the one asked about).
+    XmlParser p;
+    p.setAttributeTrace(true);
+    auto& reg = PropertyRegistry::instance();
+    size_t names = 0;
+    for (auto& [tag, create] : widgetRegistry()) {
+        const std::string xml =
+            "<screen id=\"s\"><" + tag + " id=\"w\"/></screen>";
+        auto res = p.parse(xml);
+        if (!res.root || res.root->children().empty()) continue;
+        const Widget& w = *res.root->children()[0];
+        for (const std::string& name : p.tracedAttributes(tag)) {
+            ++names;
+            CHECK_MSG(reg.find(w, name) != nullptr,
+                      "<" + tag + "> authors \"" + name + "\" on a " +
+                          Kernel::typeName(&w) +
+                          ", but no property declares it");
+        }
+    }
+    CHECK_MSG(names > 1500,
+              "the trace only saw " + std::to_string(names) + " names");
 }
 
 void testValidation() {
@@ -486,6 +517,7 @@ int main() {
     testHostClasses();
     testRoundTrip();
     testFactoryCoverage();
+    testNameDrift();
     testValidation();
     testValueCheck();
     testFacadeAndKernel();

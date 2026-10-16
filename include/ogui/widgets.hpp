@@ -660,6 +660,7 @@ public:
     void setTrackColor(const Color& col) { m_trackColor = col; }
     void setBarColor(const Color& col) { m_barColor = col; }
     void setThumbColor(const Color& col) { m_thumbColor = col; }
+    Color thumbColor() const { return m_thumbColor; }
 
     virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
     virtual void onPointerUp(MouseButton btn) override;
@@ -699,6 +700,7 @@ public:
 
     void setRange(float lo, float hi);
     void setStep(float s) { m_step = s > 0.0f ? s : 1.0f; }
+    float step() const { return m_step; }
     void setDecimals(int d) { m_decimals = d < 0 ? 0 : d; }
     int decimals() const { return m_decimals; }
     void setValue(float v);
@@ -706,6 +708,7 @@ public:
     float minimum() const { return m_min; }
     float maximum() const { return m_max; }
     void setWrap(bool w) { m_wrap = w; }
+    bool wrap() const { return m_wrap; }
     void setPrefix(const std::string& p) { m_prefix = p; }
     const std::string& prefix() const { return m_prefix; }
     void setSuffix(const std::string& s) { m_suffix = s; }
@@ -716,6 +719,7 @@ public:
     void setBgColor(const Color& col) { m_bgColor = col; }
     void setTextColor(const Color& col) { m_textColor = col; }
     void setButtonColor(const Color& col) { m_buttonColor = col; }
+    Color buttonColor() const { return m_buttonColor; }
     void setBorderColor(const Color& col) { m_borderColor = col; }
     void setRadius(float r) { m_radius = r; }
     void setFontFamily(const std::string& f) { m_fontFam = f; }
@@ -773,6 +777,7 @@ public:
     void setBgColor(const Color& col) { m_bgColor = col; }
     void setTextColor(const Color& col) { m_textColor = col; }
     void setButtonColor(const Color& col) { m_buttonColor = col; }
+    Color buttonColor() const { return m_buttonColor; }
     void setBorderColor(const Color& col) { m_borderColor = col; }
     void setRadius(float r) { m_radius = r; }
     void setFontFamily(const std::string& f) { m_fontFam = f; }
@@ -822,6 +827,7 @@ public:
     void setTrackColor(const Color& col) { m_trackColor = col; }
     void setBarColor(const Color& col) { m_barColor = col; }
     void setThumbColor(const Color& col) { m_thumbColor = col; }
+    Color thumbColor() const { return m_thumbColor; }
 
     virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
     virtual void onPointerUp(MouseButton btn) override;
@@ -862,7 +868,9 @@ public:
     void setSplit(float frac);
     float split() const { return m_split; }
     void setHandleSize(float px) { m_handle = px > 2.0f ? px : 2.0f; }
+    float handleSize() const { return m_handle; }
     void setHandleColor(const Color& col) { m_handleColor = col; }
+    Color handleColor() const { return m_handleColor; }
 
     virtual void layout(float parentWidth, float parentHeight) override;
     virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
@@ -1010,6 +1018,7 @@ public:
     void setFontFamily(const std::string& f) { m_fontFam = f; }
     void setFontSize(int s) { m_fontSize = s; }
     void setRowHeight(float px) { m_rowH = px; }
+    float rowHeight() const { return m_rowH; }
     void setBgColor(const Color& c) { m_bg = c; }
     void setBorderColor(const Color& c) { m_border = c; }
     void setTextColor(const Color& c) { m_text = c; }
@@ -1020,9 +1029,12 @@ public:
         else if (prop == "border" || prop == "bordercolor") setBorderColor(v);
     }
     void setArrowColor(const Color& c) { m_arrow = c; }
+    Color arrowColor() const { return m_arrow; }
     void setHighlightColor(const Color& c) { m_highlight = c; }
+    Color highlightColor() const { return m_highlight; }
     void setHighlightTextColor(const Color& c) { m_highlightText = c; }
     void setPanelColor(const Color& c) { m_panel = c; }
+    Color panelColor() const { return m_panel; }
     void setPopupBorderColor(const Color& c) { m_popupBorder = c; }
 
     bool popupOpen() const { return m_open; }
@@ -1106,9 +1118,13 @@ public:
     void setFontFamily(const std::string& family) { m_fontFamily = family; }
     void setFontSize(int size) { m_fontSize = size; }
     void setHeaderColor(const Color& col) { m_headerColor = col; }
+    Color headerColor() const { return m_headerColor; }
     void setTabColor(const Color& col) { m_tabColor = col; }
+    Color tabColor() const { return m_tabColor; }
     void setActiveColor(const Color& col) { m_activeColor = col; }
+    Color activeColor() const { return m_activeColor; }
     void setAccentColor(const Color& col) { m_accentColor = col; }
+    Color accentColor() const { return m_accentColor; }
     void setContentColor(const Color& col) { m_contentColor = col; }
     void setTextColor(const Color& col) { m_textColor = col; }
     void setBorderColor(const Color& col) { m_borderColor = col; }
@@ -1298,6 +1314,7 @@ public:
     void setMaxLines(int n) { m_maxLines = n < 1 ? 1 : n; trim(); }
     int maxLines() const { return m_maxLines; }
     void setRowHeight(float h) { if (h > 0.0f) m_rowH = h; }
+    float rowHeight() const { return m_rowH; }
     void setFontFamily(const std::string& f) { m_fontFam = f; }
     void setFontSize(int s) { m_fontSize = s; }
     void setBgColor(const Color& c) { m_bg = c; }
@@ -1367,12 +1384,14 @@ public:
     void setOnChanged(ChangedCallback cb) { m_onChanged = std::move(cb); }
 
     void setRowHeight(float px) { m_rowH = px; }
+    float rowHeight() const { return m_rowH; }
     void setFontFamily(const std::string& f) { m_fontFam = f; }
     void setFontSize(int s) { m_fontSize = s; }
     void setBgColor(const Color& c) { m_bg = c; }
     void setBorderColor(const Color& c) { m_border = c; }
     void setTextColor(const Color& c) { m_text = c; }
     void setHighlightColor(const Color& c) { m_highlight = c; }
+    Color highlightColor() const { return m_highlight; }
     bool isSelectedVisual() const override { return m_selected >= 0; }
     void applyVisualColor(const std::string& prop, const Color& v) override {
         if (prop == "background") setBgColor(v);
@@ -2263,8 +2282,10 @@ public:
     const std::string& right() const { return m_right; }
     void setTextColor(const Color& c) { m_textColor = c; }
     void setDimColor(const Color& c) { m_dimColor = c; }
+    Color dimColor() const { return m_dimColor; }
     void setBgColor(const Color& c) { m_bgColor = c; }
     void setFontSize(int s) { m_fontSize = s; }
+    int fontSize() const { return m_fontSize; }
     void applyVisualColor(const std::string& prop, const Color& v) override {
         if (prop == "background") m_bgColor = v;
         else if (prop == "color") m_textColor = v;
@@ -2365,6 +2386,7 @@ public:
     bool setValue(const std::string& combo);
     std::string value() const;               // formatted canonical combo
     void setPlaceholder(const std::string& p) { m_placeholder = p; }
+    const std::string& placeholder() const { return m_placeholder; }
     void setOnChanged(ValueCallback cb) { m_onChanged = std::move(cb); }
     bool capturing() const { return m_capturing; }
 
@@ -2374,6 +2396,7 @@ public:
     void setRadius(float r) { m_radius = r; }
     void setFontFamily(const std::string& f) { m_fontFam = f; }
     void setFontSize(int s) { m_fontSize = s; }
+    int fontSize() const { return m_fontSize; }
     void applyVisualColor(const std::string& prop, const Color& v) override {
         if (prop == "background") m_bgColor = v;
         else if (prop == "color") m_textColor = v;
@@ -2475,8 +2498,11 @@ public:
     const std::string& placeholder() const { return m_placeholder; }
     void setTextColor(const Color& c) { m_textColor = c; }
     void setDimColor(const Color& c) { m_dimColor = c; }
+    Color dimColor() const { return m_dimColor; }
     void setAccentColor(const Color& c) { m_accentColor = c; }
+    Color accentColor() const { return m_accentColor; }
     void setHighlightColor(const Color& c) { m_highlightColor = c; }
+    Color highlightColor() const { return m_highlightColor; }
     void setBgColor(const Color& c) { m_bgColor = c; }
     void setRowHeight(float h) { if (h > 0.0f) m_rowH = h; }
     float rowHeight() const { return m_rowH; }
@@ -2484,6 +2510,7 @@ public:
     float headerHeight() const { return m_headH; }
     void setFontFamily(const std::string& f) { m_fontFam = f; }
     void setFontSize(int s) { m_fontSize = s; }
+    int fontSize() const { return m_fontSize; }
     void applyVisualColor(const std::string& prop, const Color& v) override {
         if (prop == "color") m_textColor = v;
         else if (prop == "background") m_bgColor = v;
