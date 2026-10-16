@@ -585,9 +585,13 @@ and expands in place:
 `listbox`, `table`, `tree`, `scrollview` and `window` draw an overlay
 scrollbar (drag the thumb, or click the empty track to jump) whenever
 content exceeds the viewport. In `window` the bar sits below the title bar.
-The same bar appears inside dropdown, menu and context-menu popups; popups
-are always fitted to the screen (they flip above the anchor when there is
-no room below).
+`scrollablehorizontalcontainer` is the one widget whose bar runs along the
+bottom edge instead of the right one. A bar in a box no longer than the
+minimum thumb (a viewport under ~20 px) has the thumb filling the whole
+track: it cannot be dragged, and a press on it leaves the content where it
+is rather than snapping it back to the start.
+The same bar appears inside dropdown, menu and context-menu popups; popups are always fitted to the screen (they
+flip above the anchor when there is no room below).
 
 ### Containers
 
@@ -597,6 +601,7 @@ no room below).
 | `group` | `name` (box caption) | any widget |
 | `window` | `title`, `titleVisible` | any widget |
 | `scrollview` | `scrollStep`, `scrollX`, `scrollY` | any widget |
+| `scrollableverticalcontainer` / `scrollablehorizontalcontainer` | `scrollStep`, `scrollX`, `scrollY` (the locked axis reads back `0`; a `scrollY` on the horizontal one, or a `scrollX` on the vertical one, is thrown away at the first layout), `gap` (child spacing px, falls back to `margin` then 4, as `column`/`row`). Positions its children itself — stacked down, or tiled across, from the padding edge — and scrolls only that axis, by wheel, by finger and by its own bar; the bar sits on the right edge (vertical) or the bottom edge (horizontal) | any widget (laid out by the container; hidden children are skipped) |
 | `column` / `row` | `gap` (child spacing px, falls back to `margin` then 4), `align` on `column` (`center`/`right` child placement), `valign` on `row` (`middle`/`bottom` against the tallest child), `wrap` on `row` (children that exceed the width continue on a new line and the row grows in height) | any widget (stacked; children may set `weight` to split leftover height/width) |
 | `grid` | `columns`, `gap`, `rowHeight` | any widget |
 | `splitter` | `orientation`/`vertical`, `split` (0..1), `handleSize`, `handleColor` | two panels |

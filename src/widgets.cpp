@@ -418,6 +418,8 @@ std::map<std::string, WidgetFactory>& widgetRegistry() {
         reg["panel"] = mk<Panel>;
         reg["window"] = mk<Window>;
         reg["scrollview"] = mk<ScrollView>;
+        reg["scrollableverticalcontainer"] = mk<ScrollableVerticalContainer>;
+        reg["scrollablehorizontalcontainer"] = mk<ScrollableHorizontalContainer>;
         reg["textinput"] = mk<TextInput>;
         reg["column"] = mk<Column>;
         reg["row"] = mk<Row>;

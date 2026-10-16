@@ -39,6 +39,32 @@
            text="Um paragrafo comprido que ultrapassa a altura da viewport, por isso mora dentro de um ScrollView. Continue rolando para ver o resto do texto aparecer linha a linha conforme o conteudo se desloca para cima."/>
   </scrollview>
 
+  <label x="48.75%" y="71%" width="50%" height="18" color="@dim"
+         text="Containers de rolagem: o proprio layout empilha ou ladrilha"/>
+  <scrollableverticalcontainer id="svc_demo" x="48.75%" y="74.5%" width="50%" height="17%"
+                               gap="6" background="@window" border="@accent">
+    <button width="80%" height="24" text="Linha 1" background="@surfaceHi" color="@text" radius="4"/>
+    <button width="80%" height="24" text="Linha 2" background="@surfaceHi" color="@text" radius="4"/>
+    <button width="80%" height="24" text="Linha 3" background="@surfaceHi" color="@text" radius="4"/>
+    <button width="80%" height="24" text="Linha 4" background="@surfaceHi" color="@text" radius="4"/>
+    <button width="80%" height="24" text="Linha 5" background="@surfaceHi" color="@text" radius="4"/>
+    <button width="80%" height="24" text="Linha 6" background="@surfaceHi" color="@text" radius="4"/>
+    <button width="80%" height="24" text="Linha 7" background="@surfaceHi" color="@text" radius="4"/>
+    <button width="80%" height="24" text="Linha 8" background="@surfaceHi" color="@text" radius="4"/>
+  </scrollableverticalcontainer>
+
+  <scrollablehorizontalcontainer id="shc_demo" x="48.75%" y="93%" width="50%" height="6.5%"
+                                 gap="6" background="@window" border="@accent">
+    <panel width="70" height="100%" background="#22344a" border="#4a6c96" radius="6"/>
+    <panel width="70" height="100%" background="#3d2246" border="#7a4a96" radius="6"/>
+    <panel width="70" height="100%" background="#22463a" border="#4a967a" radius="6"/>
+    <panel width="70" height="100%" background="#463022" border="#96744a" radius="6"/>
+    <panel width="70" height="100%" background="#2a2a46" border="#6a6a96" radius="6"/>
+    <panel width="70" height="100%" background="#46222a" border="#964a6a" radius="6"/>
+    <panel width="70" height="100%" background="#3a4622" border="#7a964a" radius="6"/>
+    <panel width="70" height="100%" background="#22404a" border="#4a8c96" radius="6"/>
+  </scrollablehorizontalcontainer>
+
   <tabs id="tb_demo" x="1.25%" y="81%" width="45%" height="16%" tabHeight="24" active="0"
         headerColor="#222" tabColor="#1a1a1a" activeColor="#2a2a2a" accent="#4488ff">
     <tab label="Aba 1">

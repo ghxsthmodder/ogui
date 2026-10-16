@@ -1120,6 +1120,34 @@ compatibilidade e capacidade de manutenção.
     estreito, densidade no largo, guarda de width zero, e a largura lógica saindo
     no design com a barra de status ainda virando unidades do design); no aparelho
     as telas Basico, Containers e Game agora ocupam a largura inteira sem corte.
+-   [x] Contêineres de rolagem por eixo: `scrollableVerticalContainer` e
+    `scrollableHorizontalContainer`. Um `ScrollView` é uma *página*: cada filho
+    fica onde a layout autorou e o que passa do viewport rola no eixo que
+    transbordar --- certo para uma página grande, errado para uma lista de coisas
+    que se empilham sozinhas, onde o autor teria de calcular `y` de cada filho e
+    mesmo assim a roda moveria os dois eixos. As duas classes novas são um
+    `ScrollView` que deita os próprios filhos (empilhados para baixo, como
+    `column`, ou ladrilhados para a direita, como `row`, com o `gap` do estilo) e
+    só rola essa linha. Elas não copiam a lógica: `ScrollView` ganhou dois modos
+    --- `Flow` e `Bar` --- cujo default é exatamente o comportamento de antes, e
+    as duas classes só respondem `setFlow()`/`setBar()` no construtor, três linhas
+    cada. O eixo travado mora em `clampScroll()`, para onde todo caminho que move
+    conteúdo já ia --- roda, arrasto do dedo, inércia (os três por
+    `onPointerScroll()`, que agora não sabe nada de eixo), `setScroll()` de um
+    script, um `scrollY=` autorado e o arrasto da barra: uma trava, um lugar, e
+    nenhum jeito de passar por fora. A barra acompanha o eixo: borda direita na
+    vertical, borda inferior na horizontal, sempre testada em espaço local (o
+    bloco de origem ≠ 0) e desenhada em absoluto --- e uma barra cujo trilho é
+    mais curto que o polegar mínimo (uma caixa de 12px) enche o trilho em vez de
+    estourar o `std::clamp` com `lo > hi`, e um arrasto nela não faz nada em vez
+    de teletransportar o conteúdo para o começo. Um `<scrollview>` não mudou nada
+    --- o golden e o suite de scrollbar passaram sem tocar em um único pixel
+    esperado. Testes em `debug/tests/scrollbar_test.cpp` (empilhamento, travamento
+    por cada caminho, arrasto da barra em cada borda, uma pressão fora da barra
+    que não rola, a caixa pequena que não quebra, e as duas tags parseando e
+    herdando `scrollStep`/`gap`) e a varredura de round-trip de `properties_test`,
+    que agora declara as duas classes e lê as 40 propriedades do `ScrollView`
+    nelas.
 
 **Resultado esperado:** o mesmo `DrawList` renderiza em desktop GL, GLES 3.0 e
 CPU, com a portabilidade coberta por teste em vez de suposição.

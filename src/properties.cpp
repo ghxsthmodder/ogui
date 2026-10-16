@@ -2946,6 +2946,8 @@ void PropertyRegistry::loadBuiltins() {
     self.declare(typeid(Panel), typeid(Widget), panelProps());
     self.declare(typeid(Window), typeid(Panel), windowProps());
     self.declare(typeid(ScrollView), typeid(Widget), scrollviewProps());
+    self.declare(typeid(ScrollableVerticalContainer), typeid(ScrollView), {});
+    self.declare(typeid(ScrollableHorizontalContainer), typeid(ScrollView), {});
     self.declare(typeid(TextInput), typeid(Widget), textinputProps());
     self.declare(typeid(SearchInput), typeid(TextInput), {});
     self.declare(typeid(TextArea), typeid(TextInput), {});

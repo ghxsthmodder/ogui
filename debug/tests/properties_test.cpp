@@ -149,6 +149,8 @@ void testRoundTrip() {
         std::make_shared<Label>(),        std::make_shared<Button>(),
         std::make_shared<Image>(),        std::make_shared<Panel>(),
         std::make_shared<Window>(),       std::make_shared<ScrollView>(),
+        std::make_shared<ScrollableVerticalContainer>(),
+        std::make_shared<ScrollableHorizontalContainer>(),
         std::make_shared<TextInput>(),    std::make_shared<SearchInput>(),
         std::make_shared<TextArea>(),     std::make_shared<Group>(),
         std::make_shared<Checkbox>(),     std::make_shared<RadioButton>(),

@@ -115,7 +115,10 @@ namespace ogui {
 
     inline float barThumbH(float trackH, float viewH, float total) {
         if (total <= 0.0f) return trackH;
-        return std::clamp(trackH * (viewH / total), kBarMinThumb, trackH);
+        // A track shorter than the minimum thumb (a bar in a 12px box) fills the
+        // track instead: the minimum is the floor only while there is room.
+        return std::clamp(trackH * (viewH / total),
+                          std::min(kBarMinThumb, trackH), trackH);
     }
 
     // Scroll position -> thumb rect inside track (absolute coordinates).
@@ -152,6 +155,41 @@ namespace ogui {
         Color knob = palette().borderStrong;
         knob.a = active ? 240 : 170;
         r.drawRoundedRect(thumb, knob, thumb.w * 0.5f);
+    }
+
+    // Horizontal scrollbar: the same bar laid along the bottom edge, where the
+    // track/thumb length is the x extent instead of the y extent.
+    inline float barThumbW(float trackW, float viewW, float total) {
+        if (total <= 0.0f) return trackW;
+        return std::clamp(trackW * (viewW / total),
+                          std::min(kBarMinThumb, trackW), trackW);
+    }
+
+    inline Rect barThumbRectH(const Rect& trk, float viewW, float total, float scroll) {
+        if (trk.w <= 0.0f) return trk;
+        const float thumbW = barThumbW(trk.w, viewW, total);
+        const float maxScroll = std::max(total - viewW, 0.0f);
+        const float frac = maxScroll > 0.0f ? scroll / maxScroll : 0.0f;
+        return Rect{trk.x + frac * (trk.w - thumbW), trk.y, thumbW, trk.h};
+    }
+
+    inline float barScrollAtX(const Rect& trk, float viewW, float total,
+                              float lx, float grab) {
+        const float maxScroll = std::max(total - viewW, 0.0f);
+        if (trk.w <= 0.0f || total <= 0.0f || maxScroll <= 0.0f) return 0.0f;
+        const float span = trk.w - barThumbW(trk.w, viewW, total);
+        if (span <= 0.0f) return 0.0f;
+        return std::clamp((lx - grab - trk.x) / span, 0.0f, 1.0f) * maxScroll;
+    }
+
+    inline void drawHorizontalBar(Rasterizer& r, const Rect& trk, const Rect& thumb,
+                                  bool active) {
+        Color track = palette().surface;
+        track.a = 90;
+        r.drawRoundedRect(trk, track, trk.h * 0.5f);
+        Color knob = palette().borderStrong;
+        knob.a = active ? 240 : 170;
+        r.drawRoundedRect(thumb, knob, thumb.h * 0.5f);
     }
 
     // Fit a floating popup on the screen: clamp the size, keep it inside

@@ -8,6 +8,15 @@ namespace ogui {
 ScrollView::ScrollView() = default;
 ScrollView::~ScrollView() = default;
 
+ScrollableVerticalContainer::ScrollableVerticalContainer() { setFlow(Flow::Vertical); }
+ScrollableVerticalContainer::~ScrollableVerticalContainer() = default;
+
+ScrollableHorizontalContainer::ScrollableHorizontalContainer() {
+    setFlow(Flow::Horizontal);
+    setBar(Bar::Horizontal);
+}
+ScrollableHorizontalContainer::~ScrollableHorizontalContainer() = default;
+
 void ScrollView::setContent(std::shared_ptr<Widget> content) {
     if (m_content == content) return;
     if (m_content) removeChild(m_content);
@@ -27,7 +36,12 @@ void ScrollView::scrollBy(float dx, float dy) {
 }
 
 void ScrollView::onPointerScroll(float dx, float dy) {
-    // Positive wheel (away from the user) brings the content back down.
+    // Positive wheel (away from the user) brings the content back down. This is
+    // the one path the wheel, the finger drag and the fling all arrive by, and
+    // it hands the pair straight to scrollBy(): the axis a flow container
+    // refuses to move is clamped away there, in clampScroll(), which is where
+    // every other way of moving the content (setScroll, a bar drag) ends up too
+    // -- one lock, one place, no way around it.
     scrollBy(dx * m_step, dy * m_step);
 }
 
@@ -36,6 +50,8 @@ void ScrollView::clampScroll() {
     // view): nothing to clamp against -- keep the requested position so the
     // first layout pass can act on it.
     if (m_contentBounds.w <= 0.0f && m_contentBounds.h <= 0.0f) return;
+    if (m_flow == Flow::Vertical) m_offset.x = 0.0f;
+    else if (m_flow == Flow::Horizontal) m_offset.y = 0.0f;
     const float minX = std::min(0.0f, m_viewport.w - (m_contentBounds.x + m_contentBounds.w));
     const float minY = std::min(0.0f, m_viewport.h - (m_contentBounds.y + m_contentBounds.h));
     m_offset.x = std::clamp(m_offset.x, minX, 0.0f);
@@ -47,6 +63,17 @@ void ScrollView::layout(float parentWidth, float parentHeight) {
     m_viewport = {0.0f, 0.0f,
                   b.w > 0.0f ? b.w : parentWidth,
                   b.h > 0.0f ? b.h : parentHeight};
+
+    if (m_flow == Flow::Vertical) {
+        flowVertical();
+        clampScroll();
+        return;
+    }
+    if (m_flow == Flow::Horizontal) {
+        flowHorizontal();
+        clampScroll();
+        return;
+    }
 
     // Children keep their authored bounds; they only lay themselves out
     // (a <column> page inside, ...).
@@ -74,6 +101,59 @@ void ScrollView::layout(float parentWidth, float parentHeight) {
     clampScroll();
 }
 
+// A flow container positions its children itself -- stacked down (vertical) or
+// tiled across (horizontal) from the padding edge, each keeping its authored
+// cross-size -- and the content extent is the line they fill. The widget's own
+// bounds stay the viewport; only m_contentBounds grows, which is what makes the
+// overflow scrollable. The gap follows the style, matching Column/Row.
+void ScrollView::flowVertical() {
+    const float pad = m_style.padding;
+    const float gap = m_style.gap > 0.0f ? m_style.gap
+                  : (m_style.margin > 0.0f ? m_style.margin : 4.0f);
+    const float contentW = std::max(m_viewport.w - pad * 2.0f, 0.0f);
+    float y = pad;
+    float maxW = 0.0f;
+    for (const auto& c : m_children) {
+        if (!c || !c->isVisible()) continue;
+        c->resolveGeometry(contentW, m_viewport.h);
+        const Rect cb = c->bounds();
+        const float cw = cb.w > 0.0f ? cb.w : contentW;
+        const float ch = cb.h > 0.0f ? cb.h : 24.0f;
+        c->setBounds(Rect{cb.x, y, cw, ch});
+        c->layout(cw, ch);
+        const Rect after = c->bounds();
+        y += after.h + gap;
+        maxW = std::max(maxW, after.x + after.w);
+    }
+    const float totalH = y > pad ? y - gap : pad;
+    m_contentBounds = Rect{0.0f, 0.0f,
+                           std::max(maxW + pad, m_viewport.w), totalH};
+}
+
+void ScrollView::flowHorizontal() {
+    const float pad = m_style.padding;
+    const float gap = m_style.gap > 0.0f ? m_style.gap
+                  : (m_style.margin > 0.0f ? m_style.margin : 4.0f);
+    const float contentH = std::max(m_viewport.h - pad * 2.0f, 0.0f);
+    float x = pad;
+    float maxH = 0.0f;
+    for (const auto& c : m_children) {
+        if (!c || !c->isVisible()) continue;
+        c->resolveGeometry(m_viewport.w, contentH);
+        const Rect cb = c->bounds();
+        const float cw = cb.w > 0.0f ? cb.w : 100.0f;
+        const float ch = cb.h > 0.0f ? cb.h : contentH;
+        c->setBounds(Rect{x, cb.y, cw, ch});
+        c->layout(cw, ch);
+        const Rect after = c->bounds();
+        x += after.w + gap;
+        maxH = std::max(maxH, after.y + after.h);
+    }
+    const float totalW = x > pad ? x - gap : pad;
+    m_contentBounds = Rect{0.0f, 0.0f,
+                           totalW, std::max(maxH + pad, m_viewport.h)};
+}
+
 bool ScrollView::clipsChildren(Rect& outRect) const {
     outRect = m_viewport;   // {0,0,w,h} in this widget's space
     return true;
@@ -89,28 +169,45 @@ void ScrollView::onDraw(Rasterizer& r) const {
 }
 
 // ---- overlay scrollbar ----
-// Vertical bar on the right edge, draggable; the content's own scroll is
-// -m_offset.y over a range of (contentBottom - viewport height).
+// A draggable bar on the trailing edge of the viewport: right edge for the
+// vertical bar, bottom edge for the horizontal one. "Along" is the axis the bar
+// runs on (y for vertical, x for horizontal); the content's own scroll is the
+// negative offset along that axis over a range of (contentEnd - viewport).
+
+float ScrollView::barView() const {
+    return m_bar == Bar::Horizontal ? std::max(m_viewport.w, 0.0f)
+                                    : std::max(m_viewport.h, 0.0f);
+}
+
+float ScrollView::barContentEnd() const {
+    return m_bar == Bar::Horizontal ? m_contentBounds.x + m_contentBounds.w
+                                    : m_contentBounds.y + m_contentBounds.h;
+}
 
 bool ScrollView::barVisible() const {
-    const float viewH = std::max(m_viewport.h, 0.0f);
-    return m_contentBounds.y + m_contentBounds.h - viewH > 1.0f;
+    return barContentEnd() - barView() > 1.0f;
 }
 
 Rect ScrollView::barTrack() const {
     const Rect b = bounds();
+    if (m_bar == Bar::Horizontal)
+        return Rect{kBarMargin, b.h - kBarW - kBarMargin,
+                    std::max(b.w - 2.0f * kBarMargin, 0.0f), kBarW};
     return Rect{b.w - kBarW - kBarMargin, kBarMargin,
                 kBarW, std::max(b.h - 2.0f * kBarMargin, 0.0f)};
 }
 
 Rect ScrollView::barThumb() const {
-    const float viewH = std::max(m_viewport.h, 0.0f);
-    const float total = viewH + std::max(m_contentBounds.y + m_contentBounds.h - viewH, 0.0f);
-    return barThumbRect(barTrack(), viewH, total, -m_offset.y);
+    const float view = barView();
+    const float total = view + std::max(barContentEnd() - view, 0.0f);
+    return m_bar == Bar::Horizontal
+        ? barThumbRectH(barTrack(), view, total, -m_offset.x)
+        : barThumbRect(barTrack(), view, total, -m_offset.y);
 }
 
 void ScrollView::applyBarScroll(float scroll) {
-    m_offset.y = -std::max(scroll, 0.0f);
+    if (m_bar == Bar::Horizontal) m_offset.x = -std::max(scroll, 0.0f);
+    else m_offset.y = -std::max(scroll, 0.0f);
     clampScroll();
     if (Kernel* k = kernel()) k->invalidate();
 }
@@ -122,6 +219,16 @@ bool ScrollView::claimsPoint(const Offset2D& localP) const {
            localP.y >= trk.y && localP.y <= trk.y + trk.h;
 }
 
+// True when the track is longer than the thumb, so there is somewhere to drag
+// it. A bar in a box no taller than the minimum thumb (a 12px scrollview) has
+// the thumb filling the track: no press position means anything along it, and
+// treating one as "scroll 0" would snap the content back to the start.
+bool ScrollView::barHasSpan() const {
+    const Rect trk = barTrack();
+    const Rect th = barThumb();
+    return m_bar == Bar::Horizontal ? trk.w - th.w > 0.0f : trk.h - th.h > 0.0f;
+}
+
 void ScrollView::onPointerDown(MouseButton, const Offset2D& p) {
     const Offset2D o = absoluteOrigin();
     const float lx = static_cast<float>(p.x) - o.x;
@@ -131,15 +238,21 @@ void ScrollView::onPointerDown(MouseButton, const Offset2D& p) {
     if (lx < trk.x || lx > trk.x + trk.w || ly < trk.y || ly > trk.y + trk.h)
         return;
     m_barDrag = true;
-    const float viewH = std::max(m_viewport.h, 0.0f);
-    const float total = viewH + std::max(m_contentBounds.y + m_contentBounds.h - viewH, 0.0f);
+    if (!barHasSpan()) return;
+    const bool horiz = m_bar == Bar::Horizontal;
+    const float along = horiz ? lx : ly;
+    const float view = barView();
+    const float total = view + std::max(barContentEnd() - view, 0.0f);
     const Rect th = barThumb();
-    if (ly >= th.y && ly <= th.y + th.h) {
-        m_barGrab = ly - th.y;
+    const float thStart = horiz ? th.x : th.y;
+    const float thLen = horiz ? th.w : th.h;
+    if (along >= thStart && along <= thStart + thLen) {
+        m_barGrab = along - thStart;
     } else {
         // Empty track: jump the thumb center to the press point.
-        m_barGrab = th.h * 0.5f;
-        applyBarScroll(barScrollAt(trk, viewH, total, ly, m_barGrab));
+        m_barGrab = thLen * 0.5f;
+        applyBarScroll(horiz ? barScrollAtX(trk, view, total, along, m_barGrab)
+                             : barScrollAt(trk, view, total, along, m_barGrab));
     }
 }
 
@@ -149,18 +262,25 @@ void ScrollView::onPointerUp(MouseButton) {
 
 void ScrollView::onPointerMove(const Offset2D& p) {
     if (!m_barDrag) return;
-    const float ly = static_cast<float>(p.y) - absoluteOrigin().y;
-    const float viewH = std::max(m_viewport.h, 0.0f);
-    const float total = viewH + std::max(m_contentBounds.y + m_contentBounds.h - viewH, 0.0f);
-    applyBarScroll(barScrollAt(barTrack(), viewH, total, ly, m_barGrab));
+    if (!barHasSpan()) return;
+    const bool horiz = m_bar == Bar::Horizontal;
+    const Offset2D o = absoluteOrigin();
+    const float along = horiz ? static_cast<float>(p.x) - o.x
+                              : static_cast<float>(p.y) - o.y;
+    const float view = barView();
+    const float total = view + std::max(barContentEnd() - view, 0.0f);
+    applyBarScroll(horiz ? barScrollAtX(barTrack(), view, total, along, m_barGrab)
+                         : barScrollAt(barTrack(), view, total, along, m_barGrab));
 }
 
 void ScrollView::onDrawForeground(Rasterizer& r) const {
     if (!barVisible()) return;
     // Bounds are shifted into absolute space by Kernel::drawTree here.
     const Rect bb = bounds();
-    drawVerticalBar(r, offsetRect(barTrack(), bb.x, bb.y),
-                    offsetRect(barThumb(), bb.x, bb.y), m_barDrag);
+    const Rect trk = offsetRect(barTrack(), bb.x, bb.y);
+    const Rect th = offsetRect(barThumb(), bb.x, bb.y);
+    if (m_bar == Bar::Horizontal) drawHorizontalBar(r, trk, th, m_barDrag);
+    else drawVerticalBar(r, trk, th, m_barDrag);
 }
 
 // ------------------------------------------------------------------

@@ -332,12 +332,31 @@ public:
     virtual void onPointerMove(const Offset2D& p) override;
     virtual bool claimsPoint(const Offset2D& localP) const override;
 
+    // A plain ScrollView keeps its children where they were authored and scrolls
+    // in whichever axis they overflow, with a vertical bar. The two containers
+    // below change that: they stack their children along one axis (like Column /
+    // Row) and scroll only that axis, and the bar follows it. setFlow() and
+    // setBar() are the knobs; the defaults are exactly the historical ScrollView
+    // behaviour, so a <scrollview> is untouched by their existence.
+protected:
+    enum class Flow : uint8_t { None, Vertical, Horizontal };
+    enum class Bar : uint8_t { Vertical, Horizontal };
+    void setFlow(Flow f) { m_flow = f; }
+    void setBar(Bar b) { m_bar = b; }
+    Flow flow() const { return m_flow; }
+    Bar bar() const { return m_bar; }
+
 private:
     void clampScroll();
     bool barVisible() const;           // content overflows the viewport
+    float barView() const;             // viewport extent along the bar axis
+    float barContentEnd() const;       // content extent along the bar axis
     Rect barTrack() const;             // widget-local space
     Rect barThumb() const;
-    void applyBarScroll(float scroll); // set -m_offset.y from a bar position
+    bool barHasSpan() const;           // track longer than the thumb: draggable
+    void applyBarScroll(float scroll); // set the along-axis offset from a bar position
+    void flowVertical();               // stack children down, set contentBounds
+    void flowHorizontal();             // tile children across, set contentBounds
 
     std::shared_ptr<Widget> m_content;
     Rect m_viewport{0.0f, 0.0f, 0.0f, 0.0f};      // within this widget's bounds
@@ -349,6 +368,33 @@ private:
     Color m_borderColor{ogui::palette().accent};
     bool m_barDrag = false; // pointer is dragging the scrollbar thumb
     float m_barGrab = 0.0f; // thumb-top offset of the drag press
+    Flow m_flow = Flow::None;
+    Bar m_bar = Bar::Vertical;
+};
+
+// ------------------------------------------------------------------
+// ScrollableVerticalContainer / ScrollableHorizontalContainer
+//
+// A container that lays its children out in a single line (top to bottom, or
+// left to right) inside a fixed viewport, and scrolls that line when the
+// children overflow it. Unlike a <scrollview>, whose children keep the bounds
+// an author gave them, these position their children for you -- so a list of
+// rows, a strip of cards, or a column of fields that grows past the box stays
+// reachable by wheel, drag or the overlay bar rather than being clipped away.
+// The vertical one scrolls in y with a bar on the right edge; the horizontal
+// one scrolls in x with a bar on the bottom edge, and each ignores overflow on
+// the other axis.
+// ------------------------------------------------------------------
+class ScrollableVerticalContainer : public ScrollView {
+public:
+    ScrollableVerticalContainer();
+    virtual ~ScrollableVerticalContainer() override;
+};
+
+class ScrollableHorizontalContainer : public ScrollView {
+public:
+    ScrollableHorizontalContainer();
+    virtual ~ScrollableHorizontalContainer() override;
 };
 
 // ------------------------------------------------------------------

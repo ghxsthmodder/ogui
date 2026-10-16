@@ -196,7 +196,7 @@ cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-b
   tree, a popup whose owner died and is still on screen taking clicks, and a
   tree row the collapse animation is still drawing after the node was deleted.
 * `screens` — every manifest screen parses in both themes and keeps the ids the gallery binds to.
-* `scrollbar` — presses on the listbox/treeview/table/scrollview/window/textarea bars scroll instead of selecting or hitting children; dropdown popups fit the screen and scroll.
+* `scrollbar` — presses on the listbox/treeview/table/scrollview/window/textarea bars scroll instead of selecting or hitting children; dropdown popups fit the screen and scroll. Also the two flow containers: `scrollableverticalcontainer`/`scrollablehorizontalcontainer` stack or tile their own children, scroll only along that line (the cross axis is locked for the wheel, the drag and the bar alike) and put the bar on the matching edge — while a `<scrollview>` keeps its authored child positions exactly as before.
 * `script` — `<script>` collection, screen-bound Lua loading on screen
   switches, all four hooks and the `ogui.*` widget API; error capture. Covers
   the bubbled `info` table, a container listener hearing its children, and
@@ -611,6 +611,7 @@ theme default.
 | `group` | titled grouping box | `name` |
 | `image` | RGBA image file (PNG/JPG/… decoded by `ImageManager` via stb_image): stretched to the bounds, or repeated at native size with `tile`; `zoom` crops the bounds down to that fraction of the picture (1..8) instead of stretching the whole thing; `pinchzoom` lets two fingers set the zoom, keeping the point under the fingers still; `border` draws a frame on top; a missing file draws nothing | `source` (path, relative to the working directory), `tile`, `zoom`, `pinchzoom` |
 | `scrollview` | wheel-scrollable clipped viewport over its children | `scrollX`, `scrollY`, `scrollStep` |
+| `scrollableverticalcontainer` / `scrollablehorizontalcontainer` | a `scrollview` that lays its children out itself instead of leaving them where they were authored: stacked down (like `column`) or tiled across (like `row`), and it scrolls only that line — the cross axis is locked for the wheel, the finger drag and the bar alike. The bar rides the right edge of the vertical one and the bottom edge of the horizontal one | `scrollX`, `scrollY`, `scrollStep` (as `scrollview`), `gap` (child spacing, as `column`/`row`) |
 
 Toasts (transient notification banners) are a kernel layer rather than an
 XML element: `Kernel::showToast("saved", Kernel::ToastKind::Info)` stacks a

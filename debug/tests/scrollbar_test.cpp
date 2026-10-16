@@ -1,7 +1,9 @@
 // Scrollbar drag test: presses on the bars scroll the content instead of
-// selecting rows (kernel_test-style frame driving).
+// selecting rows (kernel_test-style frame driving), and scrollableVertical/
+// HorizontalContainer stack their children along one axis and lock the other.
 #include "ogui/kernel.hpp"
 #include "ogui/widgets.hpp"
+#include "ogui/xmlparser.hpp"
 #include <cassert>
 #include <iostream>
 
@@ -278,6 +280,247 @@ int main() {
             pressAt(k, st, pb.x + 20, pb.y + 20);               // top row
             releaseAt(k, st);
             CHECK(cb->selectedIndex() >= 70);
+        }
+    }
+
+    // ---- ScrollableVerticalContainer: stacks children, scrolls only y ----
+    {
+        auto sv = std::make_shared<ScrollableVerticalContainer>();
+        sv->setId("svc");
+        sv->setBounds({0, 0, 200, 100});
+        std::vector<std::shared_ptr<Widget>> kids;
+        for (int i = 0; i < 10; ++i) {
+            auto p = std::make_shared<Panel>();
+            p->setBounds({0, 0, 300, 30});   // wider than the viewport: the
+            sv->addChild(p);                 // locked axis has room to move
+            kids.push_back(p);
+        }
+        show(k, sv);
+        k.frame(st);
+
+        for (int i = 1; i < 10; ++i)
+            CHECK(kids[i]->bounds().y > kids[i - 1]->bounds().y + 29.0f);
+        CHECK(kids[5]->bounds().x == kids[0]->bounds().x);
+        CHECK(sv->contentBounds().h > 300.0f);
+        CHECK(sv->contentBounds().w > 200.0f);
+
+        // The cross axis is locked, whichever way the content is moved.
+        sv->setScroll(-40.0f, -50.0f);
+        CHECK(sv->scrollPosition().x == 0.0f);
+        CHECK(sv->scrollPosition().y == -50.0f);
+        CHECK(sv->childOffset().x == 0.0f);
+        sv->scrollBy(-60.0f, 0.0f);
+        CHECK(sv->scrollPosition().x == 0.0f);
+        sv->setScroll(0.0f, -200.0f);
+        sv->onPointerScroll(-1.0f, -1.0f);   // three notches further down
+        CHECK(sv->scrollPosition().x == 0.0f);
+        CHECK(sv->scrollPosition().y <= -200.0f);
+
+        // Bar on the right edge: the empty track at the bottom jumps there.
+        pressAt(k, st, 194, 95);
+        releaseAt(k, st);
+        CHECK(sv->scrollPosition().y <= -150.0f);
+        CHECK(sv->scrollPosition().x == 0.0f);
+        pressAt(k, st, 194, 60);
+        moveWhileDown(k, st, 194, 4);        // drag the thumb back to the top
+        releaseAt(k, st);
+        CHECK(sv->scrollPosition().y > -10.0f);
+
+        // A press in the body, away from the bar, scrolls nothing.
+        const float yBefore = sv->scrollPosition().y;
+        pressAt(k, st, 100, 50);
+        releaseAt(k, st);
+        CHECK(sv->scrollPosition().y == yBefore);
+    }
+
+    // ---- ScrollableHorizontalContainer: tiles children, scrolls only x ----
+    {
+        auto sv = std::make_shared<ScrollableHorizontalContainer>();
+        sv->setId("shc");
+        sv->setBounds({0, 0, 200, 100});
+        std::vector<std::shared_ptr<Widget>> kids;
+        for (int i = 0; i < 40; ++i) {
+            auto p = std::make_shared<Panel>();
+            p->setBounds({0, 0, 30, 140});  // taller than the viewport: the
+            sv->addChild(p);                // locked axis has room to move
+            kids.push_back(p);
+        }
+        show(k, sv);
+        k.frame(st);
+
+        for (int i = 1; i < 40; ++i)
+            CHECK(kids[i]->bounds().x > kids[i - 1]->bounds().x + 29.0f);
+        CHECK(kids[20]->bounds().y == kids[0]->bounds().y);
+        CHECK(sv->contentBounds().w > 1000.0f);
+        CHECK(sv->contentBounds().h > 100.0f);
+
+        sv->setScroll(-50.0f, -30.0f);
+        CHECK(sv->scrollPosition().y == 0.0f);
+        CHECK(sv->scrollPosition().x == -50.0f);
+        sv->scrollBy(0.0f, -35.0f);
+        CHECK(sv->scrollPosition().y == 0.0f);
+        sv->setScroll(-50.0f, 0.0f);
+        sv->onPointerScroll(-1.0f, -1.0f);
+        CHECK(sv->scrollPosition().y == 0.0f);
+        CHECK(sv->scrollPosition().x <= -80.0f);
+
+        // Bar along the bottom edge: an empty track in the middle jumps the
+        // thumb there, not to the end of the line.
+        sv->setScroll(0.0f, 0.0f);
+        pressAt(k, st, 100, 94);
+        releaseAt(k, st);
+        CHECK(sv->scrollPosition().x < -450.0f);
+        CHECK(sv->scrollPosition().x > -700.0f);
+        CHECK(sv->scrollPosition().y == 0.0f);
+
+        // Its right end is the end of the line.
+        pressAt(k, st, 195, 94);
+        releaseAt(k, st);
+        CHECK(sv->scrollPosition().x <= -1100.0f);
+        CHECK(sv->scrollPosition().y == 0.0f);
+
+        // The right edge is not a bar here: the vertical bar the plain
+        // ScrollView puts there does not exist for this flow.
+        const float xBefore = sv->scrollPosition().x;
+        pressAt(k, st, 196, 40);
+        releaseAt(k, st);
+        CHECK(sv->scrollPosition().x == xBefore);
+        CHECK(sv->scrollPosition().y == 0.0f);
+
+        pressAt(k, st, 180, 94);
+        moveWhileDown(k, st, 4, 94);         // drag the thumb back to the left
+        releaseAt(k, st);
+        CHECK(sv->scrollPosition().x > -20.0f);
+    }
+
+    // ---- A bar shorter than the minimum thumb: it fills the track ----
+    {
+        auto sv = std::make_shared<ScrollableVerticalContainer>();
+        sv->setId("svtiny");
+        sv->setBounds({0, 0, 200, 12});      // track 8px, thumb floor 16px
+        for (int i = 0; i < 10; ++i) {
+            auto p = std::make_shared<Panel>();
+            p->setBounds({0, 0, 200, 30});
+            sv->addChild(p);
+        }
+        show(k, sv);
+        k.frame(st);                         // drew a clamp(lo>hi) until the
+        CHECK(sv->contentBounds().h > 12.0f);  // thumb floor learned to shrink
+        sv->onPointerScroll(0.0f, -1.0f);    // the wheel still scrolls
+        CHECK(sv->scrollPosition().y < 0.0f);
+        pressAt(k, st, 194, 6);              // no drag span: nothing moves
+        releaseAt(k, st);
+        CHECK(sv->scrollPosition().y < 0.0f);
+
+        auto hs = std::make_shared<ScrollableHorizontalContainer>();
+        hs->setId("shtiny");
+        hs->setBounds({0, 40, 12, 100});
+        for (int i = 0; i < 10; ++i) {
+            auto p = std::make_shared<Panel>();
+            p->setBounds({0, 0, 30, 100});
+            hs->addChild(p);
+        }
+        show(k, hs);
+        k.frame(st);
+        CHECK(hs->contentBounds().w > 12.0f);
+        hs->onPointerScroll(-1.0f, 0.0f);
+        CHECK(hs->scrollPosition().x < 0.0f);
+        pressAt(k, st, 6, 40 + 94);
+        releaseAt(k, st);
+        CHECK(hs->scrollPosition().x < 0.0f);
+    }
+
+    // ---- Both bars are hit-tested in local space ----
+    {
+        auto sv = std::make_shared<ScrollableHorizontalContainer>();
+        sv->setId("shcofs");
+        sv->setBounds({50, 40, 200, 100});
+        for (int i = 0; i < 10; ++i) {
+            auto p = std::make_shared<Panel>();
+            p->setBounds({0, 0, 30, 100});
+            sv->addChild(p);
+        }
+        show(k, sv);
+        k.frame(st);
+
+        pressAt(k, st, 50 + 195, 40 + 94);   // bottom-right of the offset bar
+        releaseAt(k, st);
+        CHECK(sv->scrollPosition().x <= -100.0f);
+
+        auto vc = std::make_shared<ScrollableVerticalContainer>();
+        vc->setId("svcofs");
+        vc->setBounds({50, 200, 200, 100});
+        for (int i = 0; i < 10; ++i) {
+            auto p = std::make_shared<Panel>();
+            p->setBounds({0, 0, 200, 30});
+            vc->addChild(p);
+        }
+        show(k, vc);
+        k.frame(st);
+
+        pressAt(k, st, 50 + 194, 200 + 95);  // bottom of the offset bar
+        releaseAt(k, st);
+        CHECK(vc->scrollPosition().y <= -150.0f);
+    }
+
+    // ---- The tags build flow containers, not plain ScrollViews ----
+    {
+        XmlParser parser;
+        auto res = parser.parse(R"(<screen id="flows">
+  <scrollableverticalcontainer id="svc" x="0" y="0" width="200" height="100"
+                               scrollstep="20" gap="20">
+    <panel id="a" width="200" height="30"/>
+    <panel id="b" width="200" height="30"/>
+    <panel id="c" width="200" height="30"/>
+    <panel id="g" width="200" height="30"/>
+  </scrollableverticalcontainer>
+  <scrollablehorizontalcontainer id="shc" x="300" y="0" width="200" height="100">
+    <panel id="d" width="30" height="100"/>
+    <panel id="e" width="30" height="100"/>
+    <panel id="f" width="30" height="100"/>
+    <panel id="h" width="30" height="100"/>
+    <panel id="i" width="30" height="100"/>
+    <panel id="j" width="30" height="100"/>
+    <panel id="l" width="30" height="100"/>
+    <panel id="m" width="30" height="100"/>
+  </scrollablehorizontalcontainer>
+</screen>)");
+        CHECK(res.root != nullptr);
+        CHECK(res.errors.empty());
+        std::shared_ptr<ScrollableVerticalContainer> v;
+        std::shared_ptr<ScrollableHorizontalContainer> h;
+        if (res.root) {
+            for (const auto& w : res.root->children()) {
+                if (w->id() == "svc") v = std::dynamic_pointer_cast<ScrollableVerticalContainer>(w);
+                if (w->id() == "shc") h = std::dynamic_pointer_cast<ScrollableHorizontalContainer>(w);
+            }
+        }
+        CHECK(v != nullptr);
+        CHECK(h != nullptr);
+        if (v && h) {
+            CHECK(v->scrollStep() == 20.0f);   // the ScrollView attributes carry
+            auto s = std::make_shared<Screen>("flows");
+            s->widgets.push_back(v);
+            s->widgets.push_back(h);
+            s->width = 800; s->height = 600;
+            k.pushScreen(s);
+            k.frame(st);
+            CHECK(v->contentBounds().h > 100.0f);
+            CHECK(v->contentBounds().w <= 200.0f);
+            CHECK(h->contentBounds().w > 200.0f);
+            CHECK(h->contentBounds().h <= 100.0f);
+            const auto& vk = v->children();
+            const auto& hk = h->children();
+            CHECK(vk.size() == 4 && hk.size() == 8);
+            if (vk.size() == 4 && hk.size() == 8) {
+                CHECK(vk[3]->bounds().y > vk[0]->bounds().y);
+                CHECK(hk[7]->bounds().x > hk[0]->bounds().x);
+                CHECK(vk[3]->bounds().x == vk[0]->bounds().x);
+                CHECK(hk[7]->bounds().y == hk[0]->bounds().y);
+                // The style gap separates the stacked children.
+                CHECK(vk[1]->bounds().y - (vk[0]->bounds().y + vk[0]->bounds().h)
+                          == 20.0f);
+            }
         }
     }
 
