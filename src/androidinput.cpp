@@ -437,6 +437,29 @@ void AndroidInputBridge::reset() {
     m_edits.clear();
 }
 
+void AndroidInputBridge::setWindowInsets(const WindowInsets& in) {
+    // A negative bar would hand the tree more canvas than the window has, which
+    // is not a shape the platform reports but exactly what a host computing an
+    // inset out of two rectangles can produce. Zero is the honest answer to
+    // "how much of this edge does the system keep", and the answer to "none" is
+    // the same number either way.
+    std::lock_guard<std::mutex> lk(m_insetsMutex);
+    m_windowInsets = WindowInsets{
+        in.left > 0 ? in.left : 0, in.top > 0 ? in.top : 0,
+        in.right > 0 ? in.right : 0, in.bottom > 0 ? in.bottom : 0};
+    m_windowInsetsKnown = true;
+}
+
+bool AndroidInputBridge::takeWindowInsets(WindowInsets& out) {
+    std::lock_guard<std::mutex> lk(m_insetsMutex);
+    if (!m_windowInsetsKnown) return false;
+    if (m_insetsReportedKnown && m_windowInsets == m_insetsReported) return false;
+    m_insetsReported = m_windowInsets;
+    m_insetsReportedKnown = true;
+    out = m_windowInsets;
+    return true;
+}
+
 int keyFromAndroidKey(int32_t code) {
     // android/keycodes.h. Spelled out as numbers rather than included: a test
     // on a Linux machine has no Android headers, and these values are a

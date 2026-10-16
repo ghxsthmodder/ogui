@@ -51,6 +51,18 @@ public final class OguiJni {
     public static native boolean nativeHasEditor();
 
     /**
+     * Where the system's bars are, in device pixels: how much of each edge of
+     * the surface ogui draws on is painted over by the status bar, the
+     * navigation bar, the cutout or the keyboard.
+     *
+     * A latest value rather than an event, so native keeps only the newest one
+     * and applies it on the frame that follows -- a keyboard sliding up is a
+     * hundred of these, and the tree has to move once.
+     */
+    public static native void nativeSetWindowInsets(int left, int top,
+                                                    int right, int bottom);
+
+    /**
      * Ask for the keyboard a field wants: {@code android.text.InputType} and
      * {@code EditorInfo.imeOptions} as ogui decided them, and whether the
      * keyboard should be on screen at all.

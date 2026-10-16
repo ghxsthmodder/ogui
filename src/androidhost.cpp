@@ -483,3 +483,23 @@ void AndroidHost::setClearColor(float r, float g, float b) {
 } // namespace ogui
 
 #endif  // __ANDROID__
+
+namespace ogui {
+
+// The safe area is the one part of this host that needs no phone to be right:
+// it moves a number the platform reported into the kernel, and both ends of
+// that exist on a desktop. It lives outside the ifdef for that reason -- the
+// alternative is a rule about device pixels and logical units that only ever
+// runs on the one machine where it cannot be tested.
+void AndroidHost::applyWindowInsets(Kernel& kernel) {
+    WindowInsets px;
+    if (!m_input.takeWindowInsets(px)) return;
+    // The kernel's scale and not dpiScale(): a bar is measured against the
+    // window, and the window is laid out in whatever unit the screen that owns
+    // it decided to be drawn in.
+    const float sc = kernel.scale();
+    kernel.setInsets(Insets{px.left / sc, px.top / sc, px.right / sc,
+                            px.bottom / sc});
+}
+
+} // namespace ogui

@@ -6,14 +6,16 @@
 // is not, what a key code stands for, where a typed character goes -- are plain
 // data over in AndroidInputBridge, and this is where they are checked. The same
 // is true of the input connection's side of the host: which keyboard a focused
-// field asks for, what an edit the IME asks for does to that field, and how an
+// field asks for, what an edit the IME asks for does to that field, how an
 // IME's UTF-16 indices line up with the UTF-8 offsets the widget counts its
-// caret in, are all decided over ints and strings before any Java sees them.
+// caret in, and what the window's bars become once they reach a kernel -- all of
+// it is decided over ints and strings before any Java sees them.
 #include "ogui/androidhost.hpp"
 #include "ogui/api.hpp"
 #include "ogui/kernel.hpp"
 #include "ogui/widgets.hpp"
 
+#include <cmath>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -618,6 +620,74 @@ void theImeCountsInCodeUnitsAndTheWidgetInBytes() {
     check(imeCountUnits(broken, 0, broken.size()) == 2, "counted as two");
 }
 
+// The window's bars are measured by the platform on the thread that owns the
+// window, in device pixels, and have to move a tree that is drawn on another
+// thread in logical units. Both halves of that are rules, so both are checked
+// here rather than on a phone.
+void theWindowTellsTheTreeWhereItsBarsAre() {
+    const float d = 2.8125f;      // the SM-A155M's 450 dpi
+    AndroidHost host;
+    Kernel kernel;
+    kernel.init();
+    auto screen = std::make_shared<Screen>("s");
+    screen->width = 1080.0f;
+    screen->height = 2340.0f;
+    screen->scale = d;
+    kernel.pushScreen(screen);
+
+    WindowInsets out;
+    check(!host.input().takeWindowInsets(out),
+          "a window nobody has measured has no bars to hand over");
+    host.applyWindowInsets(kernel);
+    check(kernel.safeRect().x == 0.0f && kernel.safeRect().y == 0.0f,
+          "and until it says otherwise the tree gets the whole of it");
+
+    host.input().setWindowInsets(WindowInsets{0, 72, 0, 1050});
+    check(host.input().takeWindowInsets(out), "a bar the platform reported is drained");
+    check(out.top == 72 && out.bottom == 1050, "drained as it was measured, in device pixels");
+    check(!host.input().takeWindowInsets(out),
+          "and only once: a bar that has not moved must not lay the tree out again");
+
+    // The conversion, on a pair that has not been drained by hand: a status bar
+    // 72 device pixels tall is 25.6 logical units on this phone, and the number
+    // the kernel keeps has to be the one the layout is authored in.
+    AndroidHost measured;
+    Kernel k2;
+    k2.init();
+    auto phone = std::make_shared<Screen>("phone");
+    phone->width = 1080.0f;
+    phone->height = 2340.0f;
+    phone->scale = d;
+    k2.pushScreen(phone);
+    measured.input().setWindowInsets(WindowInsets{0, 72, 0, 1050});
+    measured.applyWindowInsets(k2);
+    check(std::fabs(k2.insets().top - 72.0f / d) < 0.001f,
+          "the scale is what turns a bar of 72 pixels into one of 25 units");
+    check(std::fabs(k2.safeRect().y - 72.0f / d) < 0.001f,
+          "so the tree starts under the status bar");
+    check(std::fabs(k2.safeRect().h - (2340.0f - 72.0f - 1050.0f) / d) < 0.01f,
+          "and stops above the keyboard");
+    k2.setInsets(Insets{1.0f, 2.0f, 3.0f, 4.0f});
+    measured.applyWindowInsets(k2);
+    check(k2.insets().top == 2.0f,
+          "and the next frame is not told the same bar again");
+
+    // The keyboard leaving is not a second entry under the first. An inset is
+    // what the window is right now, and a queue that replayed the bar that had
+    // already gone would push the layout out from under the one that stayed.
+    host.input().setWindowInsets(WindowInsets{0, 72, 0, 96});
+    host.input().setWindowInsets(WindowInsets{0, 72, 0, 0});
+    check(host.input().takeWindowInsets(out) && out.bottom == 0,
+          "the newest bar is the only bar there is");
+
+    // Subtracting two rectangles is how a host produces a negative bar, and a
+    // hole with a negative edge is more canvas, which is not a thing the system
+    // ever hands back.
+    host.input().setWindowInsets(WindowInsets{-40, -1, 0, 0});
+    check(host.input().takeWindowInsets(out) && out.left == 0 && out.top == 0,
+          "an inset that would enlarge the window is read as no inset");
+}
+
 } // namespace
 
 int main() {
@@ -643,6 +713,7 @@ int main() {
     theWindowTakingItsFingersBackClearsEverything();
     theKeyboardMatchesTheFieldThatHasTheFocus();
     theImeCountsInCodeUnitsAndTheWidgetInBytes();
+    theWindowTellsTheTreeWhereItsBarsAre();
 
     if (g_failures) {
         std::cout << "android_test: " << g_failures << " checks failed\n";

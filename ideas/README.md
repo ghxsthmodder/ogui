@@ -1077,6 +1077,32 @@ compatibilidade e capacidade de manutenção.
     a cada quadro. O que a conexão não atende é recusa registrada: clipboard e
     `performContextMenuAction`, que não têm para o que voltar. Testes em
     `debug/tests/android_test.cpp`.
+-   [x] Área segura (insets): uma janela de telefone não é a janela inteira ---
+    barra de status, recorte e teclado cada um come uma faixa, e uma layout que
+    não sabe disso desenha botão debaixo da barra e campo debaixo do teclado. O
+    `Kernel` guarda isso como `Insets` e `safeRect()`, no modelo em que o widget
+    mantém o *bounds autoral relativo* à área segura em vez de ter o bounds
+    reescrito: `update()` converte o ponteiro de pixels do aparelho para lógico e
+    subtrai a origem segura uma vez só, `buildDrawList()` entrega a origem ao
+    `drawTree` para somar de volta, e como os dois passes deitam a árvore a cada
+    quadro, um deslocamento persistente somaria duas vezes e uma conversão no
+    ponteiro não. `OguiActivity` pede a janela inteira
+    (`setDecorFitsSystemWindows(false)` na API 30+, os flags legados
+    `LAYOUT_STABLE | LAYOUT_FULLSCREEN | LAYOUT_HIDE_NAVIGATION` abaixo dela) para
+    o quadro parar de consumir as barras e entregar os números; o
+    `onApplyWindowInsets` lê `systemBars() | displayCutout()` e `ime()`, e o
+    teclado *substitui* a barra de navegação, então o fundo é `max(bars, ime)` e
+    não a soma. Os valores chegam em pixels do aparelho, no thread da UI, e ficam
+    como último valor, não fila: `takeWindowInsets` só reporta uma barra uma vez e
+    só quando ela mudou, `AndroidHost::applyWindowInsets` divide pela escala e
+    `setInsets` invalida quando algo se moveu, não sessenta vezes por segundo
+    enquanto nada se move. A conversão e a regra de drenagem vivem fora do
+    `#ifdef __ANDROID__` em `androidhost.cpp`, portanto testadas no host e não só
+    no aparelho. Testes em `debug/tests/kernel_test.cpp` (o retângulo, a lista de
+    desenho, o hover no ponto convertido, o clamp do toast, o overrun além da
+    janela) e `debug/tests/android_test.cpp` (o último-valor, o só-uma-vez, o
+    negativo lido como zero); controles negativos mostram cada regra derrubando
+    exatamente a asserção escrita para ela.
 
 **Resultado esperado:** o mesmo `DrawList` renderiza em desktop GL, GLES 3.0 e
 CPU, com a portabilidade coberta por teste em vez de suposição.

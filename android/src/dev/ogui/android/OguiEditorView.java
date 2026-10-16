@@ -1,7 +1,10 @@
 package dev.ogui.android;
 
 import android.content.Context;
+import android.graphics.Insets;
+import android.os.Build;
 import android.view.View;
+import android.view.WindowInsets;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
@@ -54,6 +57,47 @@ public final class OguiEditorView extends View {
      */
     @Override public boolean onCheckIsTextEditor() {
         return OguiJni.nativeHasEditor();
+    }
+
+    /**
+     * Forward the window's bars to the tree, in device pixels, without keeping
+     * any of them.
+     *
+     * This is the only place in an ogui app that learns where the status bar,
+     * the navigation bar, the cutout around the camera and the keyboard are:
+     * they are rectangles the system keeps for itself and paints over the
+     * surface, and a native window is told about them through a view. The view
+     * is one pixel wide and draws nothing, so the numbers go straight on to
+     * native, which moves the layout inside them.
+     *
+     * The keyboard is the bottom bar while it is up, and it *replaces* the
+     * navigation bar rather than adding to it: the two sit on the same strip of
+     * pixels, and an inset that counted both would lift the layout twice.
+     */
+    @Override public WindowInsets onApplyWindowInsets(WindowInsets insets) {
+        if (Build.VERSION.SDK_INT >= 30) {
+            reportModernInsets(insets);
+        } else {
+            OguiJni.nativeSetWindowInsets(insets.getSystemWindowInsetLeft(),
+                                          insets.getSystemWindowInsetTop(),
+                                          insets.getSystemWindowInsetRight(),
+                                          insets.getSystemWindowInsetBottom());
+        }
+        // Returned untouched: this view is not the one that has to live inside
+        // the bars, and consuming them here would hide them from the window.
+        return super.onApplyWindowInsets(insets);
+    }
+
+    /**
+     * The API 30 vocabulary, in a method of its own so a device older than that
+     * never verifies a reference to a type it does not have.
+     */
+    private static void reportModernInsets(WindowInsets insets) {
+        final Insets bars = insets.getInsets(WindowInsets.Type.systemBars()
+                                             | WindowInsets.Type.displayCutout());
+        final Insets ime = insets.getInsets(WindowInsets.Type.ime());
+        OguiJni.nativeSetWindowInsets(bars.left, bars.top, bars.right,
+                                      Math.max(bars.bottom, ime.bottom));
     }
 
     @Override public InputConnection onCreateInputConnection(EditorInfo outAttrs) {

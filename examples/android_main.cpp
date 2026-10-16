@@ -53,6 +53,10 @@ void frame(App& a) {
     // draw it; what the tree has focused goes to the keyboard after the frame
     // that moved it. Between those two calls an app types, deletes and submits.
     a.host.applyImeEdits(a.kernel, a.input);
+    // The bars move too -- a keyboard sliding up is a window resize the surface
+    // never sees -- and the tree has to be laid out for the rectangle that is
+    // left before anything is drawn into it.
+    a.host.applyWindowInsets(a.kernel);
     a.host.input().deliverChar(a.input);
     a.kernel.frame(a.input);
     a.host.input().endFrame(a.input);

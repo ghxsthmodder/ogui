@@ -70,6 +70,27 @@ struct InputSource {
 };
 
 // ------------------------------------------------------------------
+// Insets: the part of the window the system paints over
+// ------------------------------------------------------------------
+// An edge-to-edge phone hands the app its whole display and then draws a status
+// bar, a navigation bar and, while a keyboard is up, the keyboard itself on top
+// of whatever landed there. A layout is not wrong for having authored y="16" at
+// the top of a window it was told is 2340 pixels tall; it is only in the wrong
+// place. So the host reports the holes as four numbers in logical units and the
+// tree is laid out in what is left: a percentage resolves against the safe
+// width, and the whole tree moves into the safe rectangle when it is drawn and
+// when a pointer is read against it. Widgets never see any of it -- they keep
+// authoring from the corner of the area they were given, and the point a finger
+// delivers arrives in the same coordinates, so a caret lands under the pixel
+// that was tapped whether or not the window has bars.
+//
+// All four are >= 0 (a bar that would enlarge the canvas is a bug, not an
+// inset) and 0 is what a desktop, a test and a phone with no bars say.
+struct Insets {
+    float left = 0.0f, top = 0.0f, right = 0.0f, bottom = 0.0f;
+};
+
+// ------------------------------------------------------------------
 // Screen
 // ------------------------------------------------------------------
 struct Screen {
@@ -134,6 +155,23 @@ public:
     void setScale(float s);
     float logicalWidth() const;
     float logicalHeight() const;
+
+    // ---- safe area ----
+    // The insets are in logical units, the same canvas `logicalWidth()` reports
+    // (a host that learned them in device pixels -- which is how Android
+    // reports a bar -- divides by `scale()` on its way in). Setting them
+    // invalidates, because the tree has to be laid out again for the new
+    // rectangle, and a keyboard that comes and goes is the case where that
+    // happens sixty times a second if the host is not careful.
+    void setInsets(const Insets& in);
+    Insets insets() const { return m_insets; }
+    // Where the tree actually goes: the canvas minus the insets, with the
+    // origin the tree is drawn at and a size that is never negative. Two insets
+    // that together eat a dimension leave that dimension at 0 rather than
+    // pretending the window is somewhere else, and the leading edge is the one
+    // kept whole -- a status bar is a fact, while the trailing edge is the
+    // keyboard, which is the half that grows.
+    Rect safeRect() const;
 
     // ---- theme ----
     void setTheme(const Theme* theme);
@@ -374,6 +412,12 @@ private:
     // modifier bitmask derived from the current key state (see ModBits).
     uint32_t currentMods() const;
     void drawTree(Rasterizer& r, Widget* w, float ox, float oy) const;
+    // Lay the current screen's tree out in the safe rectangle. Both passes --
+    // the one that makes hit-testing honest before the first draw and the one
+    // inside buildDrawList() -- go through here, because a tree laid out twice
+    // with two different canvases is a tree whose second half of the frame is
+    // in the wrong place.
+    void layoutScreen();
     void advanceAnimations(float dt);
     // Widget the popup layer hit at the pointer (nullptr when closed/no hit).
     Widget* popupHitTest(const Offset2D& p) const;
@@ -507,6 +551,7 @@ private:
     InputState m_prevInput{};
     float m_builtW = -1.0f, m_builtH = -1.0f;   // screen size at last build
     float m_builtScale = -1.0f;                 // dpi scale at last build
+    Insets m_insets;                            // see safeRect()
     uint32_t m_debug = 0;                       // DebugFlag bits
     bool m_debugEvents = false;                 // event flow into addLog()
     FrameStats m_stats{};

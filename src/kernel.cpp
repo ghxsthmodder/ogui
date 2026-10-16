@@ -229,6 +229,11 @@ void Kernel::drawDebugOverlay(Rasterizer& r) const {
     auto screen = currentScreen();
     if (!screen || m_debug == 0) return;
     const Palette& pal = palette();
+    // The overlay marks the same pixels the tree was drawn into, and a widget's
+    // absolute origin is in the tree's own coordinates -- so the bars are added
+    // here exactly as drawTree() adds them, or the box around a widget would
+    // point at the window corner it was authored against.
+    const Rect safe = safeRect();
     constexpr int kFont = 10;
     const Font* f = r.resolveFont("mono", kFont);
     if (!f) f = r.resolveFont("sans", kFont);
@@ -239,7 +244,7 @@ void Kernel::drawDebugOverlay(Rasterizer& r) const {
         if (Widget* h = m_hovered) {
             const Offset2D o = h->absoluteOrigin();
             const Rect b = h->bounds();
-            const Rect box{o.x, o.y, b.w, b.h};
+            const Rect box{o.x + safe.x, o.y + safe.y, b.w, b.h};
             r.drawRect(box, withAlpha(pal.info, 38));
             r.drawRectBorder(box, pal.info, 2.0f, 0.0f);
         }
@@ -252,7 +257,7 @@ void Kernel::drawDebugOverlay(Rasterizer& r) const {
                 if (!w || !w->isVisible()) return;
                 const Offset2D o = w->absoluteOrigin();
                 const Rect b = w->bounds();
-                const Rect box{o.x, o.y, b.w, b.h};
+                const Rect box{o.x + safe.x, o.y + safe.y, b.w, b.h};
                 const Color& col = tints[static_cast<size_t>(depth) % 4];
                 if (m_debug & DebugBounds)
                     r.drawRectBorder(box, withAlpha(col, 200), 1.0f, 0.0f);
@@ -279,7 +284,7 @@ void Kernel::drawDebugOverlay(Rasterizer& r) const {
             const Offset2D o = w->absoluteOrigin();
             const Rect b = w->bounds();
             const bool focused = (w == m_focus);
-            const Rect box{o.x, o.y, b.w, b.h};
+            const Rect box{o.x + safe.x, o.y + safe.y, b.w, b.h};
             r.drawRectBorder(box, focused ? pal.focus : withAlpha(pal.focus, 130),
                              focused ? 2.0f : 1.0f, 0.0f);
             char tag[24];
@@ -607,6 +612,40 @@ float Kernel::logicalWidth() const {
 float Kernel::logicalHeight() const {
     auto screen = currentScreen();
     return screen ? screen->height / scale() : 0.0f;
+}
+
+void Kernel::setInsets(const Insets& in) {
+    const Insets next{std::max(0.0f, in.left), std::max(0.0f, in.top),
+                      std::max(0.0f, in.right), std::max(0.0f, in.bottom)};
+    if (next.left == m_insets.left && next.top == m_insets.top &&
+        next.right == m_insets.right && next.bottom == m_insets.bottom)
+        return;
+    m_insets = next;
+    invalidate();
+}
+
+Rect Kernel::safeRect() const {
+    const float w = std::max(0.0f, logicalWidth());
+    const float h = std::max(0.0f, logicalHeight());
+    const float left = std::min(m_insets.left, w);
+    const float right = std::min(m_insets.right, w - left);
+    const float top = std::min(m_insets.top, h);
+    const float bottom = std::min(m_insets.bottom, h - top);
+    return Rect{left, top, w - left - right, h - top - bottom};
+}
+
+void Kernel::layoutScreen() {
+    auto screen = currentScreen();
+    if (!screen) return;
+    const Rect safe = safeRect();
+    for (const auto& w : screen->widgets) {
+        if (!w) continue;
+        // Containers (Column/Row/ScrollView) position their children first, so
+        // the canvas a percentage resolves against is decided here and nowhere
+        // else: the safe one.
+        w->resolveGeometry(safe.w, safe.h);
+        w->layout(safe.w, safe.h);
+    }
 }
 
 void Kernel::processInput(const InputState& st) { m_input = st; }
@@ -1150,16 +1189,15 @@ void Kernel::update() {
     // The tree is laid out in logical units; screen->width/height are device
     // pixels, so the scale divides them here and nowhere else.
     const float sc = scale();
-    const float lw = screen->width / sc;
-    const float lh = screen->height / sc;
-    for (const auto& w : screen->widgets) {
-        if (!w) continue;
-        w->resolveGeometry(lw, lh);
-        w->layout(lw, lh);
-    }
+    layoutScreen();
 
-    // The host reports the pointer in device pixels; widgets see logical.
-    const Offset2D p{m_input.mouseX / sc, m_input.mouseY / sc};
+    // The host reports the pointer in device pixels against the *window*, and
+    // the tree lives in the safe rectangle inside it: the bars come off here,
+    // once, so that a widget putting a caret under a tap -- which subtracts its
+    // own bounds from this point -- is working in the same world as the pixel
+    // that was pressed.
+    const Rect safe = safeRect();
+    const Offset2D p{m_input.mouseX / sc - safe.x, m_input.mouseY / sc - safe.y};
     const int btn = (m_input.mouseButton >= 0 && m_input.mouseButton < 4)
                         ? m_input.mouseButton : 0;
     const bool down = m_input.mouseDown[btn];
@@ -1352,18 +1390,22 @@ const DrawList& Kernel::buildDrawList() {
     FontManager::instance().setScale(sc);
     r.reset();
     r.beginFrame(Rect{0, 0, logicalW, logicalH});
+    // The safe rectangle is where the tree goes: laid out at its origin and
+    // drawn shifted into it, so a widget authored against the top-left of the
+    // content area ends up below the status bar without knowing there is one.
+    const Rect safe = safeRect();
+    layoutScreen();
     for (const auto& w : screen->widgets) {
         if (!w) continue;
-        // Containers (Column/Row/ScrollView) position their children first.
-        w->resolveGeometry(logicalW, logicalH);
-        w->layout(logicalW, logicalH);
-        drawTree(r, w.get(), 0.0f, 0.0f);
+        drawTree(r, w.get(), safe.x, safe.y);
     }
 
     // Popup layer: drawn after the tree so dropdowns/menus float above
-    // everything, before the tooltip. Bounds are screen-absolute.
+    // everything, before the tooltip. Its bounds are in the tree's own
+    // coordinates -- a dropdown hangs off the widget that opened it, which
+    // lives in the safe rectangle -- so it is shifted the same way.
     if (m_popup && m_popup->isVisible()) {
-        drawTree(r, m_popup.get(), 0.0f, 0.0f);
+        drawTree(r, m_popup.get(), safe.x, safe.y);
     }
 
     // Hover tooltip, drawn last so it floats above everything. It fades in
@@ -1378,15 +1420,19 @@ const DrawList& Kernel::buildDrawList() {
         const float bw = tw + kPad * 2.0f;
         const float bh = lineH + kPad * 2.0f;
         // Pointer and canvas are both logical here; the rasterizer scales the
-        // box into device pixels when it emits it.
+        // box into device pixels when it emits it. The pointer is in window
+        // coordinates -- the tooltip is drawn by the window, not by the tree --
+        // but it is kept inside the area the user can actually see, since a tip
+        // that lands under the navigation bar is a tip nobody reads.
         const float mx = m_input.mouseX / sc;
         const float my = m_input.mouseY / sc;
+        const float right = safe.x + safe.w, bottom = safe.y + safe.h;
         float tx = mx + 14.0f;
         float ty = my + 18.0f;
-        if (tx + bw > logicalW) tx = mx - bw - 6.0f;
-        if (ty + bh > logicalH) ty = my - bh - 6.0f;
-        if (tx < 0.0f) tx = 0.0f;
-        if (ty < 0.0f) ty = 0.0f;
+        if (tx + bw > right) tx = mx - bw - 6.0f;
+        if (ty + bh > bottom) ty = my - bh - 6.0f;
+        if (tx < safe.x) tx = safe.x;
+        if (ty < safe.y) ty = safe.y;
         const Rect box{tx, ty, bw, bh};
         const float fade = std::max(m_tipFade, 0.02f);
         auto tinted = [&](const Color& base) {
@@ -1403,10 +1449,13 @@ const DrawList& Kernel::buildDrawList() {
         }
     }
 
-    // Toast banners: bottom-right stack, fading out over the last 0.5 s.
+    // Toast banners: bottom-right stack, fading out over the last 0.5 s. They
+    // are content the user has to read, so the stack sits inside the safe
+    // rectangle -- on a phone that is the difference between a warning above
+    // the keyboard and a warning nobody ever sees.
     {
         constexpr float kPad = 8.0f;
-        float y = logicalH - 8.0f;
+        float y = safe.y + safe.h - 8.0f;
         for (size_t i = m_toasts.size(); i-- > 0;) {
             const ToastItem& t = m_toasts[i];
             const float fade = t.age > 3.0f ? (3.5f - t.age) * 2.0f : 1.0f;
@@ -1417,7 +1466,7 @@ const DrawList& Kernel::buildDrawList() {
             const float tw = f ? r.textWidth(t.text.c_str(), *f) : 120.0f;
             const float bw = tw + kPad * 2.0f + 4.0f;
             const float bh = 28.0f;
-            const Rect box{logicalW - bw - 8.0f, y - bh, bw, bh};
+            const Rect box{safe.x + safe.w - bw - 8.0f, y - bh, bw, bh};
             auto tint = [&](const Color& base) {
                 Color c = base;
                 c.a = static_cast<uint8_t>(static_cast<float>(c.a) * a);

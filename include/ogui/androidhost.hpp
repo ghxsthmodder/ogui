@@ -124,6 +124,28 @@ struct ImeEdit {
 };
 
 // ------------------------------------------------------------------
+// The window's holes, as the platform reports them
+// ------------------------------------------------------------------
+// A bar is a rectangle the system keeps for itself and paints over the app's
+// surface, and Android measures it the way it measures everything on the screen:
+// device pixels. They stay device pixels across this boundary because that is
+// the unit they were born in, and the division into logical units happens with
+// the kernel's own scale, on the thread that draws -- see
+// AndroidHost::applyWindowInsets().
+//
+// What is in them is decided by the platform: a status bar at the top, a
+// navigation bar at the bottom or on the sides of a rotated phone, a cutout
+// around the camera, and the keyboard as the bottom one while it is up.
+struct WindowInsets {
+    int32_t left = 0, top = 0, right = 0, bottom = 0;
+
+    bool operator==(const WindowInsets& o) const {
+        return left == o.left && top == o.top && right == o.right &&
+               bottom == o.bottom;
+    }
+};
+
+// ------------------------------------------------------------------
 // AndroidInputBridge: what a motion event means, without a phone
 // ------------------------------------------------------------------
 // The NDK hands input over as opaque structs whose fields you can only read on
@@ -222,6 +244,23 @@ public:
     // then it is a release. The host calls this after every Kernel::frame().
     void endFrame(InputState& io);
 
+    // ---- the window's safe area ------------------------------------------
+    // The platform reports its bars on the UI thread, through the Java view that
+    // owns the window (see android/src/dev/ogui/android/OguiEditorView.java),
+    // and the tree may only be touched by the thread that draws, so the value is
+    // published here and drained there.
+    //
+    // It is a latest value and not a queue: unlike an edit, an inset is not a
+    // thing that happened to the window but what the window is right now, and
+    // draining two of them would apply a bar that had already moved again.
+    void setWindowInsets(const WindowInsets& in);
+
+    // The frame thread's side: true and `out` filled when the window's bars are
+    // not what the last drain reported. An inset that did not move must not
+    // dirty the tree, because a keyboard that stays on screen for a minute is
+    // sixty thousand frames of nothing otherwise.
+    bool takeWindowInsets(WindowInsets& out);
+
     // The window went away (backgrounded, rotated): whoever held the press does
     // not hold it any more, the queue belongs to a field that may be gone, and
     // whatever the IME had composed dies with the connection -- so the snapshot
@@ -266,6 +305,20 @@ public:
     // Indexed by the library's own KeyCode.
     std::bitset<256> m_pressedThisFrame;
     std::bitset<256> m_releaseAtFrameEnd;
+
+    // The window's bars, published by the UI thread and drained by the one that
+    // draws. Its own lock rather than the input connection's: the two are moved
+    // by the same pair of threads, but an inset has no business being hidden
+    // behind a text edit's critical section, and `m_insetsReported` is written by
+    // the draining thread alone.
+    mutable std::mutex m_insetsMutex;
+    WindowInsets m_windowInsets;
+    WindowInsets m_insetsReported;
+    // Two flags because "nothing has been said" and "nothing has changed" are
+    // different answers: the first means the tree keeps the whole window, the
+    // second means it keeps what it was already told.
+    bool m_windowInsetsKnown = false;
+    bool m_insetsReportedKnown = false;
 };
 
 // AKEYCODE_* -> the library's KeyCode. Anything the library has no equivalent
@@ -377,6 +430,13 @@ public:
     // backspaces, and the return key fires the field's own submit event.
     void applyImeEdits(Kernel& kernel, InputState& io);
     void syncIme(Kernel& kernel);
+
+    // The window's safe area, from the thread that owns the window to the tree
+    // that has to live inside it. Device pixels become logical units by the
+    // kernel's own scale, because that is the unit the screen is authored in,
+    // and a bar that did not move leaves the kernel alone. Call it with the
+    // frame, like the two above.
+    void applyWindowInsets(Kernel& kernel);
 
     // Put the keyboard away whatever has the focus -- what a paused activity
     // owes the user, since the field it is leaving may be behind another app.

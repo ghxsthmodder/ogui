@@ -3640,6 +3640,122 @@ static void testFocusableDefault() {
     CHECK(k.focusNext()); CHECK(k.focusedWidget() == l2);   // wraps the two
 }
 
+// The window's bars. A phone paints a status bar, a navigation bar and, while a
+// keyboard is up, the keyboard itself over the surface it handed the app, and
+// the tree has to live inside what is left without a single layout knowing that
+// any of it exists.
+static void testSafeArea() {
+    Kernel k;
+    k.init();
+    XmlParser p;
+    auto res = p.parse(R"XML(<screen id="s">
+  <panel id="full" x="0" y="0" width="100%" height="100%" background="#101010"/>
+</screen>)XML");
+    CHECK(res.root != nullptr);
+    if (!res.root) return;
+    auto s = std::make_shared<Screen>("s");
+    s->widgets.push_back(res.root);
+    s->width = 800;
+    s->height = 600;
+    k.pushScreen(s);
+    InputState st = makeInput();
+
+    // No bars at all: the safe rectangle is the window. That is every desktop,
+    // every test that ever ran here, and a phone with its bars hidden.
+    Rect whole = k.safeRect();
+    CHECK(whole.x == 0.0f && whole.y == 0.0f && whole.w == 800.0f && whole.h == 600.0f);
+
+    const Insets bars{20.0f, 50.0f, 10.0f, 30.0f};
+    k.setInsets(bars);
+    CHECK(k.insets().left == 20.0f && k.insets().bottom == 30.0f);
+    Rect safe = k.safeRect();
+    CHECK(safe.x == 20.0f && safe.y == 50.0f);
+    CHECK(safe.w == 770.0f && safe.h == 520.0f);
+
+    idle(k, st);
+    float minX = 1e9f, minY = 1e9f, maxX = -1e9f, maxY = -1e9f;
+    for (const auto& v : k.drawList().vertices) {
+        minX = std::min(minX, v.x);
+        minY = std::min(minY, v.y);
+        maxX = std::max(maxX, v.x);
+        maxY = std::max(maxY, v.y);
+    }
+    // The panel is authored at 100% of the canvas and ends up filling the safe
+    // rectangle: the percentage resolved against 770x520 and the tree moved by
+    // (20,50) on its way to the rasterizer.
+    CHECK(minX == 20.0f && minY == 50.0f);
+    CHECK(maxX == 790.0f && maxY == 570.0f);
+
+    // The widget itself never heard about any of it, and that is the point: a
+    // widget that puts a caret under a tap subtracts its own bounds from the
+    // point it was handed, so both have to be in the tree's world.
+    Widget* full = k.findWidget("full");
+    CHECK(full != nullptr);
+    if (!full) return;
+    CHECK(full->bounds().x == 0.0f && full->bounds().y == 0.0f);
+    CHECK(full->bounds().w == 770.0f && full->bounds().h == 520.0f);
+
+    // A finger on the status bar is a finger on nothing.
+    st.mouseX = 10.0f;
+    st.mouseY = 10.0f;
+    idle(k, st);
+    CHECK(k.hoveredWidget() == nullptr);
+    // The same pixel of the window, two bars in, is the panel.
+    st.mouseX = 30.0f;
+    st.mouseY = 60.0f;
+    idle(k, st);
+    CHECK(k.hoveredWidget() == full);
+    // And past the trailing edges there is nothing either.
+    st.mouseX = 795.0f;
+    st.mouseY = 575.0f;
+    idle(k, st);
+    CHECK(k.hoveredWidget() == nullptr);
+
+    // The pointer arrives in device pixels and the insets are logical units, so
+    // on a screen drawn at 2x the bars sit twice as far into the window -- which
+    // is only true if the scale comes off the pointer before the bars do.
+    s->scale = 2.0f;
+    k.invalidate();
+    st.mouseX = 60.0f;
+    st.mouseY = 120.0f;
+    idle(k, st);
+    CHECK(k.hoveredWidget() == full);
+    st.mouseX = 20.0f;   // (10,10) logical: still the status bar
+    st.mouseY = 20.0f;
+    idle(k, st);
+    CHECK(k.hoveredWidget() == nullptr);
+    s->scale = 1.0f;
+    k.invalidate();
+
+    // An inset that is not a hole in the window is a mistake, not extra canvas.
+    k.setInsets(Insets{-50.0f, -1.0f, 0.0f, 0.0f});
+    CHECK(k.insets().left == 0.0f && k.insets().top == 0.0f);
+
+    // Two bars that together eat an edge leave that edge with nothing, and the
+    // leading one is kept whole: a status bar is a fact about the display,
+    // while the trailing edge is the keyboard, which is the half that grows.
+    k.setInsets(Insets{600.0f, 700.0f, 600.0f, 0.0f});
+    safe = k.safeRect();
+    CHECK(safe.x == 600.0f && safe.w == 0.0f);
+    CHECK(safe.y == 600.0f && safe.h == 0.0f);
+
+    // A banner the user has to read is content, so the toast stack is measured
+    // from the bottom of the safe rectangle: a warning that slides in behind
+    // the keyboard is a warning that was never sent.
+    k.setInsets(Insets{0.0f, 0.0f, 0.0f, 100.0f});
+    k.showToast("held");
+    idle(k, st);
+    maxY = -1e9f;
+    for (const auto& v : k.drawList().vertices) maxY = std::max(maxY, v.y);
+    CHECK(maxY <= 505.0f);
+    k.setInsets(Insets{});
+    k.showToast("held");
+    idle(k, st);
+    maxY = -1e9f;
+    for (const auto& v : k.drawList().vertices) maxY = std::max(maxY, v.y);
+    CHECK(maxY > 590.0f);
+}
+
 static void testKeyboardNavigation() {
     Kernel k;
     k.init();
@@ -4113,6 +4229,7 @@ int main() {
     testCommandPalette();
     testKeyboardNavigation();
     testFocusableDefault();
+    testSafeArea();
     testEventPropagation();
     testIdIndex();
     testDpiScale();

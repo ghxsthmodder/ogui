@@ -188,6 +188,12 @@ void nativePerformEditorAction(JNIEnv*, jclass, jint actionCode) {
     if (auto* b = bridge()) b->queueEdit(std::move(edit));
 }
 
+void nativeSetWindowInsets(JNIEnv*, jclass, jint left, jint top, jint right,
+                           jint bottom) {
+    if (auto* b = bridge())
+        b->setWindowInsets(WindowInsets{left, top, right, bottom});
+}
+
 // ---- the snapshot: what the field says back --------------------------------
 // Every position is answered in UTF-16 code units, because that is what the
 // caller counts in, and the snapshot keeps byte offsets, because that is what
@@ -257,6 +263,8 @@ const JNINativeMethod kMethods[] = {
      reinterpret_cast<void*>(nativeSendKeyEvent)},
     {"nativePerformEditorAction", "(I)V",
      reinterpret_cast<void*>(nativePerformEditorAction)},
+    {"nativeSetWindowInsets", "(IIII)V",
+     reinterpret_cast<void*>(nativeSetWindowInsets)},
     {"nativeGetText", "()Ljava/lang/String;",
      reinterpret_cast<void*>(nativeGetText)},
     {"nativeGetSelectionStart", "()I",

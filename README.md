@@ -1107,6 +1107,28 @@ device size, one frame per input event and per `APP_CMD_REDRAW_NEEDED`, and a
 hand-drained `ALooper_pollOnce` loop with a 16 ms budget while a window is up
 (`ALooper_pollAll` is documented as obsoleted: it "may ignore wakes").
 
+A window on a phone is not the whole window: a status bar, a notch and the
+keyboard each take a strip of it, and a layout that does not know that draws a
+button under the bar or an input field under the keyboard. `Kernel` carries that
+as `Insets` and a `safeRect()`, and the model is that widgets keep their
+*authored* bounds relative to the safe rectangle rather than having them
+rewritten — `update()` converts the device-pixel pointer to logical and subtracts
+the safe origin once, `buildDrawList()` hands `drawTree` the origin to add back,
+and because those two passes both lay the tree out every frame, a persistent
+shift would compound and a pointer-side conversion does not. `OguiActivity` asks
+for the whole window (`setDecorFitsSystemWindows(false)` on API 30+, the legacy
+`LAYOUT_STABLE | LAYOUT_FULLSCREEN | LAYOUT_HIDE_NAVIGATION` flags below it) so
+the framework stops consuming the bars and hands the numbers out instead; the
+view's `onApplyWindowInsets` reads `systemBars() | displayCutout()` and `ime()`,
+and the keyboard *replaces* the nav bar, so the bottom is `max(bars, ime)` rather
+than their sum. Those figures arrive in device pixels on the UI thread and are
+stored as a latest value, not a queue — `takeWindowInsets` reports a bar only once
+and only when it actually changed, so `AndroidHost::applyWindowInsets` divides it
+by the scale into logical units and `setInsets` invalidates the layout exactly
+when something moved, not sixty times a second while nothing does. The conversion
+and the drain rule live outside the `__ANDROID__` guard in `androidhost.cpp`, so
+both are host-tested rather than only on a phone.
+
 The gestures are what the device is for, and the staged screens use them:
 `layout_demo.xml`'s first `<image>` carries `pinchzoom="true"`, so two fingers
 spread over it magnify into the texture, and holding a finger on the
