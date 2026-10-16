@@ -848,6 +848,14 @@ widget class has to carry a name. The overlay draws into the same `DrawList`,
 so it is captured by screenshots and by the software renderer exactly like any
 other quad.
 
+An `id` that names two widgets is the one mistake a lookup cannot show: it
+keeps returning the first, so nothing looks broken. `kernel.duplicateIds()`
+answers with `{id, first, shadowed}` per collision, found by the pass that
+builds the index rather than by a second walk, and each pair is written to
+`Kernel::logs()` once — `duplicate id "d": Button d answers to it, Label d is
+unreachable by that name` — where a `<console>` widget mirrors it on screen.
+`clearLogs()` forgets what was reported, so a host can be told again.
+
 From Lua the same four knobs are `ogui.dump()`, `ogui.inspect(id)`,
 `ogui.debug(bits|"bounds labels focus hover all none")` and `ogui.stats()`.
 The headless render is:

@@ -363,6 +363,8 @@ void Kernel::init() {
     m_quit = false;
     m_screenStack.clear();
     m_logs.clear();
+    m_duplicates.clear();
+    m_duplicateSeen.clear();
     m_theme = nullptr;
     m_focus = nullptr;
     m_hovered = nullptr;
@@ -670,14 +672,62 @@ void Kernel::bind(const std::string& name, std::function<void()> fn) {
 // pass in document order, first writer of a duplicated id wins (matching the
 // scan this replaced). Cheap enough to redo on every tree change, rare
 // enough that doing it lazily from the lookup is the right trade.
+//
+// The pass also sees every collision, which is the only place a duplicated id
+// can be caught at all: the parser cannot do it without calling the shared
+// body of a `<template>` a duplicate, since the instance scope is applied
+// after the body is built, and a host that fixes the layout later would still
+// be looking at markup that was valid when it was read.
 void Kernel::rebuildIdIndex() const {
     m_idIndex.clear();
+    m_duplicates.clear();
     auto screen = currentScreen();
     if (!screen) { m_indexGen = m_treeGen; return; }
     forEachWidget(screen->widgets, [&](const Widget::Ptr& w) {
-        if (!w->id().empty()) m_idIndex.emplace(w->id(), w);
+        if (w->id().empty()) return;
+        auto placed = m_idIndex.emplace(w->id(), w);
+        if (placed.second) return;
+        // Values were inserted by this same walk over a tree that owns them,
+        // so the name is held by a live widget here, not by an expired entry.
+        m_duplicates.push_back(DuplicateRecord{w->id(), placed.first->second,
+                                               w});
     });
     m_indexGen = m_treeGen;
+    reportDuplicates();
+}
+
+// One line per shadowed widget, not per lookup: the index is rebuilt after
+// every tree change, so reporting each meeting would refill the console while
+// a host typed nothing new. The message names both widgets because the lookup
+// returning *something* is exactly what hides the problem.
+void Kernel::reportDuplicates() const {
+    bool added = false;
+    for (const auto& d : m_duplicates) {
+        const Widget::Ptr first = d.first.lock();
+        const Widget::Ptr shadowed = d.shadowed.lock();
+        if (!first || !shadowed) continue;
+        if (!m_duplicateSeen.insert({d.id, shadowed.get()}).second) continue;
+        m_logs.insert(m_logs.begin(),
+                      "duplicate id \"" + d.id + "\": " + describe(first.get()) +
+                          " answers to it, " + describe(shadowed.get()) +
+                          " is unreachable by that name");
+        added = true;
+    }
+    if (added) m_dirty = true;   // the overlay should show the line now
+}
+
+std::vector<Kernel::DuplicateId> Kernel::duplicateIds() const {
+    if (m_indexGen != m_treeGen) rebuildIdIndex();
+    std::vector<DuplicateId> out;
+    for (const auto& d : m_duplicates) {
+        // A widget that left the tree without a mutation the kernel saw drops
+        // out of the answer rather than pointing at freed memory.
+        const Widget::Ptr first = d.first.lock();
+        const Widget::Ptr shadowed = d.shadowed.lock();
+        if (!first || !shadowed) continue;
+        out.push_back(DuplicateId{d.id, first.get(), shadowed.get()});
+    }
+    return out;
 }
 
 Widget* Kernel::lookupWidget(const std::string& id) const {

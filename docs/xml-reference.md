@@ -303,7 +303,22 @@ instead of a walk of the tree.
 
 Duplicate ids are tolerated, not useful: the index keeps the first widget in
 document order (depth-first, parents before children), which is what a
-sequential scan returned before. Widgets handed back by a lookup are borrowed —
+sequential scan returned before — and it says so, because a lookup that returns
+*something* is exactly what hides the second widget. The same pass that builds
+the index records every collision, so `Kernel::duplicateIds()` answers with one
+`{id, first, shadowed}` per shadowed widget, and the first time it meets a pair
+the kernel puts a line through `Kernel::addLog()`:
+`duplicate id "d": Button d answers to it, Button d is unreachable by that
+name`, which a `<console>` on the screen mirrors for free. Once per pair, not
+once per lookup — the index is rebuilt after every tree change, and a duplicate
+is a fact about the layout rather than an event — and `clearLogs()` forgets what
+was already said, which is how a host asks again after fixing the markup. The
+parser cannot report it with a line and column, because the ids a `<template>`
+body authored only become instance-scoped once that body is built: two
+instances of one body are the same names twice while parsing and distinct in
+the tree, so the tree is where the question belongs.
+
+Widgets handed back by a lookup are borrowed —
 the tree owns them: removing a widget from the tree — `ogui.remove`, any
 `removeChild` that drops the last `shared_ptr`, a screen switch — expires its
 entry, so the id reports `nullptr` rather than a dangling pointer. If you keep

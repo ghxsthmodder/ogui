@@ -11,6 +11,7 @@
 #include <memory>
 #include <functional>
 #include <map>
+#include <set>
 #include <unordered_map>
 #include <thread>
 
@@ -282,8 +283,23 @@ public:
 
     // ---- debug ----
     void addLog(const std::string& msg);
-    void clearLogs() { m_logs.clear(); }
+    // Forgetting the log also forgets which duplicated ids were already
+    // reported, so a host that clears the console can be told again.
+    void clearLogs() { m_logs.clear(); m_duplicateSeen.clear(); }
     const std::vector<std::string>& logs() const { return m_logs; }
+
+    // An `id` that names more than one widget on the current screen. The
+    // lookup takes the first in document order, so `shadowed` is the widget
+    // that name never reaches — invisible while the id still resolves to
+    // *something*. Each duplicated id is reported into logs() the first time
+    // the index meets it; this is the same fact with the widgets in it, for a
+    // host or a tool that would rather point than read text.
+    struct DuplicateId {
+        std::string id;
+        Widget* first = nullptr;    // what findWidget(id) hands back
+        Widget* shadowed = nullptr; // what the author also wrote
+    };
+    std::vector<DuplicateId> duplicateIds() const;
 
     // ---- inspection (P4 #27) ----
     // The current screen's tree as one line per widget, in draw order:
@@ -368,7 +384,9 @@ private:
     const Theme* m_theme = nullptr;
 
     InputState m_input;
-    std::vector<std::string> m_logs;
+    // Mutable because a duplicated id is discovered by a const lookup, which is
+    // the only place the tree is walked cheaply; see reportDuplicates().
+    mutable std::vector<std::string> m_logs;
     bool m_quit = false;
 
     // event state
@@ -458,7 +476,7 @@ private:
     Rasterizer m_raster;          // persistent: keeps buffers between frames
 
     // redraw bookkeeping (see invalidate/buildDrawList)
-    bool m_dirty = true;
+    mutable bool m_dirty = true;   // mutable with m_logs: same reason
     size_t m_treeGen = 1;      // bumped by invalidate(): what the index lags
 
     // id -> widget over the current screen, rebuilt lazily the first lookup
@@ -467,6 +485,24 @@ private:
     mutable std::unordered_map<std::string, std::weak_ptr<Widget>> m_idIndex;
     mutable size_t m_indexGen = 0;
     void rebuildIdIndex() const;
+    // The walk that fills the index already knows when a name was taken, so
+    // duplicated ids are found there rather than by a second pass. Weak for
+    // the same reason the index is: a widget that leaves the tree drops out of
+    // the answer instead of lingering as a pointer.
+    struct DuplicateRecord {
+        std::string id;
+        std::weak_ptr<Widget> first;
+        std::weak_ptr<Widget> shadowed;
+    };
+    mutable std::vector<DuplicateRecord> m_duplicates;
+    // (id, widget) pairs already put in logs(). Keyed by the shadowed widget
+    // rather than by the name so a second collision elsewhere is still new
+    // news, while the same one reported by every rebuild is not: the index is
+    // rebuilt after every tree change, and a duplicate is a fact about the
+    // layout, not an event. `clearLogs()` forgets them, which is how a host
+    // asks to be told again.
+    mutable std::set<std::pair<std::string, const Widget*>> m_duplicateSeen;
+    void reportDuplicates() const;
     Widget* lookupWidget(const std::string& id) const;
     InputState m_prevInput{};
     float m_builtW = -1.0f, m_builtH = -1.0f;   // screen size at last build

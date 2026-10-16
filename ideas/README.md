@@ -726,7 +726,16 @@ especificadas antes da implementação.
     `removeChild`, `takeChildren`, `Widget::setId`, push/pop/switch de tela ou
     `invalidate()` explícito, que é por onde toda mutação da biblioteca passa.
     Ids repetidos ficam com o primeiro em ordem de documento (o que a varredura
-    sequencial dava); um widget removido expira do índice e devolve `nullptr`
+    sequencial dava) e não são mais silenciosos: a mesma varredura que monta o
+    índice vê a colisão, guarda `{id, first, shadowed}` e despeja uma linha por
+    par no `addLog` (`duplicate id "d": Button d answers to it, Label d is
+    unreachable by that name`), que um `<console>` na tela mostra de graça;
+    `Kernel::duplicateIds()` devolve os ponteiros para uma ferramenta que não
+    quer ler texto, `clearLogs()` esquece o que já foi dito (o host pede de
+    novo), e o motivo de ser o kernel e não o parser é que um `<template>` com
+    o mesmo corpo em duas instâncias só fica sem colisão depois que o escopo da
+    instância é aplicado, ou seja, depois que a árvore está pronta. Um widget
+    removido expira do índice e devolve `nullptr`
     em vez de um ponteiro pendurado. Os widgets passam a conhecer o kernel já
     na troca de tela, então uma árvore mutada antes do primeiro frame também
     consegue invalidar o índice. Testes em `kernel::testIdIndex`, regras em

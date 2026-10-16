@@ -3522,10 +3522,71 @@ static void testIdIndex() {
     auto* dup = dynamic_cast<Button*>(k.findWidget("d"));
     CHECK(dup && dup->text() == "first");
 
+    // ...and the widget that name never reaches says so, instead of being
+    // quietly unreachable while the lookup still returns *something*.
+    auto logCount = [&k](const std::string& needle) {
+        size_t n = 0;
+        for (const auto& line : k.logs())
+            if (line.find(needle) != std::string::npos) ++n;
+        return n;
+    };
+    const std::string needle = "duplicate id \"d\"";
+    auto dups = k.duplicateIds();
+    CHECK(dups.size() == 1);
+    if (dups.size() == 1) {
+        CHECK(dups[0].id == "d");
+        CHECK(dups[0].first == dup);                                  // "first"
+        CHECK(dups[0].shadowed == res.root->children()[1].get());     // "second"
+    }
+    CHECK(logCount(needle) == 1);
+    for (const auto& line : k.logs()) {
+        if (line.find(needle) == std::string::npos) continue;
+        CHECK(line.find("Button d answers to it") != std::string::npos);
+        CHECK(line.find("is unreachable by that name") != std::string::npos);
+    }
+
+    // The index is rebuilt after every tree change; the report is not.
+    for (int i = 0; i < 3; ++i) {
+        k.invalidate();
+        CHECK(k.findWidget("d") == dup);
+        CHECK(k.duplicateIds().size() == 1);
+    }
+    CHECK(logCount(needle) == 1);
+
+    // Clearing the console forgets what was reported, so a host can be told
+    // again about the same widget.
+    k.clearLogs();
+    k.invalidate();
+    CHECK(k.duplicateIds().size() == 1);
+    CHECK(logCount(needle) == 1);
+
     k.popScreen();
     CHECK(k.findWidget("d") == nullptr);
     CHECK(k.findWidget("btn") == btn);
     CHECK(k.getText("btn") == "Ok");
+    // The index follows the current screen, and so does the report: this
+    // screen's ids are all its own.
+    CHECK(k.duplicateIds().empty());
+
+    // A duplicate a host creates at runtime is the same news: the id still
+    // resolves to the original and the added widget is the shadowed one. It
+    // joins after the original, which is what document order then means.
+    auto twin = std::make_shared<Label>();
+    twin->setId("btn");
+    win->addChild(twin);
+    CHECK(k.findWidget("btn") == btn);
+    auto live = k.duplicateIds();
+    CHECK(live.size() == 1);
+    if (live.size() == 1) {
+        CHECK(live[0].id == "btn");
+        CHECK(live[0].first == btn);
+        CHECK(live[0].shadowed == twin.get());
+    }
+    CHECK(logCount("duplicate id \"btn\"") == 1);
+    // Fixing it clears the record; the console keeps what it already said.
+    win->removeChild(twin.get());
+    CHECK(k.duplicateIds().empty());
+    CHECK(logCount("duplicate id \"btn\"") == 1);
 }
 
 // The Tab stop is the class's own answer, not a mark the tag factory paints:
