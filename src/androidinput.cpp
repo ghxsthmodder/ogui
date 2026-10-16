@@ -1,5 +1,6 @@
 #include "ogui/androidhost.hpp"
 #include "ogui/font.hpp"
+#include "ogui/widgets.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -11,6 +12,45 @@ namespace {
 bool printableChar(uint32_t c) {
     return c >= 0x20 && c != 0x7F;
 }
+
+// android.text.InputType and android.view.inputmethod.EditorInfo as the numbers
+// those classes define (the same ones javap -constants reports for API 36),
+// named because the app hands the framework exactly these bits and a reader of
+// this file has to be able to tell which ones.
+constexpr int32_t kTypeClassText = 1;          // TYPE_CLASS_TEXT
+constexpr int32_t kTextMultiLine = 1 << 17;    // TYPE_TEXT_FLAG_MULTI_LINE
+constexpr int32_t kActionSearch = 3;           // IME_ACTION_SEARCH
+constexpr int32_t kActionDone = 6;             // IME_ACTION_DONE
+constexpr int32_t kNoEnterAction = 1 << 30;    // IME_FLAG_NO_ENTER_ACTION
+
+// How many bytes a code point announces at *p. A continuation byte, or a lead
+// byte of a shape that is not used, claims one: the same reading utf8Next gives
+// a stray, and the reason an index can be computed without decoding.
+size_t leadWidth(unsigned char c) {
+    if ((c & 0x80u) == 0u) return 1;
+    if ((c & 0xE0u) == 0xC0u) return 2;
+    if ((c & 0xF0u) == 0xE0u) return 3;
+    if ((c & 0xF8u) == 0xF0u) return 4;
+    return 1;
+}
+
+// The bytes one code point occupies at `p`, bounded by `end`: a lead byte whose
+// continuation bytes are missing or misshapen counts as one, so a broken field
+// is walked a byte at a time instead of read past the end of the string.
+// utf8Next has the same rule and no bound, because it is handed text it decoded
+// already; this walks a caret's coordinates in whatever the widget holds.
+size_t codepointWidth(const unsigned char* p, const unsigned char* end) {
+    const size_t w = leadWidth(*p);
+    if (w == 1) return 1;
+    if (static_cast<size_t>(end - p) < w) return 1;
+    for (size_t i = 1; i < w; ++i)
+        if ((p[i] & 0xC0u) != 0x80u) return 1;
+    return w;
+}
+
+// Code units an IME counts a code point of `bytes` as: four bytes is an astral
+// one, which is a surrogate pair -- two units for one character.
+int32_t unitsOfWidth(size_t bytes) { return bytes == 4 ? 2 : 1; }
 
 // The unshifted character of a key, 0 for a key that types nothing. Enter,
 // backspace and the arrows are actions the widgets already run off KeyCode, so
@@ -239,6 +279,85 @@ int keyFromAndroidKey(int32_t code) {
     if (code >= 131 && code <= 142) return Key_F1 + (code - 131);    // F1..F12
     if (code >= 144 && code <= 153) return Key_KP_0 + (code - 144);  // numpad
     return Key_None;
+}
+
+ImeRequest imeRequestFor(const Widget* focused) {
+    ImeRequest r;
+    // The order is the answer, not an accident: a TextArea and a SearchInput are
+    // TextInputs, so asking the most specific class first is what makes the
+    // keyboard match the behaviour the field actually has.
+    if (!dynamic_cast<const TextInput*>(focused)) return r;
+    r.visible = true;
+    r.inputType = kTypeClassText;
+    if (dynamic_cast<const TextArea*>(focused)) {
+        // Enter writes a newline here, so the return key must not double as a
+        // submit button -- which is what the flag, rather than an action, says.
+        r.inputType |= kTextMultiLine;
+        r.imeOptions = kNoEnterAction;
+    } else if (dynamic_cast<const SearchInput*>(focused)) {
+        r.imeOptions = kActionSearch;
+    } else {
+        r.imeOptions = kActionDone;
+    }
+    return r;
+}
+
+size_t imeAdvanceUnits(const std::string& utf8, size_t from, int32_t units) {
+    const unsigned char* d =
+        reinterpret_cast<const unsigned char*>(utf8.data());
+    const unsigned char* end = d + utf8.size();
+    if (from > utf8.size()) from = utf8.size();
+    const unsigned char* p = d + from;
+    for (int32_t left = units; left > 0 && p < end; ) {
+        const size_t w = codepointWidth(p, end);
+        // An astral code point is two units, and a caller that asked for one is
+        // not being asked to land in the middle of a pair: stop where it is.
+        const int32_t u = unitsOfWidth(w);
+        if (u > left) break;
+        p += w;
+        left -= u;
+    }
+    return static_cast<size_t>(p - d);
+}
+
+size_t imeRewindUnits(const std::string& utf8, size_t from, int32_t units) {
+    const unsigned char* d =
+        reinterpret_cast<const unsigned char*>(utf8.data());
+    if (from > utf8.size()) from = utf8.size();
+    size_t pos = from;
+    for (int32_t left = units; left > 0 && pos > 0; ) {
+        // Continuation bytes are the only ones shaped 10xxxxxx, so stepping back
+        // over them lands on the lead byte of the code point that ends at `pos`.
+        size_t start = pos;
+        do { --start; } while (start > 0 && (d[start] & 0xC0u) == 0x80u);
+        const size_t w = codepointWidth(d + start, d + pos);
+        if (w != pos - start) {
+            // Not a whole code point: a stray byte before the caret, one unit.
+            pos -= 1;
+            left -= 1;
+            continue;
+        }
+        const int32_t u = unitsOfWidth(w);
+        if (u > left) break;
+        pos = start;
+        left -= u;
+    }
+    return pos;
+}
+
+int32_t imeCountUnits(const std::string& utf8, size_t from, size_t to) {
+    const unsigned char* d =
+        reinterpret_cast<const unsigned char*>(utf8.data());
+    const unsigned char* end = d + utf8.size();
+    from = std::min(from, utf8.size());
+    to = std::min(to, utf8.size());
+    int32_t n = 0;
+    for (const unsigned char* p = d + from; p < d + to; ) {
+        const size_t w = codepointWidth(p, end);
+        p += w;
+        n += unitsOfWidth(w);
+    }
+    return n;
 }
 
 } // namespace ogui

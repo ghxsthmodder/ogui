@@ -4,10 +4,15 @@
 // exist only on the device. The rules those getters feed -- which finger the
 // widget tree gets, what happens when a second one joins, what a cancellation
 // is not, what a key code stands for, where a typed character goes -- are plain
-// data over in AndroidInputBridge, and this is where they are checked.
+// data over in AndroidInputBridge, and this is where they are checked. The same
+// is true of the input connection's side of the host: which keyboard a focused
+// field asks for, and how an IME's UTF-16 indices line up with the UTF-8
+// offsets the widget counts its caret in, are decided over ints and strings
+// before any Java sees them.
 #include "ogui/androidhost.hpp"
 #include "ogui/api.hpp"
 #include "ogui/kernel.hpp"
+#include "ogui/widgets.hpp"
 
 #include <iostream>
 #include <string>
@@ -232,6 +237,93 @@ void theWindowTakingItsFingersBackClearsEverything() {
     check(r.bridge.deliverChar(r.st) == 0, "or the text that was queued");
 }
 
+void theKeyboardMatchesTheFieldThatHasTheFocus() {
+    // The ints are what the app hands to InputMethodManager, so they are checked
+    // as ints: a wrong bit here is a phone showing the wrong keyboard, which no
+    // test on this machine would notice.
+    const auto text = imeRequestFor(std::make_shared<TextInput>().get());
+    check(text.visible, "a field asks for a keyboard");
+    check(text.inputType == 1, "TYPE_CLASS_TEXT");
+    check(text.imeOptions == 6, "IME_ACTION_DONE, because Enter submits");
+
+    const auto area = imeRequestFor(std::make_shared<TextArea>().get());
+    check(area.visible, "and so does a multiline one");
+    check(area.inputType == (1 | (1 << 17)),
+          "the same class with TYPE_TEXT_FLAG_MULTI_LINE");
+    check(area.imeOptions == (1 << 30),
+          "IME_FLAG_NO_ENTER_ACTION: Enter writes a newline here");
+
+    const auto search = imeRequestFor(std::make_shared<SearchInput>().get());
+    check(search.inputType == 1, "a search box is still text");
+    check(search.imeOptions == 3, "IME_ACTION_SEARCH is the only difference");
+
+    // TextArea and SearchInput are TextInputs, so a mapping that asked the base
+    // class first would hand back DONE for all three and never say so.
+    check(area.inputType != text.inputType, "the subclass wins over the base");
+    check(search.imeOptions != text.imeOptions, "and so does the next one");
+
+    const auto button = imeRequestFor(std::make_shared<Button>().get());
+    check(!button.visible && button.inputType == 0 && button.imeOptions == 0,
+          "a widget that edits nothing asks for no keyboard");
+    const auto nothing = imeRequestFor(nullptr);
+    check(!nothing.visible, "and neither does no focus at all");
+}
+
+void theImeCountsInCodeUnitsAndTheWidgetInBytes() {
+    const std::string emoji = "a\U0001F600b";   // 1 + 4 + 1 bytes, 1 + 2 + 1 units
+    const std::string accented = "caf\xC3\xA9"; // é: two bytes, one unit
+
+    check(imeCountUnits(emoji, 0, emoji.size()) == 4,
+          "an astral code point is two units to the IME");
+    check(imeCountUnits(accented, 0, accented.size()) == 4,
+          "an accent is one, however many bytes it takes");
+    check(imeCountUnits(emoji, 0, 0) == 0, "an empty range counts nothing");
+
+    check(imeAdvanceUnits(emoji, 0, 1) == 1, "one unit off 'a' is the emoji's lead");
+    check(imeAdvanceUnits(emoji, 0, 3) == 5, "three units is past the whole pair");
+    // The case a deletion arrives as: the IME asks for one character and must not
+    // be pointed at the middle of a pair, where half an emoji would be cut out.
+    check(imeAdvanceUnits(emoji, 1, 1) == 1, "a pair is not one unit wide");
+    check(imeAdvanceUnits(emoji, 1, 2) == 5, "and moves as two");
+    check(imeAdvanceUnits(accented, 3, 1) == 5, "one unit is the whole accent");
+    check(imeAdvanceUnits(emoji, emoji.size(), 1) == emoji.size(),
+          "asking past the end stays at the end");
+
+    check(imeRewindUnits(emoji, emoji.size(), 1) == 5, "one unit back from the end");
+    check(imeRewindUnits(emoji, 5, 2) == 1, "two back is over the pair");
+    check(imeRewindUnits(emoji, 5, 1) == 5, "and one is still inside it");
+    check(imeRewindUnits(accented, accented.size(), 1) == 3,
+          "the accent comes off as one unit");
+    check(imeRewindUnits(emoji, 0, 3) == 0, "rewinding off the front stops at 0");
+
+    // Round trip: a caret the widget actually holds -- so a code-point boundary,
+    // never the middle of a pair -- is reachable by its own unit count from
+    // either end, which is the property every query the IME makes rests on. The
+    // walk asks for two units at a time because that is the widest a code point
+    // can be: one request, one character, and never a step that does not move.
+    std::vector<size_t> bounds;
+    for (size_t at = 0;; at = imeAdvanceUnits(emoji, at, 2)) {
+        bounds.push_back(at);
+        if (at == emoji.size()) break;
+    }
+    check(bounds == std::vector<size_t>({0, 1, 5, 6}),
+          "one boundary before each character and one after the last");
+    for (size_t caret : bounds) {
+        check(imeAdvanceUnits(emoji, 0, imeCountUnits(emoji, 0, caret)) == caret,
+              "a caret's byte offset is reachable by its unit count");
+        check(imeRewindUnits(emoji, emoji.size(),
+                             imeCountUnits(emoji, caret, emoji.size())) == caret,
+              "and from the other end");
+    }
+
+    // A field with a broken byte in it is what a paste hands over, and an index
+    // that walked off the end of the string would be found on a phone instead.
+    const std::string broken = "a\xC3";
+    check(imeAdvanceUnits(broken, 0, 2) == 2, "a truncated sequence is one unit");
+    check(imeRewindUnits(broken, 2, 1) == 1, "and steps back the same way");
+    check(imeCountUnits(broken, 0, broken.size()) == 2, "counted as two");
+}
+
 } // namespace
 
 int main() {
@@ -247,6 +339,8 @@ int main() {
     shiftAndCapsLockChangeOnlyTheLetters();
     theImeAndTheKeyboardShareOneQueue();
     theWindowTakingItsFingersBackClearsEverything();
+    theKeyboardMatchesTheFieldThatHasTheFocus();
+    theImeCountsInCodeUnitsAndTheWidgetInBytes();
 
     if (g_failures) {
         std::cout << "android_test: " << g_failures << " checks failed\n";

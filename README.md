@@ -1037,6 +1037,21 @@ Two splits make the interesting half of it testable without a phone:
   `releaseWindow()` — which is what keeps the GPU font atlases alive across
   pause, resume and rotation, and `configChanges` in the manifest is what lets
   rotation take that route instead of tearing the process down.
+* **What the IME is asked for versus the device that asks it.** Which keyboard a
+  focused field wants is `imeRequestFor()`, and it answers with the two ints
+  `InputMethodManager` takes — `TYPE_CLASS_TEXT` (1), its
+  `TYPE_TEXT_FLAG_MULTI_LINE` (1<<17) for a `TextArea`, `IME_ACTION_DONE` (6) for
+  a field whose Enter submits, `IME_ACTION_SEARCH` (3) for a `SearchInput`,
+  `IME_FLAG_NO_ENTER_ACTION` (1<<30) where Enter is a newline instead. The
+  values are the framework's own (checked against `android.jar` for API 36) and
+  the tests check them as numbers, because a wrong bit is a phone showing the
+  wrong keyboard and nothing on this machine would notice. The other half is
+  counting: an IME measures a field in UTF-16 code units and `TextInput`
+  measures its caret in UTF-8 bytes, so one emoji is two units and four bytes,
+  and `imeAdvanceUnits()`/`imeRewindUnits()`/`imeCountUnits()` are the boundary
+  where that is settled — including the case that matters, a one-unit request at
+  a pair, which stops before it rather than landing in the middle and cutting
+  half an emoji out.
 
 `present()` renders with `flipY = false`: the draw list's `y = 0` is the top of
 the screen and a window framebuffer's `y = 0` is its bottom, which cancel out.
@@ -1056,8 +1071,13 @@ spread over it magnify into the texture, and holding a finger on the
 with the right button.
 
 What it does not do is the soft keyboard's text. NDK r30 ships no
-`AInputConnection` header, so a pure-NDK composing-text path is not available;
-the host shows and hides the input method (`showKeyboard()`/`hideKeyboard()`)
+`AInputConnection` header, so a pure-NDK composing-text path is not available,
+and the framework does not fill the gap either: `NativeActivity` never declares
+`onCreateInputConnection`, it just calls
+`mIMM.showSoftInput(mNativeContentView, …)` on the plain `View` it puts in the
+window — so the connection the input method is handed is the empty one a bare
+`View` offers, the keyboard goes up and has nowhere to put what it composes.
+The host shows and hides the input method (`showKeyboard()`/`hideKeyboard()`)
 and translates key events, which covers a hardware keyboard, and
 `AndroidInputBridge::commitText()` is the seam a Java-side input connection
 would call to put a soft keyboard's text — composing updates included — into the

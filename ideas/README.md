@@ -1014,16 +1014,30 @@ compatibilidade e capacidade de manutenção.
     lazy do `treeview`), que listam pastas em vez de ler um nome. Testes em
     `debug/tests/asset_test.cpp`.
 -   [ ] Entrada de texto pelo IME: `InputState::lastChar` chega de eventos de
-    teclado, e o NDK r30 não expõe cabeçalho de `AInputConnection` nenhum --- um
-    campo de texto no Android precisa da ponte JNI para a `InputMethodManager`,
-    dos callbacks `onStartInput`/`onFinishInput` e do texto confirmado que por
-    eles volta, para receber composing e mutações de seleção. Isso pede Java no
-    pacote, e o host de hoje é `android:hasCode="false"`. O que já está pronto
-    é o destino: `AndroidInputBridge::commitText()` coloca numa fila de
-    caracteres qualquer texto já composto, `deliverChar()` o entrega um por
-    quadro, e o `android_main.cpp` mostra e esconde o teclado conforme o foco é
-    um `textinput`. Falta quem chame `commitText()`.
-    `Kernel::focusedWidget()` já diz a quem entregar.
+    teclado, e o NDK r30 não expõe cabeçalho de `AInputConnection` nenhum --- na
+    fonte (lida aqui, `NativeActivity.java` do AOSP) a classe não declara
+    `onCreateInputConnection` nem `onStartInput`/`onFinishInput`: ela só pega a
+    `InputMethodManager` e chama `showSoftInput(mNativeContentView, ...)`, sendo
+    `mNativeContentView` um `View` comum que `requestFocus()` no `onCreate`. A
+    conexão que o IME recebe é portanto a vazia de um `View` qualquer: o teclado
+    aparece e não escreve em lugar nenhum. Fechoi primeiro o que não depende de
+    aparelho --- `imeRequestFor()` responde os dois ints que a
+    `InputMethodManager` quer (`TYPE_CLASS_TEXT`, os bits de multilinha do
+    `TextArea`, `IME_ACTION_DONE`/`IME_ACTION_SEARCH`,
+    `IME_FLAG_NO_ENTER_ACTION`), conferidos contra `javap -constants` do
+    `android.jar` de API 36 em vez de memória, e a contagem que a ponte vai
+    precisar: o IME mede o campo em unidades UTF-16 e o `TextInput` mede o caret
+    em bytes UTF-8, então um emoji são duas unidades e quatro bytes, e
+    `imeAdvanceUnits()`/`imeRewindUnits()`/`imeCountUnits()` param antes de um
+    par quando pedem uma unidade --- que é o caso em que uma versão errada desta
+    função corta um emoji ao meio. Os dois são dados puros e estão em
+    `debug/tests/android_test.cpp`. O que falta é quem chame: uma
+    `InputConnection` nossa em Java (o destino já existe ---
+    `AndroidInputBridge::commitText()` enfileira qualquer texto já composto,
+    `deliverChar()` entrega um caractere por quadro e o `android_main.cpp` já
+    sabe a quem entregar por `Kernel::focusedWidget()`), `android:hasCode`
+    trocando para `"true"` e o `classes.dex` entrando no APK por
+    `javac`/`d8`.
 
 **Resultado esperado:** o mesmo `DrawList` renderiza em desktop GL, GLES 3.0 e
 CPU, com a portabilidade coberta por teste em vez de suposição.

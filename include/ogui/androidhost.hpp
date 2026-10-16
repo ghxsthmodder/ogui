@@ -119,6 +119,56 @@ public:
 int keyFromAndroidKey(int32_t androidKeyCode);
 
 // ------------------------------------------------------------------
+// What the IME is being asked for, without a phone
+// ------------------------------------------------------------------
+// An input connection is a Java object, so everything ogui decides *about* one
+// has to be handed over as ints and strings -- but the two decisions themselves
+// do not need a device to be right, and neither does the counting this boundary
+// requires. They live here over plain data: which keyboard a focused widget
+// wants, and how the IME's UTF-16 positions line up with the widget tree's
+// UTF-8 ones.
+//
+// The constants below are android.text.InputType and
+// android.view.inputmethod.EditorInfo spelled as the numbers those classes
+// define (checked against android.jar for API 36), because the value an app
+// hands to InputMethodManager is these bits or nothing else.
+struct ImeRequest {
+    // TYPE_CLASS_TEXT (1), or that with TYPE_TEXT_FLAG_MULTI_LINE (1<<17) added
+    // for a field whose Enter is a newline. Zero means no editor has the focus,
+    // which is the answer that puts the keyboard away.
+    int32_t inputType = 0;
+    // The return key: IME_ACTION_DONE (6) for a field that submits,
+    // IME_ACTION_SEARCH (3) for one that searches, or IME_FLAG_NO_ENTER_ACTION
+    // (1<<30) where Enter is text like any other.
+    int32_t imeOptions = 0;
+    bool visible = false;
+};
+
+// Which keyboard a focused widget wants. A TextArea and a SearchInput *are*
+// TextInputs, so the order of these tests is the answer: what the IME has to
+// match is the subclass's own behaviour, and anything else that is not an
+// editor at all asks for nothing.
+ImeRequest imeRequestFor(const Widget* focused);
+
+// ---- code units and bytes --------------------------------------------------
+// An IME counts positions in UTF-16 code units; TextInput's caret and selection
+// are byte offsets into UTF-8. One emoji is two units and four bytes, which is
+// the whole reason the conversion is a boundary of its own: an app that gets it
+// wrong deletes half an emoji, and only finds out on a phone.
+//
+// `from` is always an offset the widget itself produced, so it sits on a
+// code-point boundary; a stray byte in the *text* is still consumed one at a
+// time rather than stalling, the way utf8Next does it.
+
+// The byte offset `units` code units after `from`, clamped to the end.
+size_t imeAdvanceUnits(const std::string& utf8, size_t from, int32_t units);
+// The byte offset `units` code units before `from`, clamped to the start.
+size_t imeRewindUnits(const std::string& utf8, size_t from, int32_t units);
+// How many code units [from, to) is worth: 0 for an empty range, 1 for a
+// letter, 2 for an emoji, and never more than the bytes between them.
+int32_t imeCountUnits(const std::string& utf8, size_t from, size_t to);
+
+// ------------------------------------------------------------------
 // AndroidHost: ANativeWindow + EGL + AAsset, wired to a Kernel
 // ------------------------------------------------------------------
 // The Android counterpart of the desktop Host: it owns an EGL context and the
