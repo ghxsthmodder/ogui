@@ -159,9 +159,71 @@ build_android() {
         # that has to keep its exported symbols, so --strip-unneeded and no more.
         "$STRIP" --strip-unneeded "$stage/lib/$abi/liboggui_app.so"
         ls -lh "$stage/lib/$abi/liboggui_app.so" | awk '{print "  stripped: "$5}'
+        # Two symbols the dynamic linker is the only one who asks for, and both
+        # are found by name: android_main, which native_app_glue looks up after
+        # dlopen, and JNI_OnLoad, which the VM calls when OguiJni's static block
+        # loads the library -- NativeActivity's own dlopen never does -- and
+        # which is what binds the input connection. A strip that took
+        # either one leaves an APK that installs, starts, and has no way to say
+        # why nothing happens when a field is tapped.
+        local dynsym exports READELF
+        READELF="$(dirname "$STRIP")/llvm-readelf"
+        [ -x "$READELF" ] || READELF="$(command -v readelf || true)"
+        [ -n "$READELF" ] || {
+            echo "error: no readelf to check what the strip left exported" >&2
+            exit 1; }
+        exports="$("$READELF" -W --dyn-syms "$stage/lib/$abi/liboggui_app.so")"
+        # A here-string, not a pipe: grep -q closes the read as soon as it has
+        # its answer, and under `set -o pipefail` the SIGPIPE that then kills
+        # printf fails a check whose symbol is plainly there.
+        grep -q ' JNI_OnLoad' <<<"$exports" || {
+            echo "error: $abi exports no JNI_OnLoad: the input connection cannot bind" >&2
+            exit 1; }
+        grep -q ' android_main' <<<"$exports" || {
+            echo "error: $abi exports no android_main: native_app_glue has no entry" >&2
+            exit 1; }
+        echo "  exports: android_main, JNI_OnLoad"
     done
 
-    # ---- 2. the screens, inside the archive --------------------------------
+    # ---- 2. the input connection, as bytecode ------------------------------
+    # An IME commits text through a Java object, so the library needs a classes.dex
+    # even though the app has no UI of its own: see android/src/dev/ogui/android.
+    #
+    # The declarations in OguiJni.java and the table in src/androidjni.cpp are one
+    # promise kept twice. RegisterNatives refuses the entire table if a name or a
+    # signature does not match the class it is given, and the only place that
+    # would say so is the first keystroke on a phone -- so the two lists are
+    # compared here, sorted, before either is packaged.
+    local decl bound
+    decl="$(grep -h 'static native' "$ROOT"/android/src/dev/ogui/android/*.java \
+            | sed -n 's/.*static native [^ ]* \([a-zA-Z0-9_]*\)(.*/\1/p' | sort)"
+    bound="$(grep -o '{"native[A-Za-z0-9_]*"' "$ROOT/src/androidjni.cpp" \
+            | sed -n 's/.*"\(native[A-Za-z0-9_]*\)".*/\1/p' | sort)"
+    if [ "$decl" != "$bound" ]; then
+        echo "error: the Java declarations and the C++ registration table disagree:" >&2
+        diff <(printf '%s\n' "$decl") <(printf '%s\n' "$bound") >&2
+        exit 1
+    fi
+    [ -n "$decl" ] || { echo "error: no native methods found to bind" >&2; exit 1; }
+    echo "  bound: $(printf '%s\n' "$decl" | wc -l) natives, in agreement"
+
+    command -v javac >/dev/null 2>&1 || {
+        echo "error: javac is needed to compile android/src" >&2; exit 1; }
+    [ -x "${BT}d8" ] || {
+        echo "error: no d8 in $BT (set ANDROID_SDK)" >&2; exit 1; }
+
+    # -bootclasspath android.jar, so nothing from this machine's JDK leaks into
+    # a class the phone's framework has never seen. -Xlint:-options: the compiler
+    # has opinions about targeting an API level it is not the same age as.
+    rm -rf "$stage/classes"; mkdir -p "$stage/classes"
+    javac -nowarn -Xlint:-options -source 8 -target 8 -bootclasspath "$PLATFORM" \
+        -d "$stage/classes" "$ROOT"/android/src/dev/ogui/android/*.java
+    # .class files in, classes.dex out -- dalvik, not JVM, bytecode.
+    "${BT}d8" --release --min-api "$API" --lib "$PLATFORM" --output "$stage" \
+        $(find "$stage/classes" -name '*.class')
+    ls -lh "$stage/classes.dex" | awk '{print "  dex: "$5}'
+
+    # ---- 3. the screens, inside the archive --------------------------------
     # The asset reader installed by the host is what makes these names work;
     # nothing on the device has a filesystem the app may read. The names have to
     # be the ones the layouts author, which are repository-relative: a layout
@@ -177,7 +239,7 @@ build_android() {
     [ -d "$ROOT/themes" ] && cp -r "$ROOT/themes" "$stage/assets/themes"
     [ -d "$ROOT/assets" ] && cp -r "$ROOT/assets" "$stage/assets/assets"
 
-    # ---- 3. manifest + assets into an archive ------------------------------
+    # ---- 4. manifest, dex, libraries into an archive ------------------------
     local out="$stage/ogui-demo-debug.apk"
     "${BT}aapt2" link -I "$PLATFORM" \
         --manifest "$ROOT/android/AndroidManifest.xml" \
@@ -186,20 +248,26 @@ build_android() {
         -A "$stage/assets" \
         -o "$stage/unaligned.apk"
 
-    # The native libraries are not aapt2's business: stored (extractNativeLibs
-    # is false, so the loader mmaps them straight out of the archive) and then
-    # page-aligned by zipalign below.
-    python3 - "$stage/unaligned.apk" "$stage/lib" <<'PY'
+    # Neither the bytecode nor the native libraries are aapt2's business on this
+    # road: the dex is compressed like any other entry, the libraries are stored
+    # because extractNativeLibs is false and the loader mmaps them straight out of
+    # the archive. Everything is in before zipalign and apksigner, because a
+    # signature covers what was in the archive when it was made and nothing that
+    # was added after it -- which is the whole reason this step is not "just
+    # append a file when someone asks for one".
+    python3 - "$stage/unaligned.apk" "$stage/lib" "$stage/classes.dex" <<'PY'
 import os, sys, zipfile
-apk, libroot = sys.argv[1], sys.argv[2]
-with zipfile.ZipFile(apk, 'a', zipfile.ZIP_STORED) as z:
+apk, libroot, dex = sys.argv[1], sys.argv[2], sys.argv[3]
+with zipfile.ZipFile(apk, 'a') as z:
+    z.write(dex, 'classes.dex', zipfile.ZIP_DEFLATED)
+    print('  + classes.dex')
     for abi in sorted(os.listdir(libroot)):
         so = os.path.join(libroot, abi, 'liboggui_app.so')
-        z.write(so, f'lib/{abi}/liboggui_app.so')
+        z.write(so, f'lib/{abi}/liboggui_app.so', zipfile.ZIP_STORED)
         print(f'  + lib/{abi}/liboggui_app.so')
 PY
 
-    # ---- 4. align, sign with the debug key, verify -------------------------
+    # ---- 5. align, sign with the debug key, verify -------------------------
     local KS="${ANDROID_DEBUG_KEYSTORE:-$HOME/.android/debug.keystore}"
     if [ ! -f "$KS" ]; then
         mkdir -p "$(dirname "$KS")"

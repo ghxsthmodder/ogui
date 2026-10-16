@@ -173,6 +173,9 @@ void AndroidInputBridge::onKey(InputState& io, int32_t androidKeyCode, bool down
     if (kc > 0 && kc < static_cast<int>(std::size(io.keyDown))) {
         io.keyDown[kc] = down;
         io.keyRepeat[kc] = down && repeat;
+        // Which frame a press belongs to is what lets the input connection's
+        // release of the same key wait for it, whoever the press came in from.
+        if (down) m_pressedThisFrame.set(kc);
     }
     if (!down) return;
     if (kc == Key_CapsLock) {
@@ -193,12 +196,208 @@ void AndroidInputBridge::onKey(InputState& io, int32_t androidKeyCode, bool down
     if (printableChar(ch)) m_typeahead.push_back(ch);
 }
 
-void AndroidInputBridge::commitText(const std::string& utf8) {
-    const unsigned char* p = reinterpret_cast<const unsigned char*>(utf8.data());
-    const unsigned char* end = p + utf8.size();
-    while (p < end) {
-        const uint32_t cp = utf8Next(p);
-        if (printableChar(cp)) m_typeahead.push_back(cp);
+void AndroidInputBridge::syncEditor(const Widget* focused) {
+    const auto* field = dynamic_cast<const TextInput*>(focused);
+    std::lock_guard<std::mutex> lk(m_imeMutex);
+    ImeEditor next;
+    if (field) {
+        next.text = field->text();
+        next.selStart = field->selectionStart();
+        next.selEnd = field->selectionEnd();
+        next.field = field;
+        // What the IME is composing is not the tree's business: the span
+        // survives a publish, because the text sitting under it is part of what
+        // is published. It dies with the field it belonged to, and with a text
+        // that no longer reaches that far -- a field that cut the composition
+        // short has said so in the only terms the bridge reads.
+        if (m_editor.composing && m_editor.field == field &&
+            m_editor.compEnd <= next.text.size()) {
+            next.composing = true;
+            next.compStart = m_editor.compStart;
+            next.compEnd = m_editor.compEnd;
+        }
+    }
+    m_editor = next;
+}
+
+ImeEditor AndroidInputBridge::editor() const {
+    std::lock_guard<std::mutex> lk(m_imeMutex);
+    return m_editor;
+}
+
+void AndroidInputBridge::setComposing(bool on, size_t start, size_t end) {
+    std::lock_guard<std::mutex> lk(m_imeMutex);
+    m_editor.composing = on;
+    m_editor.compStart = start;
+    m_editor.compEnd = end;
+}
+
+void AndroidInputBridge::queueEdit(ImeEdit edit) {
+    std::lock_guard<std::mutex> lk(m_imeMutex);
+    // Not what the caller thinks it is typing into, but what the bridge was
+    // answering for when the call came: the snapshot is the only thing the two
+    // threads have in common.
+    edit.target = m_editor.field;
+    m_edits.push_back(std::move(edit));
+}
+
+std::vector<ImeEdit> AndroidInputBridge::takeEdits() {
+    std::lock_guard<std::mutex> lk(m_imeMutex);
+    std::vector<ImeEdit> out;
+    out.swap(m_edits);
+    return out;
+}
+
+void AndroidInputBridge::applyEdits(Widget* focused, InputState& io) {
+    const auto edits = takeEdits();
+    if (edits.empty()) return;
+    auto* field = dynamic_cast<TextInput*>(focused);
+    for (const auto& edit : edits) {
+        // An edit the IME asked for against a field that no longer has the focus
+        // is dropped rather than handed to whoever took it: its positions count a
+        // text this field never held, and "the right characters in the wrong box"
+        // is the one mistake a user cannot see coming.
+        if (edit.target && edit.target != focused) continue;
+        applyEdit(field, edit, io);
+    }
+    // The IME's next question has to be answered from what the tree now holds,
+    // not from what it held when the key was pressed.
+    if (field) syncEditor(field);
+}
+
+void AndroidInputBridge::applyEdit(TextInput* field, const ImeEdit& edit,
+                                   InputState& io) {
+    using Kind = ImeEdit::Kind;
+
+    if (edit.kind == Kind::Action) {
+        // However the return key was drawn, it means the same thing to a field:
+        // the tree's own Enter, held for one frame and released by endFrame, is
+        // what fires a TextInput's submit event. Nothing here decides what
+        // "search" or "next" does with it.
+        io.keyDown[Key_Enter] = true;
+        m_enterLatched = true;
+        return;
+    }
+    if (edit.kind == Kind::Key) {
+        // A keyboard that sends key events instead of editing -- arrows, a
+        // hardware Enter, a function key -- goes through the same door the
+        // rocker and a real keyboard come in by, so its characters keep their
+        // order against each other and its unknown codes stay unknown.
+        //
+        // A pair, though, is not what a rocker sends: a phone's backspace is a
+        // down and an up in the same instant, and keyDown is a level the kernel
+        // reads across two frames. Applying both is a key that was never
+        // pressed, so the release of a pair that arrives together waits for the
+        // end of the frame that saw the press -- which is what a key a real
+        // finger held down for one frame looks like to the tree.
+        const int kc = keyFromAndroidKey(edit.key);
+        if (!edit.down && kc > 0 &&
+            kc < static_cast<int>(m_releaseAtFrameEnd.size()) &&
+            m_pressedThisFrame.test(kc)) {
+            m_releaseAtFrameEnd.set(kc);
+        } else {
+            onKey(io, edit.key, edit.down, false);
+        }
+        return;
+    }
+    if (!field) return;
+
+    // Each edit is read against the text the edit before it left behind, which
+    // is why the queue is drained in order and on this thread.
+    const std::string text = field->text();
+    const size_t selStart = field->selectionStart();
+    const size_t selEnd = field->selectionEnd();
+    const ImeEditor snap = editor();
+    const bool composing = snap.composing && snap.field == field;
+
+    switch (edit.kind) {
+    case Kind::Commit: {
+        // A commit replaces the selection *widened over whatever the IME was
+        // composing*: the keyboard that finalises "word" after the user typed
+        // three of its letters means the whole word, which is why picking a
+        // candidate replaces the letters on screen instead of adding the word
+        // after them.
+        size_t from = selStart, to = selEnd;
+        if (composing) {
+            from = std::min(from, snap.compStart);
+            to = std::max(to, snap.compEnd);
+        }
+        const size_t caret = edit.cursor <= 0 ? from : from + edit.text.size();
+        field->replaceRange(from, to, edit.text);
+        field->setSelection(caret, caret);
+        // A commit is the end of whatever was being composed; the text stays.
+        setComposing(false, 0, 0);
+        break;
+    }
+    case Kind::Composing: {
+        // The IME replaces its own span when it has one, and the selection when
+        // it does not -- which is what makes the second keystroke of a word
+        // change one letter instead of appending the whole word again.
+        const size_t from = composing ? snap.compStart : selStart;
+        const size_t to = composing ? snap.compEnd : selEnd;
+        const size_t caret = edit.cursor <= 0 ? from : from + edit.text.size();
+        field->replaceRange(from, to, edit.text);
+        field->setSelection(caret, caret);
+        setComposing(true, from, from + edit.text.size());
+        break;
+    }
+    case Kind::ComposingRegion: {
+        // The IME claims text that is already in the field, so nothing is
+        // written: this is the one edit whose whole effect is on the span. An
+        // empty region is how a keyboard says it is not composing any more.
+        if (edit.start >= edit.end) {
+            setComposing(false, 0, 0);
+        } else {
+            setComposing(true, imeAdvanceUnits(text, 0, edit.start),
+                        imeAdvanceUnits(text, 0, edit.end));
+        }
+        break;
+    }
+    case Kind::Finish: {
+        if (!composing) break;
+        const size_t caret = edit.cursor <= 0 ? snap.compStart : snap.compEnd;
+        field->setSelection(caret, caret);
+        setComposing(false, 0, 0);
+        break;
+    }
+    case Kind::Delete: {
+        // Around the cursor, in the IME's units: back from where the selection
+        // starts and forward from where it ends, so a backspace on a selected
+        // word takes the word and the character before it -- and no selection is
+        // ever left pointing at text that has gone. The composing span counts as
+        // part of what goes too: a keyboard that deletes next to a half-typed
+        // word means the word, not the letters it has not committed yet.
+        size_t from = imeRewindUnits(text, selStart, edit.before);
+        size_t to = imeAdvanceUnits(text, selEnd, edit.after);
+        // A deletion, unlike a caret, has to land somewhere: asking for one code
+        // unit next to an astral character is a keyboard naming the character it
+        // drew a key for, and the answer is the whole of it rather than a key
+        // that deletes nothing. Two units is the widest one code point is, and
+        // the walk only fails to move when the neighbour is wider than the ask,
+        // so asking for both takes exactly that one character.
+        if (edit.before > 0 && from == selStart && selStart > 0)
+            from = imeRewindUnits(text, selStart, 2);
+        if (edit.after > 0 && to == selEnd && to < text.size())
+            to = imeAdvanceUnits(text, selEnd, 2);
+        if (composing) {
+            from = std::min(from, snap.compStart);
+            to = std::max(to, snap.compEnd);
+        }
+        field->replaceRange(from, to, std::string());
+        field->setSelection(from, from);
+        // Whatever the IME owned in that range is gone with it.
+        setComposing(false, 0, 0);
+        break;
+    }
+    case Kind::Select: {
+        const int32_t start = edit.start < 0 ? 0 : edit.start;
+        const int32_t end = edit.end < start ? start : edit.end;
+        field->setSelection(imeAdvanceUnits(text, 0, start),
+                            imeAdvanceUnits(text, 0, end));
+        break;
+    }
+    case Kind::Action: break;   // handled above, on the way in
+    case Kind::Key: break;      // ... and here too
     }
 }
 
@@ -211,12 +410,31 @@ uint32_t AndroidInputBridge::deliverChar(InputState& io) {
 void AndroidInputBridge::endFrame(InputState& io) {
     io.touchCancelled = false;
     io.lastChar = 0;
+    if (m_enterLatched) {
+        io.keyDown[Key_Enter] = false;
+        m_enterLatched = false;
+    }
+    // The frame the tree saw is over: a press that was held for it can let go
+    // now, and the next frame reads the release as the edge it is.
+    for (size_t kc = 0; kc < m_releaseAtFrameEnd.size(); ++kc) {
+        if (!m_releaseAtFrameEnd.test(kc)) continue;
+        io.keyDown[kc] = false;
+        io.keyRepeat[kc] = false;
+    }
+    m_releaseAtFrameEnd.reset();
+    m_pressedThisFrame.reset();
 }
 
 void AndroidInputBridge::reset() {
     m_fingers.clear();
     m_typeahead.clear();
     m_caps = false;
+    // The connection is gone, so the field it was answering for is a field this
+    // bridge no longer knows anything about. An Enter that is already down stays
+    // down until the endFrame() after it releases it.
+    std::lock_guard<std::mutex> lk(m_imeMutex);
+    m_editor = ImeEditor();
+    m_edits.clear();
 }
 
 int keyFromAndroidKey(int32_t code) {

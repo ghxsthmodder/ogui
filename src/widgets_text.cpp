@@ -32,6 +32,25 @@ void TextInput::setSelection(size_t start, size_t end) {
     if (Kernel* kn = kernel()) kn->invalidate();
 }
 
+bool TextInput::replaceRange(size_t start, size_t end, const std::string& text) {
+    if (start > m_text.size()) start = m_text.size();
+    if (end < start) end = start;
+    if (end > m_text.size()) end = m_text.size();
+    // A no-op has to stay one: an IME that replaces nothing still expects the
+    // caret to move, and a change event for text that did not change would make
+    // every bound script fire on it.
+    const bool moved = start != end || !text.empty();
+    if (moved) m_text.erase(start, end - start);
+    if (!text.empty()) m_text.insert(start, text);
+    m_caret = m_selAnchor = start + text.size();
+    syncState();
+    if (moved) {
+        announceChange();
+        if (Kernel* kn = kernel()) kn->invalidate();
+    }
+    return moved;
+}
+
 void TextInput::syncState() {
     if (m_caret > m_text.size()) m_caret = m_text.size();
     if (m_selAnchor > m_text.size()) m_selAnchor = m_text.size();

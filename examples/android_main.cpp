@@ -27,10 +27,6 @@ struct App {
     ogui::Kernel kernel;
     ogui::InputState input;
     gallery::Gallery gallery;
-    // The widget the IME is answering for. Compared by pointer, which the
-    // Kernel keeps alive for the whole walk, so a screen swap that moved focus
-    // reads as a change instead of as freed memory.
-    ogui::Widget* editing = nullptr;
 };
 
 App& of(struct android_app* app) {
@@ -53,19 +49,15 @@ void fit(App& a) {
 void frame(App& a) {
     if (!a.host.hasWindow()) return;
     a.input.time = a.host.elapsed();
+    // What the keyboard typed goes into the tree before the frame that has to
+    // draw it; what the tree has focused goes to the keyboard after the frame
+    // that moved it. Between those two calls an app types, deletes and submits.
+    a.host.applyImeEdits(a.kernel, a.input);
     a.host.input().deliverChar(a.input);
     a.kernel.frame(a.input);
     a.host.input().endFrame(a.input);
-    if (!a.host.present(a.kernel)) return;
-
-    // The keyboard follows the focus, not a tap: a layout that moves focus with
-    // the arrows or from a script gets the IME too, and a widget that is not an
-    // editor never asks for it.
-    ogui::Widget* focus = a.kernel.focusedWidget();
-    if (focus == a.editing) return;
-    a.editing = focus;
-    if (dynamic_cast<ogui::TextInput*>(focus)) a.host.showKeyboard();
-    else a.host.hideKeyboard();
+    a.host.syncIme(a.kernel);
+    a.host.present(a.kernel);
 }
 
 void onAppCmd(struct android_app* app, int32_t cmd) {

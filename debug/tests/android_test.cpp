@@ -6,9 +6,9 @@
 // is not, what a key code stands for, where a typed character goes -- are plain
 // data over in AndroidInputBridge, and this is where they are checked. The same
 // is true of the input connection's side of the host: which keyboard a focused
-// field asks for, and how an IME's UTF-16 indices line up with the UTF-8
-// offsets the widget counts its caret in, are decided over ints and strings
-// before any Java sees them.
+// field asks for, what an edit the IME asks for does to that field, and how an
+// IME's UTF-16 indices line up with the UTF-8 offsets the widget counts its
+// caret in, are all decided over ints and strings before any Java sees them.
 #include "ogui/androidhost.hpp"
 #include "ogui/api.hpp"
 #include "ogui/kernel.hpp"
@@ -212,29 +212,321 @@ void shiftAndCapsLockChangeOnlyTheLetters() {
     check(r.bridge.deliverChar(r.st) == 'a', "tapping it again clears");
 }
 
+// ---- the edits an input connection asks for --------------------------------
+// The IME's side of the bridge takes an ImeEdit by value, which is what the Java
+// half fills in from a JNI call. Stamping the target is the bridge's own job, so
+// a test that wants the same answer the phone gets asks the same question:
+// publish the field, then queue.
+
+void queueCommit(AndroidInputBridge& b, const std::string& text,
+                 int32_t cursor = 1) {
+    ImeEdit edit;
+    edit.kind = ImeEdit::Kind::Commit;
+    edit.text = text;
+    edit.cursor = cursor;
+    b.queueEdit(std::move(edit));
+}
+
+void queueComposing(AndroidInputBridge& b, const std::string& text) {
+    ImeEdit edit;
+    edit.kind = ImeEdit::Kind::Composing;
+    edit.text = text;
+    b.queueEdit(std::move(edit));
+}
+
+void queueDelete(AndroidInputBridge& b, int32_t before, int32_t after) {
+    ImeEdit edit;
+    edit.kind = ImeEdit::Kind::Delete;
+    edit.before = before;
+    edit.after = after;
+    b.queueEdit(std::move(edit));
+}
+
+void queueKind(AndroidInputBridge& b, ImeEdit::Kind kind) {
+    ImeEdit edit;
+    edit.kind = kind;
+    b.queueEdit(std::move(edit));
+}
+
+void queueKey(AndroidInputBridge& b, int32_t keyCode, bool down) {
+    ImeEdit edit;
+    edit.kind = ImeEdit::Kind::Key;
+    edit.key = keyCode;
+    edit.down = down;
+    b.queueEdit(std::move(edit));
+}
+
 void theImeAndTheKeyboardShareOneQueue() {
     Rig r;
-    r.bridge.commitText("olá");
-    check(r.bridge.deliverChar(r.st) == 'o', "one character per frame");
-    check(r.bridge.deliverChar(r.st) == 'l', "in the order it was typed");
-    check(r.bridge.deliverChar(r.st) == 0xE1, "and a whole code point, not a byte");
+    auto field = std::make_shared<TextInput>();
+    r.bridge.syncEditor(field.get());
 
-    r.bridge.onKey(r.st, 66 /* ENTER */, true, false);
-    r.bridge.commitText("x");
-    check(r.bridge.deliverChar(r.st) == 'x',
-          "a key in between does not jump the queue");
+    // A keyboard that does not compose sends key events, and a rocker or a real
+    // keyboard sends the same ones: one queue, in the order they arrived.
+    r.bridge.onKey(r.st, 29 /* A */, true, false);
+    queueKey(r.bridge, 29, false);
+    r.bridge.applyEdits(field.get(), r.st);
+    check(r.st.keyDown[Key_A], "the release waits for the frame the press was in");
+    check(r.bridge.deliverChar(r.st) == 'a',
+          "and the letter waits in the queue the frame reads");
+    r.bridge.endFrame(r.st);
+    check(!r.st.keyDown[Key_A], "let go by the end of the frame that saw it down");
+}
+
+void aPressAndItsReleaseInOneFrameAreStillAPress() {
+    Rig r;
+    auto field = std::make_shared<TextInput>();
+    r.bridge.syncEditor(field.get());
+
+    // A phone's backspace is a down and an up in the same instant, and keyDown is
+    // a level the kernel reads across frames: clearing it in the frame that set
+    // it is a key that was never pressed, which is what a field that ignores the
+    // delete key looks like.
+    queueKey(r.bridge, 67 /* DEL */, true);
+    queueKey(r.bridge, 67, false);
+    r.bridge.applyEdits(field.get(), r.st);
+    check(r.st.keyDown[Key_Backspace], "the frame the tree sees holds the press");
+    r.bridge.endFrame(r.st);
+    check(!r.st.keyDown[Key_Backspace], "and the release follows one frame later");
+
+    // A press that outlives its own frame is released where it stands, not held
+    // until some later frame decides to let go of it.
+    r.bridge.onKey(r.st, 20 /* DPAD_DOWN */, true, false);
+    check(r.st.keyDown[Key_Down], "down, and the frame ends");
+    r.bridge.endFrame(r.st);
+    check(r.st.keyDown[Key_Down], "still down: nobody said it came up");
+    r.bridge.onKey(r.st, 20, false, false);
+    check(!r.st.keyDown[Key_Down], "the release arrives in a later frame");
+    r.bridge.endFrame(r.st);
+    check(!r.st.keyDown[Key_Down], "and is not held over into the one after");
+}
+
+void aCommittedWordLandsInTheFieldItWasTypedFor() {
+    Rig r;
+    auto field = std::make_shared<TextInput>();
+    field->setText("hi");
+    r.bridge.syncEditor(field.get());
+
+    queueCommit(r.bridge, " there");
+    r.bridge.applyEdits(field.get(), r.st);
+    check(field->text() == "hi there", "a commit writes at the caret");
+    check(field->caret() == field->text().size(),
+          "and leaves it after what it wrote");
+
+    // newCursorPosition <= 0 means the caret goes before the inserted text, which
+    // is how a keyboard that has just typed a word parks itself on its first
+    // letter to offer corrections over it.
+    queueCommit(r.bridge, "x", 0);
+    r.bridge.applyEdits(field.get(), r.st);
+    check(field->text() == "hi therex", "the text still lands where the caret was");
+    check(field->caret() == field->text().size() - 1,
+          "but the caret can be asked to stop before it");
+
+    Rig s;
+    auto selected = std::make_shared<TextInput>();
+    selected->setText("hi there");
+    selected->setSelection(0, 2);            // "hi"
+    s.bridge.syncEditor(selected.get());
+    queueCommit(s.bridge, "yo");
+    s.bridge.applyEdits(selected.get(), s.st);
+    check(selected->text() == "yo there", "a commit takes the selection with it");
+}
+
+void aBackspaceTakesAWholeCharacterAndNotAByte() {
+    Rig r;
+    auto field = std::make_shared<TextInput>();
+    const std::string cafe = std::string("caf\xC3\xA9");
+    field->setText(cafe + "\xF0\x9F\x98\x80");       // "café" plus one emoji
+    r.bridge.syncEditor(field.get());
+    check(field->caret() == cafe.size() + 4,
+          "the field ends with four bytes of emoji");
+
+    // One code unit back is the whole emoji. One byte back would be the last
+    // continuation byte of it, which is the bug this boundary exists to avoid.
+    queueDelete(r.bridge, 1, 0);
+    r.bridge.applyEdits(field.get(), r.st);
+    check(field->text() == cafe, "deleteSurroundingText(1) takes four bytes");
+
+    queueDelete(r.bridge, 1, 0);
+    r.bridge.applyEdits(field.get(), r.st);
+    check(field->text() == "caf", "and the accented letter is one, not two");
+
+    // A selection is deleted along with what surrounds it, measured from its ends.
+    Rig s;
+    auto selected = std::make_shared<TextInput>();
+    selected->setText("abcdef");
+    selected->setSelection(1, 3);            // "bc"
+    s.bridge.syncEditor(selected.get());
+    queueDelete(s.bridge, 1, 0);
+    s.bridge.applyEdits(selected.get(), s.st);
+    check(selected->text() == "def",
+          "one back before a selected range takes the letter left of it");
+
+    // The same rule from the other side. A delete that reaches forward is the
+    // key that removes what is under the caret, so it takes the whole pair
+    // rather than the half of it one code unit names.
+    Rig f;
+    auto ahead = std::make_shared<TextInput>();
+    ahead->setText(std::string("a\xF0\x9F\x98\x80") + "b");
+    ahead->setSelection(1, 1);
+    f.bridge.syncEditor(ahead.get());
+    queueDelete(f.bridge, 0, 1);
+    f.bridge.applyEdits(ahead.get(), f.st);
+    check(ahead->text() == "ab", "one code unit forward takes the whole pair");
+    check(ahead->caret() == 1,
+          "and the caret stays on the boundary it started on");
+}
+
+void theComposingSpanIsReplacedAndNotAppended() {
+    Rig r;
+    auto field = std::make_shared<TextInput>();
+    r.bridge.syncEditor(field.get());
+
+    queueComposing(r.bridge, "wor");
+    r.bridge.applyEdits(field.get(), r.st);
+    check(field->text() == "wor", "composing text is in the field as it is typed");
+
+    // The whole point of the span: the next keystroke replaces what the IME owns
+    // instead of writing the word out again after itself.
+    queueComposing(r.bridge, "word");
+    r.bridge.applyEdits(field.get(), r.st);
+    check(field->text() == "word", "the next one replaces the span");
+    const ImeEditor snap = r.bridge.editor();
+    check(snap.composing && snap.compStart == 0 && snap.compEnd == 4,
+          "and the span moved with the text it covers");
+
+    // A commit widens over the composition, which is what picking a candidate
+    // from under it means to the user.
+    queueCommit(r.bridge, "word ");
+    r.bridge.applyEdits(field.get(), r.st);
+    check(field->text() == "word ",
+          "committing finalises it instead of doubling it");
+    check(!r.bridge.editor().composing, "and the IME owns nothing after that");
+
+    // finishComposingText keeps the text and lets go of the span: the word stays
+    // on screen, the keyboard stops treating it as one unit.
+    Rig s;
+    auto area = std::make_shared<TextArea>();
+    s.bridge.syncEditor(area.get());
+    queueComposing(s.bridge, "hal");
+    s.bridge.applyEdits(area.get(), s.st);
+    queueKind(s.bridge, ImeEdit::Kind::Finish);
+    s.bridge.applyEdits(area.get(), s.st);
+    check(area->text() == "hal", "a finish leaves the text standing");
+    check(!s.bridge.editor().composing, "and the span to itself");
+    check(area->caret() == 3, "with the caret at its end");
+}
+
+void aRegionTheImeClaimsIsReplacedLikeASpan() {
+    Rig r;
+    auto field = std::make_shared<TextInput>();
+    field->setText("one two");
+    field->setSelection(8, 8);
+    r.bridge.syncEditor(field.get());
+
+    // Some keyboards mark a word that is already on screen as theirs (a swipe
+    // over an existing word, a correction offer) without writing anything.
+    ImeEdit region;
+    region.kind = ImeEdit::Kind::ComposingRegion;
+    region.start = 4;
+    region.end = 7;                // "two", in code units
+    r.bridge.queueEdit(std::move(region));
+    r.bridge.applyEdits(field.get(), r.st);
+    check(field->text() == "one two", "claiming a span writes nothing");
+    check(r.bridge.editor().composing, "... and marks it as the IME's");
+    check(r.bridge.editor().compStart == 4 && r.bridge.editor().compEnd == 7,
+          "at the bytes the units stand for");
+
+    queueComposing(r.bridge, "2");
+    r.bridge.applyEdits(field.get(), r.st);
+    check(field->text() == "one 2",
+          "so the next keystroke replaces the word, not the caret");
+}
+
+void anEditorActionIsTheEnterTheFieldAlreadyUnderstands() {
+    Rig r;
+    auto field = std::make_shared<TextInput>();
+    r.bridge.syncEditor(field.get());
+
+    queueKind(r.bridge, ImeEdit::Kind::Action);
+    r.bridge.applyEdits(field.get(), r.st);
+    check(r.st.keyDown[Key_Enter],
+          "the action holds Enter for the frame that follows");
+    r.bridge.endFrame(r.st);
+    check(!r.st.keyDown[Key_Enter],
+          "and releases it after, so a submit that is held down is not one");
+}
+
+void anEditForAFieldThatLostTheFocusIsDropped() {
+    Rig r;
+    auto first = std::make_shared<TextInput>();
+    first->setText("first");
+    auto second = std::make_shared<TextInput>();
+    second->setText("second");
+
+    r.bridge.syncEditor(first.get());
+    queueCommit(r.bridge, "!");
+    // A tap moved the focus before the drain got the edit. Its positions count a
+    // text the new field never held, so it goes with the field it was typed for.
+    r.bridge.syncEditor(second.get());
+    r.bridge.applyEdits(second.get(), r.st);
+    check(second->text() == "second",
+          "the edit does not land in the field that took the focus");
+    check(first->text() == "first",
+          "and the field it was typed for is left as it was");
+
+    // An edit queued before any field was published has no opinion about focus,
+    // which is the answer for a keyboard that beat the app's first frame to it.
+    Rig s;
+    auto third = std::make_shared<TextInput>();
+    queueCommit(s.bridge, "x");
+    s.bridge.applyEdits(third.get(), s.st);
+    check(third->text() == "x",
+          "a first commit with nothing published still lands");
+}
+
+void theSnapshotIsWhatTheImeIsTold() {
+    Rig r;
+    auto field = std::make_shared<TextInput>();
+    field->setText("a\U0001F600b");                            // "a😀b"
+    field->setSelection(5, 5);                                // after the emoji
+    r.bridge.syncEditor(field.get());
+
+    const ImeEditor snap = r.bridge.editor();
+    check(snap.selStart == 5,
+          "the snapshot keeps the bytes the widget counts in");
+    check(imeCountUnits(snap.text, 0, snap.selStart) == 3,
+          "and the Java side is told three code units, which is what it counts in");
+
+    // A field that is not an editor has nothing for an IME to answer for; the
+    // empty snapshot is what makes the keyboard go away rather than stay up.
+    auto button = std::make_shared<Button>();
+    r.bridge.syncEditor(button.get());
+    check(!r.bridge.editor().field, "a button publishes no field");
+    check(r.bridge.editor().text.empty(), "... and no text to compose into");
+
+    r.bridge.syncEditor(nullptr);
+    check(!r.bridge.editor().field, "and neither does no focus at all");
 }
 
 void theWindowTakingItsFingersBackClearsEverything() {
     Rig r;
+    auto field = std::make_shared<TextInput>();
+    field->setText("hi");
+    r.bridge.syncEditor(field.get());
     r.down(9, 1.0f, 2.0f);
-    r.bridge.commitText("hi");
+    queueCommit(r.bridge, "!");
     r.bridge.reset();
-    check(r.st.touchCount == 1, "reset does not rewrite what the host already sent");
+    check(r.st.touchCount == 1,
+          "reset does not rewrite what the host already sent");
     std::vector<AndroidPointer> none;
     r.bridge.onMotion(r.st, AndroidAction::Up, 0, none.data(), 0);
     check(r.st.touchCount == 0, "and the next event sees no fingers");
-    check(r.bridge.deliverChar(r.st) == 0, "or the text that was queued");
+    check(r.bridge.deliverChar(r.st) == 0, "the typeahead is gone");
+    check(!r.bridge.editor().field, "the field the IME was answering for is gone");
+    r.bridge.applyEdits(field.get(), r.st);
+    check(field->text() == "hi",
+          "and the edit queued for it does not come back later");
 }
 
 void theKeyboardMatchesTheFieldThatHasTheFocus() {
@@ -279,7 +571,8 @@ void theImeCountsInCodeUnitsAndTheWidgetInBytes() {
           "an accent is one, however many bytes it takes");
     check(imeCountUnits(emoji, 0, 0) == 0, "an empty range counts nothing");
 
-    check(imeAdvanceUnits(emoji, 0, 1) == 1, "one unit off 'a' is the emoji's lead");
+    check(imeAdvanceUnits(emoji, 0, 1) == 1,
+          "one unit off 'a' is the emoji's lead");
     check(imeAdvanceUnits(emoji, 0, 3) == 5, "three units is past the whole pair");
     // The case a deletion arrives as: the IME asks for one character and must not
     // be pointed at the middle of a pair, where half an emoji would be cut out.
@@ -289,7 +582,8 @@ void theImeCountsInCodeUnitsAndTheWidgetInBytes() {
     check(imeAdvanceUnits(emoji, emoji.size(), 1) == emoji.size(),
           "asking past the end stays at the end");
 
-    check(imeRewindUnits(emoji, emoji.size(), 1) == 5, "one unit back from the end");
+    check(imeRewindUnits(emoji, emoji.size(), 1) == 5,
+          "one unit back from the end");
     check(imeRewindUnits(emoji, 5, 2) == 1, "two back is over the pair");
     check(imeRewindUnits(emoji, 5, 1) == 5, "and one is still inside it");
     check(imeRewindUnits(accented, accented.size(), 1) == 3,
@@ -337,7 +631,15 @@ int main() {
     modifiersAreKeysLikeAnyOther();
     aKeyTypesAndAutoRepeatsKeepTyping();
     shiftAndCapsLockChangeOnlyTheLetters();
+    aCommittedWordLandsInTheFieldItWasTypedFor();
+    aBackspaceTakesAWholeCharacterAndNotAByte();
+    theComposingSpanIsReplacedAndNotAppended();
+    aRegionTheImeClaimsIsReplacedLikeASpan();
+    anEditorActionIsTheEnterTheFieldAlreadyUnderstands();
+    anEditForAFieldThatLostTheFocusIsDropped();
+    theSnapshotIsWhatTheImeIsTold();
     theImeAndTheKeyboardShareOneQueue();
+    aPressAndItsReleaseInOneFrameAreStillAPress();
     theWindowTakingItsFingersBackClearsEverything();
     theKeyboardMatchesTheFieldThatHasTheFocus();
     theImeCountsInCodeUnitsAndTheWidgetInBytes();

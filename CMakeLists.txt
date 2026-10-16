@@ -100,6 +100,7 @@ add_library(ogui STATIC
     src/glbackend.cpp
     src/androidinput.cpp
     src/androidhost.cpp
+    src/androidjni.cpp
     src/tween.cpp
     src/host.cpp
     src/script.cpp

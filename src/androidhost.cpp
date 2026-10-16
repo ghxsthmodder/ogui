@@ -15,6 +15,8 @@
 
 #ifdef __ANDROID__
 
+#include "androidime.hpp"
+
 #include <android/asset_manager.h>
 #include <android/configuration.h>
 #include <android/input.h>
@@ -117,6 +119,10 @@ bool AndroidHost::create(ANativeActivity* activity) {
     if (m_display) return true;
     if (!activity) { m_error = "no ANativeActivity"; return false; }
     m_activity = activity;
+    // Before the window, before the first frame: the activity's UI thread can be
+    // asked for an input connection at any moment after the class was loaded,
+    // and an answer of "no bridge" would put the keyboard up over nothing.
+    androidImeAttach(&m_input);
 
     EGLDisplay dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     if (dpy == EGL_NO_DISPLAY) {
@@ -170,6 +176,10 @@ void AndroidHost::destroy() {
     // place would hand a dangling AAssetManager to the next readFile().
     if (m_activity) setAssetReader(nullptr);
     m_activity = nullptr;
+    // The bridge is a member of this host, and this host is on the app thread's
+    // stack: after destroy() returns there is nothing for a late UI-thread call
+    // to point at, so it gets a null bridge instead of a freed one.
+    androidImeDetach();
     m_input.reset();
 }
 
@@ -386,15 +396,47 @@ bool AndroidHost::present(Kernel& kernel) {
     return true;
 }
 
-void AndroidHost::showKeyboard() {
-    if (m_activity)
+void AndroidHost::sendImeRequest(const ImeRequest& request) {
+    // Sixty times a second is what the frame loop is; the keyboard is not
+    // interested in being told the same thing each one of them, and a restart it
+    // did not ask for closes the word it is in the middle of composing.
+    if (m_imeSentKnown && m_imeSent.inputType == request.inputType &&
+        m_imeSent.imeOptions == request.imeOptions &&
+        m_imeSent.visible == request.visible) {
+        return;
+    }
+    m_imeSent = request;
+    m_imeSentKnown = true;
+
+    if (androidImeAvailable() && androidImeSendRequest(request)) return;
+
+    // No Java bridge: the NDK's own call. It brings the keyboard up over a field
+    // that has no input connection, which is the best an app made of nothing but
+    // native code can do -- a hardware keyboard's key events still reach the
+    // tree through onInputEvent().
+    if (!m_activity) return;
+    if (request.visible) {
         ANativeActivity_showSoftInput(m_activity,
-                                      ANATIVEACTIVITY_SHOW_SOFT_INPUT_FORCED);
+                                      ANATIVEACTIVITY_SHOW_SOFT_INPUT_IMPLICIT);
+    } else {
+        ANativeActivity_hideSoftInput(m_activity,
+                                      ANATIVEACTIVITY_HIDE_SOFT_INPUT_IMPLICIT_ONLY);
+    }
 }
 
-void AndroidHost::hideKeyboard() {
-    if (m_activity) ANativeActivity_hideSoftInput(m_activity, 0);
+void AndroidHost::applyImeEdits(Kernel& kernel, InputState& io) {
+    m_input.applyEdits(kernel.focusedWidget(), io);
 }
+
+void AndroidHost::syncIme(Kernel& kernel) {
+    Widget* focus = kernel.focusedWidget();
+    m_input.syncEditor(focus);
+    sendImeRequest(imeRequestFor(focus));
+}
+
+bool AndroidHost::hasImeBridge() const { return androidImeAvailable(); }
+
+void AndroidHost::hideKeyboard() { sendImeRequest(ImeRequest()); }
 
 void AndroidHost::setClearColor(float r, float g, float b) {
     m_clearR = r; m_clearG = g; m_clearB = b;
@@ -431,7 +473,9 @@ bool AndroidHost::present(Kernel&) {
     m_error = "AndroidHost requires Android";
     return false;
 }
-void AndroidHost::showKeyboard() {}
+void AndroidHost::applyImeEdits(Kernel&, InputState&) {}
+void AndroidHost::syncIme(Kernel&) {}
+bool AndroidHost::hasImeBridge() const { return false; }
 void AndroidHost::hideKeyboard() {}
 void AndroidHost::setClearColor(float r, float g, float b) {
     m_clearR = r; m_clearG = g; m_clearB = b;

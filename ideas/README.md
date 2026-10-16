@@ -939,8 +939,11 @@ compatibilidade e capacidade de manutenção.
     layouts entram por `AAsset` pela costura de assets, a densidade vira
     `dpiScale()`, `/system/fonts` entra na busca de fontes, e
     `./scripts/build.sh android` produz um APK assinado com a chave de debug e
-    verificado por `apksigner`: sem Gradle e sem Java (`android:hasCode="false"`),
-    a `liboggui_app.so` armazenada sem comprimir porque o carregador a faz
+    verificado por `apksigner`: sem Gradle --- mas com Java, quatro classes sob
+    `android/src/dev/ogui/android`, um `javac` contra o `android.jar` da API 36
+    e um `d8` que delas faz `classes.dex`, com `android:hasCode="true"` e a
+    activity apontando para `dev.ogui.android.OguiActivity` ---, a
+    `liboggui_app.so` armazenada sem comprimir porque o carregador a faz
     `mmap` direto do arquivo, e uma etapa de `strip` antes de empacotar porque a
     biblioteca sem desbastar é dez vezes o que o vinculador precisa. **Foi
     instalado num aparelho** — um SM-A155M, API 36, 1080x2340 a 450dpi — e o
@@ -959,8 +962,8 @@ compatibilidade e capacidade de manutenção.
     dos assets, porque `aapt2 -A dir` nomeia as entradas sem o prefixo `assets/`
     mas os nomes que os layouts autoram têm-no — `source="assets/checker.png"`
     pede `assets/assets/checker.png` no arquivo, e sem isso eram duas caixas em
-    branco. O que falta é a conexão de entrada: o teclado aparece e não escreve
-    em parte alguma (item abaixo).
+    branco. A conexão de entrada veio depois, e é o item abaixo: o teclado
+    aparece e escreve no campo.
 -   [x] Toque no `InputState`: a lista de dedos entra pelo estado
     (`touches[]` com o id do `AMotionEvent` e a posição em pixels de
     dispositivo, `touchCount`, `touchCancelled`) e o `Kernel` a dobra no único
@@ -1028,34 +1031,52 @@ compatibilidade e capacidade de manutenção.
     toolkit) e os navegadores de diretório (`<pathpicker>`, o preenchimento
     lazy do `treeview`), que listam pastas em vez de ler um nome. Testes em
     `debug/tests/asset_test.cpp`.
--   [ ] Entrada de texto pelo IME: `InputState::lastChar` chega de eventos de
+-   [x] Entrada de texto pelo IME: `InputState::lastChar` chega de eventos de
     teclado, e o NDK r30 não expõe cabeçalho de `AInputConnection` nenhum --- na
     fonte (lida aqui, `NativeActivity.java` do AOSP) a classe não declara
     `onCreateInputConnection` nem `onStartInput`/`onFinishInput`: ela só pega a
     `InputMethodManager` e chama `showSoftInput(mNativeContentView, ...)`, sendo
     `mNativeContentView` um `View` comum que `requestFocus()` no `onCreate`. A
-    conexão que o IME recebe é portanto a vazia de um `View` qualquer: o teclado
-    aparece e não escreve em lugar nenhum --- é o que o aparelho mostra, um
-    `dumpsys input_method` com `EditorInfo{packageName=dev.ogui.demo,
-    inputType=0, isTextEditor=false, hasInputConnection=true}`. Fechoi primeiro
-    o que não depende de
-    aparelho --- `imeRequestFor()` responde os dois ints que a
-    `InputMethodManager` quer (`TYPE_CLASS_TEXT`, os bits de multilinha do
-    `TextArea`, `IME_ACTION_DONE`/`IME_ACTION_SEARCH`,
-    `IME_FLAG_NO_ENTER_ACTION`), conferidos contra `javap -constants` do
-    `android.jar` de API 36 em vez de memória, e a contagem que a ponte vai
-    precisar: o IME mede o campo em unidades UTF-16 e o `TextInput` mede o caret
-    em bytes UTF-8, então um emoji são duas unidades e quatro bytes, e
-    `imeAdvanceUnits()`/`imeRewindUnits()`/`imeCountUnits()` param antes de um
-    par quando pedem uma unidade --- que é o caso em que uma versão errada desta
-    função corta um emoji ao meio. Os dois são dados puros e estão em
-    `debug/tests/android_test.cpp`. O que falta é quem chame: uma
-    `InputConnection` nossa em Java (o destino já existe ---
-    `AndroidInputBridge::commitText()` enfileira qualquer texto já composto,
-    `deliverChar()` entrega um caractere por quadro e o `android_main.cpp` já
-    sabe a quem entregar por `Kernel::focusedWidget()`), `android:hasCode`
-    trocando para `"true"` e o `classes.dex` entrando no APK por
-    `javac`/`d8`.
+    conexão que o IME recebe era portanto a vazia de um `View` qualquer, e o
+    aparelho mostrava isso: `inputType=0, isTextEditor=false`. O que fecha isso
+    é meio `View` nosso e uma `InputConnection` nossa, ambos em Java, porque só
+    o quadro de View é quem fala com o teclado: `OguiActivity` estende a
+    `NativeActivity`, adiciona um `OguiEditorView` por `addContentView()` (nunca
+    `setContentView()`, que o `onCreate` da `NativeActivity` já usou para a
+    surface dela), `requestFocus()` nele, e `OguiEditorView` devolve um
+    `OguiInputConnection` com `inputType`/`imeOptions` do `fieldName` que a
+    ponte publica. Cada método da conexão vira um `ImeEdit` --- inserir, apagar
+    antes/depois do caret, substituir um *span* de composição, um trecho que o
+    IME reivindica, um `performEditorAction`, uma tecla --- e `applyEdits()` os
+    drena na ordem, no thread do quadro, contra o texto que o edit anterior
+    deixou. As duas metades que não dependiam de aparelho ficaram: os ints da
+    `InputMethodManager` conferidos contra `javap -constants` do `android.jar`
+    de API 36, e a contagem UTF-16 do IME contra os bytes UTF-8 do caret, em
+    `imeAdvanceUnits()`/`imeRewindUnits()`/`imeCountUnits()`, que param antes de
+    um par quando pedem uma unidade --- exceção da deleção, que tem de cair em
+    algum lugar: um apagar que não andou pede as duas unidades e toma o código
+    inteiro, porque duas é o máximo que um caractere ocupa. Três coisas só o
+    aparelho ensinou. A primeira é que `ExtractedText` da API 36 não tem campo
+    `token`, e referenciá-lo é o `javac` recusando. A segunda: o
+    backspace do Gboard não é um delete nem um `sendKeyEvent` que a ponte
+    conhecesse --- é um par `down`+`up` do mesmo instante dentro de uma única
+    drenagem, que deixava o quadro com `keyDown` armado e o soltava só no
+    release seguinte; então uma
+    pressão pertence ao quadro em que chegou, e um release que chega nesse
+    quadro espera `endFrame()` para abaixar o nível, quem quer que tenha
+    pressionado. A terceira é que a carga nativa estava errada desde o começo: os
+    registros dependiam de `JNI_OnLoad`, porque
+    `NativeActivity` dá `dlopen()` na biblioteca para achar `android_main` e um
+    `dlopen()` de código nativo nunca chama `JNI_OnLoad` --- é o bloco
+    `static { System.loadLibrary("oggui_app"); }` do `OguiJni` que faz a VM
+    registrá-lo, sem o qual a primeira chamada nativa é um `UnsatisfiedLinkError`
+    fatal. O `dumpsys input_method` do SM-A155M hoje responde
+    `mServedView=dev.ogui.android.OguiEditorView`, `inputType=0x1`,
+    `imeOptions=0x6`, `fieldName=ogui`, e um "o" digitado no campo chega como
+    `text=o bytes=1` pela consulta do próprio IME; `syncIme()` diffa o snapshot
+    a cada quadro. O que a conexão não atende é recusa registrada: clipboard e
+    `performContextMenuAction`, que não têm para o que voltar. Testes em
+    `debug/tests/android_test.cpp`.
 
 **Resultado esperado:** o mesmo `DrawList` renderiza em desktop GL, GLES 3.0 e
 CPU, com a portabilidade coberta por teste em vez de suposição.

@@ -403,6 +403,12 @@ public:
     std::string selectedText() const;
     // Selects [start, end); the caret lands on `end`. Clamped to the text.
     void setSelection(size_t start, size_t end);
+    // Replaces [start, end) with `text` and leaves the caret at the end of what
+    // was inserted: the edit an IME makes, in the units the widget keeps. Both
+    // ends are clamped to the text, so a stale index shortens the edit instead
+    // of cutting a code point in half. Fires the "change" event when the text
+    // moved, which is what a field bound to a script needs to hear.
+    bool replaceRange(size_t start, size_t end, const std::string& text);
 
 protected:
     // Clamps caret/anchor, refreshes [start,end] and scrolls the caret into

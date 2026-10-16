@@ -1,17 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- AndroidManifest.xml : the demo, as the system sees it.
 
-     There is no Java here. android.app.NativeActivity is a framework class:
-     it creates the activity, loads liboggui_app.so and calls its android_main,
-     which is the whole of the app's entry point. android:hasCode="false" says
-     so out loud: no classes.dex is looked for, and the APK is the native
-     library plus the assets the asset reader opens by name.
+     The activity is dev.ogui.android.OguiActivity, one subclass of
+     android.app.NativeActivity whose whole purpose is the input connection: a
+     NativeActivity has none, so the keyboard it raises has nowhere to commit
+     text. The subclass adds an invisible focusable view that answers for the
+     field ogui has focused, and the framework loads liboggui_app.so exactly as
+     it did before: the meta-data below is what it reads, and android_main is
+     still the entry point.
 
-     configChanges keeps a rotation from recreating the activity: the window
-     then arrives as a new ANativeWindow through APP_CMD_INIT_WINDOW and the
-     EGL context the host already built (the GPU's font atlases with it)
-     survives, which is exactly what releaseWindow() and setWindow() were split
-     for. Without it, every rotation tears the process down and starts over. -->
+     hasCode is spelled out because it used to say the opposite: there is Java
+     in the archive now (classes.dex, from android/src, compiled by d8), and an
+     activity class named here is a class the classloader has to find.
+
+     configChanges keeps a rotation from recreating the activity. The window is
+     not replaced when it is survived: the same ANativeWindow and the same
+     EGLSurface come back bigger, and only APP_CMD_WINDOW_RESIZED says so, which
+     is what refreshWindowSize() is for. Without this attribute every rotation
+     tears the process down, the EGL context goes with it, and the GPU's font
+     atlases are rebuilt from scratch on the way back in. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="dev.ogui.demo"
     android:versionCode="1"
@@ -26,11 +33,11 @@
 
     <application
         android:allowBackup="false"
-        android:hasCode="false"
+        android:hasCode="true"
         android:label="ogui"
         android:supportsRtl="true">
         <activity
-            android:name="android.app.NativeActivity"
+            android:name="dev.ogui.android.OguiActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|navigation|density|uiMode"
             android:exported="true"
             android:label="ogui">

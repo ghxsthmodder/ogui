@@ -251,10 +251,15 @@ cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-b
   pointers at all clears the screen, and the window taking them back clears
   everything. Plus the keyboard: Android key codes arrive in the library's own
   language, modifiers are keys like any other, auto-repeat keeps typing,
-  shift and caps lock change only the letters, and the IME and the keys share
-  one character queue. Those rules are plain data in `AndroidInputBridge`; only
-  the getters need a device, so the semantics are covered here and the shell
-  that calls the getters is ten lines of it.
+  shift and caps lock change only the letters, and a key that comes up in the
+  frame it came down in is still a press. Plus the input connection: a commit
+  lands in the field it was typed for and nowhere else, a composing span is
+  replaced rather than appended to, a delete takes whole characters in the
+  IME's units while the widget counts them in bytes, and the snapshot an IME
+  is told about is the one the tree just left behind. Those rules are plain
+  data in `AndroidInputBridge`; only the JNI and the four Java classes need a
+  device, so the semantics are covered here and the shell that calls the
+  getters is thin.
 
 Regenerate the golden after an intentional visual change:
 
@@ -752,9 +757,10 @@ takes — while a `keybind` mid-capture keeps the keys for itself.
 A host translates its platform's event language into `KeyCode` and fills
 `keyDown[]`; `AndroidInputBridge::onKey()` is that translation for the
 `AKeyEvent` codes, and it also synthesizes `lastChar` from the code plus the
-shift/caps state, because the NDK exposes no unicode getter on a key event. Text
-that arrives already composed — a soft keyboard, an input connection — goes
-through `commitText()` and lands in the same one-code-point-per-frame queue.
+shift/caps state, because the NDK exposes no unicode getter on a key event. Text that arrives already composed — a soft keyboard's commit, its composing
+updates, its deletes — comes in as an `ImeEdit` through `queueEdit()` and is
+applied by `applyEdits()` on the frame thread, in the order it arrived against
+the key events that share the queue.
 
 ## Events and propagation
 
@@ -1008,11 +1014,22 @@ by, which is the repository-relative one, so the archive carries
 — links `android/AndroidManifest.xml` with `aapt2`, appends the `.so`s
 stored — uncompressed, because `extractNativeLibs` is false and the loader mmaps
 them straight out of the archive — then `zipalign -p 4`, `apksigner sign`,
-`apksigner verify`. No Gradle and no Java: `android.app.NativeActivity` is a
-framework class, so the manifest says `android:hasCode="false"` and the APK is
-one library plus its assets. `ANDROID_API` (default 24) and
-`ANDROID_DEBUG_KEYSTORE` are the other knobs; the debug key is generated with
-`keytool` on first use if `~/.android/debug.keystore` is not there.
+`apksigner verify`. No Gradle. There is Java — four classes under
+`android/src/dev/ogui/android`, `javac`'d against `android.jar` and `d8`'d into
+`classes.dex` — because a soft keyboard commits text through a Java object and
+the NDK has no header for it; the manifest names
+`dev.ogui.android.OguiActivity`, a `NativeActivity` subclass, and says
+`android:hasCode="true"` because there is a class for the loader to find. The
+APK is that dex, one library per ABI and the screens. `ANDROID_API` (default 24)
+and `ANDROID_DEBUG_KEYSTORE` are the other knobs; the debug key is generated
+with `keytool` on first use if `~/.android/debug.keystore` is not there.
+
+The two halves of that Java have to agree, and neither compiler can see the
+other: `build.sh` diffs the `static native` declarations in `OguiJni.java`
+against the `RegisterNatives` table in `src/androidjni.cpp` and refuses the APK
+on a name or a signature that does not match, then checks that the stripped
+library still exports `android_main` (which `native_app_glue` looks up by name)
+and `JNI_OnLoad` (which binds the input connection).
 
 For your own app the CMake side is one toolchain invocation:
 
@@ -1040,21 +1057,28 @@ Three splits make the interesting half of it testable without a phone:
   `releaseWindow()` — which is what keeps the GPU font atlases alive across
   pause, resume and rotation, and `configChanges` in the manifest is what lets
   rotation take that route instead of tearing the process down.
-* **What the IME is asked for versus the device that asks it.** Which keyboard a
-  focused field wants is `imeRequestFor()`, and it answers with the two ints
+* **What an input connection asks for versus the device that asks it.** A soft
+  keyboard does not send text, it sends *edits*, and the rules for what each one
+  does to a field are plain data: `imeRequestFor()` answers with the two ints
   `InputMethodManager` takes — `TYPE_CLASS_TEXT` (1), its
   `TYPE_TEXT_FLAG_MULTI_LINE` (1<<17) for a `TextArea`, `IME_ACTION_DONE` (6) for
   a field whose Enter submits, `IME_ACTION_SEARCH` (3) for a `SearchInput`,
   `IME_FLAG_NO_ENTER_ACTION` (1<<30) where Enter is a newline instead. The
   values are the framework's own (checked against `android.jar` for API 36) and
   the tests check them as numbers, because a wrong bit is a phone showing the
-  wrong keyboard and nothing on this machine would notice. The other half is
-  counting: an IME measures a field in UTF-16 code units and `TextInput`
-  measures its caret in UTF-8 bytes, so one emoji is two units and four bytes,
-  and `imeAdvanceUnits()`/`imeRewindUnits()`/`imeCountUnits()` are the boundary
-  where that is settled — including the case that matters, a one-unit request at
-  a pair, which stops before it rather than landing in the middle and cutting
-  half an emoji out.
+  wrong keyboard and nothing on this machine would notice. An `ImeEdit` —
+  commit, composing text, a claimed region, a finish, a delete, a selection, a
+  key, an action — is applied by `AndroidInputBridge::applyEdits()` on the frame
+  thread, against the field it was typed for and in the order it arrived. The
+  other half is counting: an IME measures a field in UTF-16 code units and
+  `TextInput` measures its caret in UTF-8 bytes, so one emoji is two units and
+  four bytes, and `imeAdvanceUnits()`/`imeRewindUnits()`/`imeCountUnits()` are
+  the boundary where that is settled — including the case that matters, a
+  one-unit request at a pair, which stops before it rather than landing in the
+  middle and cutting half an emoji out, except under a deletion, where the whole
+  character goes because a key that asked to remove something has to remove it.
+  What is left for the phone is the translator: `src/androidjni.cpp` and the
+  four classes in `android/src`, which hold no rule of their own.
 
 Rotation is the command sequence nobody documents: an activity that survives it
 through `configChanges` is told by `APP_CMD_WINDOW_RESIZED` on the *same*
@@ -1089,19 +1113,42 @@ spread over it magnify into the texture, and holding a finger on the
 `layout_widgets.xml` form panel opens the same `cm_form` menu the desktop reaches
 with the right button.
 
-What it does not do is the soft keyboard's text. NDK r30 ships no
-`AInputConnection` header, so a pure-NDK composing-text path is not available,
-and the framework does not fill the gap either: `NativeActivity` never declares
-`onCreateInputConnection`, it just calls
-`mIMM.showSoftInput(mNativeContentView, …)` on the plain `View` it puts in the
-window — so the connection the input method is handed is the empty one a bare
-`View` offers, the keyboard goes up and has nowhere to put what it composes.
-The host shows and hides the input method (`showKeyboard()`/`hideKeyboard()`)
-and translates key events, which covers a hardware keyboard, and
-`AndroidInputBridge::commitText()` is the seam a Java-side input connection
-would call to put a soft keyboard's text — composing updates included — into the
-same character queue the keys already use. `ACTION_SCROLL` and hover events are
-not translated either: nothing here to check them against.
+The soft keyboard's text goes through a Java input connection, because the NDK
+ships no `AInputConnection` header and `NativeActivity` offers no connection of
+its own: it calls `showSoftInput` on the plain `View` it puts in the window, and
+the keyboard is handed that `View`'s empty connection — which is what `dumpsys
+input_method` reported as `inputType=0x0, isTextEditor=false`, a keyboard that
+raises itself over a field and has nowhere to write. So the app is
+`dev.ogui.android.OguiActivity`: an `addContentView` of one 1×1 focusable view
+whose `onCreateInputConnection` fills the `EditorInfo` from `imeRequestFor()` and
+returns an `OguiInputConnection`. Every callback that connection receives becomes
+an `ImeEdit` for the bridge, and every question an IME asks is answered from the
+snapshot the bridge published after the last frame — one snapshot per answer, so
+the text and the caret cannot disagree mid-reply. The window's own input still
+arrives through `AInputQueue`, because `NativeActivity` takes the surface and the
+queue before any view exists, so the overlay view cannot steal a touch or a key
+from the app thread; it only speaks for the field. Showing and hiding is not a
+call an app makes either: `AndroidHost::syncIme()` runs once per frame, diffs the
+focused field's request against the one already sent, and asks the Java side
+(falling back to `ANativeActivity_showSoftInput`) only when the answer changed.
+
+On the phone this ran on — an SM-A155M with Gboard — `dumpsys input_method`
+reports `mServedView=dev.ogui.android.OguiEditorView` and
+`mServedInputConnection=…OguiInputConnection` with `inputType=0x1`,
+`imeOptions=0x6` and `fieldName=ogui`; tapping the field and pressing keys puts
+the letters into it, the delete key takes them out, and its Done key arrives as
+`performEditorAction(IME_ACTION_DONE)` and closes the keyboard. One of those was
+not visible from anywhere in C++: Gboard's backspace is a `sendKeyEvent` *pair*,
+a down and an up in the same instant, and `InputState::keyDown` is a level the
+kernel reads across two frames, so applying both in one drain was a key that was
+never pressed and a delete key that did nothing. A press is now held for the
+frame it arrived in and released by that frame's `endFrame()`, which is what a
+finger tapping a key already looks like to the tree.
+
+`ACTION_SCROLL` and hover events are not translated: nothing here to check them
+against. Cut, copy, paste and select-all are not implemented:
+`performContextMenuAction` answers false rather than editing the base class's
+empty buffer and reporting a success nobody can see.
 
 ## Repository layout
 
@@ -1113,7 +1160,9 @@ examples/         demo.cpp (headless), demo_win32.cpp (WGL gallery host),
                   gallery.hpp (multi-screen loader), screenshot.cpp,
                   validate.cpp (ogui_validate), custom_widget.cpp,
                   hello.xml + counter.xml (the docs' runnable examples)
-android/          AndroidManifest.xml for the demo APK (no Java)
+android/          AndroidManifest.xml for the demo APK, and src/dev/ogui/android:
+                  the four classes of the input connection (activity, editor
+                  view, connection, JNI declarations)
 layouts/          extra gallery screens (text, selection, data, containers)
 assets/           files the demo loads at runtime (checker.png for <image>)
 manifest.xml      gallery screen list (edit to add/remove screens)
@@ -1175,7 +1224,9 @@ thirdparty/lua    vendored Lua 5.4 interpreter sources (scripting)
   anything else that wants it overrides `wantsPinch`/`onPinch`. Panning a text
   area with a finger is declined on purpose: a `textinput`/`textarea` drag is a
   selection, and the enclosing scrollable ancestor takes the drag instead.
-* On Android the soft keyboard can be shown but its text has nowhere to go:
-  the NDK exposes no `AInputConnection`, so composing input needs a Java-side
-  input connection feeding `AndroidInputBridge::commitText()`. Key events are
-  translated, so a hardware keyboard types today.
+* On Android the soft keyboard types, through the input connection described in
+  [The Android host](#the-android-host). What it cannot do is the clipboard:
+  `performContextMenuAction` declines cut, copy, paste and select-all, because
+  the widget that would do them has no clipboard to hand and no Android service
+  to ask for one. Key events from a hardware keyboard are translated as they
+  always were.

@@ -1,7 +1,9 @@
 #pragma once
 #include "ogui/api.hpp"
 #include "ogui/kernel.hpp"
+#include <bitset>
 #include <cstdint>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -16,6 +18,110 @@ struct AInputEvent;
 namespace ogui {
 
 class GlBackend;
+class TextInput;
+
+// ------------------------------------------------------------------
+// What the IME is being asked for, without a phone
+// ------------------------------------------------------------------
+// An input connection is a Java object, so everything ogui decides *about* one
+// has to be handed over as ints and strings -- but the two decisions themselves
+// do not need a device to be right, and neither does the counting this boundary
+// requires. They live here over plain data: which keyboard a focused widget
+// wants, and how the IME's UTF-16 positions line up with the widget tree's
+// UTF-8 ones.
+//
+// The constants below are android.text.InputType and
+// android.view.inputmethod.EditorInfo spelled as the numbers those classes
+// define (checked against android.jar for API 36), because the value an app
+// hands to InputMethodManager is these bits or nothing else.
+struct ImeRequest {
+    // TYPE_CLASS_TEXT (1), or that with TYPE_TEXT_FLAG_MULTI_LINE (1<<17) added
+    // for a field whose Enter is a newline. Zero means no editor has the focus,
+    // which is the answer that puts the keyboard away.
+    int32_t inputType = 0;
+    // The return key: IME_ACTION_DONE (6) for a field that submits,
+    // IME_ACTION_SEARCH (3) for one that searches, or IME_FLAG_NO_ENTER_ACTION
+    // (1<<30) where Enter is text like any other.
+    int32_t imeOptions = 0;
+    bool visible = false;
+};
+
+// Which keyboard a focused widget wants. A TextArea and a SearchInput *are*
+// TextInputs, so the order of these tests is the answer: what the IME has to
+// match is the subclass's own behaviour, and anything else that is not an
+// editor at all asks for nothing.
+ImeRequest imeRequestFor(const Widget* focused);
+
+// ---- code units and bytes --------------------------------------------------
+// An IME counts positions in UTF-16 code units; TextInput's caret and selection
+// are byte offsets into UTF-8. One emoji is two units and four bytes, which is
+// the whole reason the conversion is a boundary of its own: an app that gets it
+// wrong deletes half an emoji, and only finds out on a phone.
+//
+// `from` is always an offset the widget itself produced, so it sits on a
+// code-point boundary; a stray byte in the *text* is still consumed one at a
+// time rather than stalling, the way utf8Next does it.
+
+// The byte offset `units` code units after `from`, clamped to the end.
+size_t imeAdvanceUnits(const std::string& utf8, size_t from, int32_t units);
+// The byte offset `units` code units before `from`, clamped to the start.
+size_t imeRewindUnits(const std::string& utf8, size_t from, int32_t units);
+// How many code units [from, to) is worth: 0 for an empty range, 1 for a
+// letter, 2 for an emoji, and never more than the bytes between them.
+int32_t imeCountUnits(const std::string& utf8, size_t from, size_t to);
+
+// ---- the field, and the edits asked for it --------------------------------
+// An input connection is called on the activity's *UI* thread while the widget
+// tree is only touched by the thread `android_main` runs on, so the two never
+// meet a widget: the app publishes what the focused field looks like, the IME
+// queues what it wants done to it, and the queue is drained on the app's side of
+// the next frame. Both sides are plain data, so both sides are testable, and the
+// units each speaks are written down on the type that carries them.
+struct ImeEditor {
+    std::string text;             // the field's own text, UTF-8
+    size_t selStart = 0;          // byte offsets, as TextInput keeps them
+    size_t selEnd = 0;
+    // The span the IME is still composing -- text it owns and may replace on the
+    // next keystroke. `composing` is what makes an empty span different from a
+    // span of nothing: an IME that has just begun has nothing to replace.
+    bool composing = false;
+    size_t compStart = 0;
+    size_t compEnd = 0;
+    // The widget this state belongs to, compared by pointer and never
+    // dereferenced: a publish from the app thread and a read from the UI thread
+    // are the only two things that touch it, and the tree outlives both.
+    const Widget* field = nullptr;
+};
+
+// One request from the IME, in the units the IME counts in -- UTF-16 code units
+// for every position and length, and text handed over as UTF-8.
+struct ImeEdit {
+    // Which field the IME was answering for, stamped by the bridge when the edit
+    // was queued and never written by a caller. A tap that moved the focus while
+    // a keyboard was mid-sentence is not a reason to type into the new field.
+    const Widget* target = nullptr;
+
+    enum class Kind : int32_t {
+        Commit,           // replace the selection with text and finish composing
+        Composing,        // replace the composing span (or the selection) with text
+        ComposingRegion,  // the IME claims a span of text that is already there
+        Finish,           // the span the IME owned is now the widget's
+        Delete,           // text around the cursor, and any selection, goes
+        Select,           // an absolute cursor or selection
+        Key,              // a key event the IME sent instead of an edit
+        Action,           // the return key was pressed: Done, Search, Next, ...
+    };
+    Kind kind = Kind::Commit;
+    std::string text;
+    int32_t cursor = 1;      // newCursorPosition: <= 0 lands before `text`
+    int32_t before = 0;      // Delete, in code units from the selection's start
+    int32_t after = 0;       // Delete, in code units from its end
+    int32_t start = 0;       // Select / ComposingRegion, absolute code units
+    int32_t end = 0;
+    int32_t key = 0;         // Key: an AKEYCODE_* --
+    bool down = true;        //      ... and whether it is a press or a release
+    int32_t action = 0;      // Action: the IME_ACTION_* that was pressed
+};
 
 // ------------------------------------------------------------------
 // AndroidInputBridge: what a motion event means, without a phone
@@ -75,26 +181,52 @@ public:
     // is what a keyboard with a different one would need the IME for.
     void onKey(InputState& io, int32_t androidKeyCode, bool down, bool repeat);
 
-    // The soft keyboard's commit: a whole string at a time, which is why the
-    // characters queue instead of overwriting each other. Nothing in the NDK
-    // can call this -- an input connection is a Java object -- but a host with
-    // one has somewhere to put it.
-    void commitText(const std::string& utf8);
-
-    // One queued code point into `io.lastChar`, the way the desktop host feeds
-    // text: a frame carries at most one character, the rest waits. Returns the
-    // character delivered (0 when the queue was empty).
+    // One code point from the typeahead into `io.lastChar`, the way the desktop
+    // host feeds text: a frame carries at most one character, the rest waits.
+    // Composed text from an input connection does not come this way -- it is an
+    // edit, with a selection and a cursor of its own. Returns the character
+    // delivered (0 when the queue was empty).
     uint32_t deliverChar(InputState& io);
+
+    // ---- the input connection's side of the bridge ------------------------
+    // Every one of these is called from whichever thread the platform put it
+    // on, so they share a mutex and nothing else. The app publishes the field
+    // the tree has focused; the IME reads that snapshot and queues edits; the
+    // app drains the queue into the field on its own thread.
+    //
+
+    // Publish `focused` as the field the IME is talking to. An editor that is
+    // not a TextInput -- or none at all -- publishes an empty one, which is what
+    // tells the Java side there is nothing to compose into. The composing span
+    // survives a publish (the text it covers is part of what is published) and
+    // dies with the field it belonged to.
+    void syncEditor(const Widget* focused);
+    // What the IME is allowed to know, in the units the widget keeps.
+    ImeEditor editor() const;
+
+    // Queue one edit, from the UI thread.
+    void queueEdit(ImeEdit edit);
+    // Apply every queued edit to the field they were asked for, in the order the
+    // IME sent them and each against the text the one before it left behind --
+    // which is why the drain happens on the app's thread and not in the callback.
+    // `io` is for the two edits that are not text: an action sets Key_Enter down
+    // for exactly the frame that follows, the way a hardware Enter would, so the
+    // field's own submit event fires and nothing has to be re-implemented; a key
+    // event a simple keyboard sent instead of editing goes in through onKey().
+    void applyEdits(Widget* focused, InputState& io);
 
     // `InputState::touchCancelled` and the mouse-wheel fields are edges, not
     // levels: the Kernel reads the cancel on the frame the fingers vanish, and
     // re-acting to an old one on the next frame would kill a drag that started
-    // in between. The host calls this after every Kernel::frame().
+    // in between. A latched Enter is the same kind of thing -- one frame of it,
+    // then it is a release. The host calls this after every Kernel::frame().
     void endFrame(InputState& io);
 
     // The window went away (backgrounded, rotated): whoever held the press does
     // not hold it any more, the queue belongs to a field that may be gone, and
-    // whatever the IME had composed dies with the connection.
+    // whatever the IME had composed dies with the connection -- so the snapshot
+    // it was composed against goes too, and an IME that asks after this is told
+    // there is no field at all.
     void reset();
 
     // Fingers the bridge still believes are down, for tests and for an app that
@@ -104,12 +236,36 @@ public:
   private:
     void writeTouches(InputState& io) const;
     void dropFingers(InputState& io, bool cancelled);
+    void applyEdit(TextInput* field, const ImeEdit& edit, InputState& io);
+    void setComposing(bool on, size_t start, size_t end);
+    // The queue, emptied. Private because there is no second reader: an app that
+    // drained it itself would leave the snapshot behind, and the two are one
+    // answer to one question.
+    std::vector<ImeEdit> takeEdits();
 
     std::vector<AndroidPointer> m_fingers;
     std::vector<uint32_t> m_typeahead;
     // Only caps lock is state a keyboard keeps between events; shift is read
     // from the InputState the press itself set.
     bool m_caps = false;
+
+    // The input connection's half, guarded because it is written by the UI
+    // thread and read by the one that draws. Nothing here is ever dereferenced
+    // as a widget: `field` is only an identity, so the lock never has to cover
+    // the tree itself.
+    mutable std::mutex m_imeMutex;
+    ImeEditor m_editor;
+    std::vector<ImeEdit> m_edits;
+    // An editor action arrives between frames; Key_Enter is held down for the
+    // one frame the tree sees it and released by the endFrame() after it.
+    bool m_enterLatched = false;
+
+    // The keys pressed since the frame began, and the releases that arrived in
+    // that same frame as their press and so wait for it to end. Read and written
+    // on the thread that draws, so neither is under the input connection's lock.
+    // Indexed by the library's own KeyCode.
+    std::bitset<256> m_pressedThisFrame;
+    std::bitset<256> m_releaseAtFrameEnd;
 };
 
 // AKEYCODE_* -> the library's KeyCode. Anything the library has no equivalent
@@ -117,56 +273,6 @@ public:
 // look like a known one. Out-of-range returns are what the Kernel's keyDown[]
 // array is sized for.
 int keyFromAndroidKey(int32_t androidKeyCode);
-
-// ------------------------------------------------------------------
-// What the IME is being asked for, without a phone
-// ------------------------------------------------------------------
-// An input connection is a Java object, so everything ogui decides *about* one
-// has to be handed over as ints and strings -- but the two decisions themselves
-// do not need a device to be right, and neither does the counting this boundary
-// requires. They live here over plain data: which keyboard a focused widget
-// wants, and how the IME's UTF-16 positions line up with the widget tree's
-// UTF-8 ones.
-//
-// The constants below are android.text.InputType and
-// android.view.inputmethod.EditorInfo spelled as the numbers those classes
-// define (checked against android.jar for API 36), because the value an app
-// hands to InputMethodManager is these bits or nothing else.
-struct ImeRequest {
-    // TYPE_CLASS_TEXT (1), or that with TYPE_TEXT_FLAG_MULTI_LINE (1<<17) added
-    // for a field whose Enter is a newline. Zero means no editor has the focus,
-    // which is the answer that puts the keyboard away.
-    int32_t inputType = 0;
-    // The return key: IME_ACTION_DONE (6) for a field that submits,
-    // IME_ACTION_SEARCH (3) for one that searches, or IME_FLAG_NO_ENTER_ACTION
-    // (1<<30) where Enter is text like any other.
-    int32_t imeOptions = 0;
-    bool visible = false;
-};
-
-// Which keyboard a focused widget wants. A TextArea and a SearchInput *are*
-// TextInputs, so the order of these tests is the answer: what the IME has to
-// match is the subclass's own behaviour, and anything else that is not an
-// editor at all asks for nothing.
-ImeRequest imeRequestFor(const Widget* focused);
-
-// ---- code units and bytes --------------------------------------------------
-// An IME counts positions in UTF-16 code units; TextInput's caret and selection
-// are byte offsets into UTF-8. One emoji is two units and four bytes, which is
-// the whole reason the conversion is a boundary of its own: an app that gets it
-// wrong deletes half an emoji, and only finds out on a phone.
-//
-// `from` is always an offset the widget itself produced, so it sits on a
-// code-point boundary; a stray byte in the *text* is still consumed one at a
-// time rather than stalling, the way utf8Next does it.
-
-// The byte offset `units` code units after `from`, clamped to the end.
-size_t imeAdvanceUnits(const std::string& utf8, size_t from, int32_t units);
-// The byte offset `units` code units before `from`, clamped to the start.
-size_t imeRewindUnits(const std::string& utf8, size_t from, int32_t units);
-// How many code units [from, to) is worth: 0 for an empty range, 1 for a
-// letter, 2 for an emoji, and never more than the bytes between them.
-int32_t imeCountUnits(const std::string& utf8, size_t from, size_t to);
 
 // ------------------------------------------------------------------
 // AndroidHost: ANativeWindow + EGL + AAsset, wired to a Kernel
@@ -197,8 +303,10 @@ public:
     bool create(ANativeActivity* activity);
     void destroy();
 
-    // The window. setWindow() attaches (or re-attaches after a resize; a resize
-    // arrives as a whole new ANativeWindow) and makes the surface current.
+    // The window. setWindow() attaches (or re-attaches after the window itself
+    // went away, which is what a pause and resume does) and makes the surface
+    // current. A resize that the activity survives is not this road at all: see
+    // refreshWindowSize().
     // releaseWindow() drops the surface but keeps the context, and is what
     // APP_CMD_TERM_WINDOW must call before the window is destroyed.
     bool setWindow(ANativeWindow* window);
@@ -227,10 +335,11 @@ public:
     // tooltip clock, and the flick's sample window).
     float elapsed() const;
 
-    // Device pixels per logical unit, from the configuration's density bucket:
-    // mdpi 1.0, hdpi 1.5, xhdpi 2.0, xxhdpi 3.0, xxxhdpi 4.0. Assign it to
-    // Screen::scale so a layout authored in logical units keeps its physical
-    // size from a 5" phone to a 12" tablet.
+    // Device pixels per logical unit: the configuration's density divided by
+    // mdpi, which is the unit a layout is authored in -- 450 dpi is 2.8125, and
+    // the density the header has no name for is still a density. Assign it to
+    // Screen::scale so a layout keeps its physical size from a 5" phone to a 12"
+    // tablet. A report that cannot be a dpi (0, the ANY/NONE sentinels) is 1.0.
     float dpiScale() const;
 
     // Points ogui::setAssetReader at the APK: a layout, a theme, a script, a
@@ -252,15 +361,33 @@ public:
     // the window rather than spinning on a dead swap.
     bool present(Kernel& kernel);
 
-    // Ask the IME to show or hide itself for this activity's window. Showing
-    // it is only half the story: the NDK cannot create the input connection a
-    // composing keyboard commits through (that object is Java), so what reaches
-    // the tree from a soft keyboard is the key events the IME sends on the
-    // activity's window, which onInputEvent() turns into characters. A host
-    // that adds a Java-side connection feeds the composed text to
-    // AndroidInputBridge::commitText().
-    void showKeyboard();
+    // ---- the soft keyboard -------------------------------------------------
+    // A composing keyboard commits through an input connection, and that object
+    // is Java: no NDK header can make one. So the app's Java side (see
+    // android/src/dev/ogui/android) owns the connection, hands the bridge the
+    // edits the IME asks for, and is told which field has the focus -- in three
+    // calls around the frame:
+    //
+    //   host.applyImeEdits(kernel, input);   // what the IME queued, to the tree
+    //   ... Kernel::frame(input) ...
+    //   host.syncIme(kernel);                // what the tree says, to the IME
+    //
+    // An app that adds nothing else therefore types: a tap that focuses a field
+    // brings up the keyboard that field wants, the words arrive as commits and
+    // backspaces, and the return key fires the field's own submit event.
+    void applyImeEdits(Kernel& kernel, InputState& io);
+    void syncIme(Kernel& kernel);
+
+    // Put the keyboard away whatever has the focus -- what a paused activity
+    // owes the user, since the field it is leaving may be behind another app.
     void hideKeyboard();
+
+    // The activity's Java bridge, when the app has one: without it the keyboard
+    // request falls back to ANativeActivity_showSoftInput(), which shows a
+    // keyboard with nothing to commit through, and the only text that reaches the
+    // tree is the key events a hardware keyboard sends. False when no Java
+    // library answered the registration.
+    bool hasImeBridge() const;
 
     void setClearColor(float r, float g, float b);
     const std::string& lastError() const { return m_error; }
@@ -269,6 +396,7 @@ public:
 
   private:
     bool makeCurrent();
+    void sendImeRequest(const ImeRequest& request);
 
     std::string m_error;
     ANativeActivity* m_activity = nullptr;
@@ -286,6 +414,11 @@ public:
     bool m_glReady = false;
     GlBackend* m_gl = nullptr;
     AndroidInputBridge m_input;
+    // The last request the Java side was given. The keyboard does not need to be
+    // told the same thing sixty times a second, and a restart it does not need
+    // closes the composition it is in the middle of.
+    ImeRequest m_imeSent;
+    bool m_imeSentKnown = false;
 };
 
 } // namespace ogui
