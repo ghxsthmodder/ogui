@@ -384,6 +384,85 @@ void aMouseDragDoesNotPan() {
     check(r.inner->moves > 0, "the captured widget still got its drag");
 }
 
+// The flow containers are the widgets a phone user actually drags: a row of
+// cards running off the edge has no wheel to turn, and the only thing that
+// reaches it is this pan machine walking up from the card under the finger.
+// The drag is deliberately diagonal -- a finger never travels along one axis --
+// so what is asserted is not that the free axis moves but that the other one
+// does not, with room to have.
+struct FlowRig {
+    Kernel kernel;
+    std::shared_ptr<Screen> screen;
+    ScrollView* box = nullptr;
+    InputState st;
+
+    void build(bool horizontal) {
+        kernel.init();
+        screen = std::make_shared<Screen>("main");
+        screen->width = 800.0f;
+        screen->height = 600.0f;
+        screen->scale = 1.0f;
+        std::shared_ptr<ScrollView> sv =
+            horizontal ? std::static_pointer_cast<ScrollView>(
+                             std::make_shared<ScrollableHorizontalContainer>())
+                       : std::static_pointer_cast<ScrollView>(
+                             std::make_shared<ScrollableVerticalContainer>());
+        box = sv.get();
+        box->setBounds(Rect{50, 50, 300, 120});
+        for (int i = 0; i < 10; ++i) {
+            auto card = std::make_shared<Panel>();
+            // Overflowing on both axes, so a locked axis that moved would have
+            // somewhere to go: only the lock itself can hold it at zero.
+            card->setBounds(horizontal ? Rect{0, 0, 80, 200}
+                                       : Rect{0, 0, 200, 40});
+            box->addChild(card);
+        }
+        // The stack is 436 tall in a 120 viewport and the row 836 wide in 300:
+        // both have more room than the drag below asks for.
+        screen->widgets.push_back(sv);
+        kernel.pushScreen(screen);
+        st = InputState{};
+        st.mouseButton = -1;
+    }
+
+    void touch(float x, float y) {
+        st.time += 1.0f / 60.0f;
+        st.touchCount = 1;
+        st.touches[0] = Rig::pt(1, x, y);
+        kernel.frame(st);
+    }
+    void lift() {
+        st.time += 1.0f / 60.0f;
+        st.touchCount = 0;
+        kernel.frame(st);
+    }
+};
+
+void aFlowContainerPansAlongItsLine() {
+    FlowRig r;
+    r.build(true);
+    r.touch(200, 110);            // a press on a card, away from the bar
+    for (int i = 1; i <= 8; ++i) r.touch(200.0f - 15.0f * i, 110.0f - 12.0f * i);
+    check(r.box->scrollPosition().x < -80.0f, "the finger pulled the row across");
+    check(r.box->scrollPosition().y == 0.0f, "a horizontal row never moves down");
+    r.lift();
+    r.kernel.frame(r.st);         // the fling inherits the same lock
+    check(r.box->scrollPosition().y == 0.0f,
+          "the inertia after the lift cannot unlock the axis either");
+}
+
+void aStackedContainerPansDownItsLine() {
+    FlowRig r;
+    r.build(false);
+    r.touch(200, 110);
+    for (int i = 1; i <= 8; ++i) r.touch(200.0f - 12.0f * i, 110.0f - 12.0f * i);
+    check(r.box->scrollPosition().y < -60.0f, "the finger pulled the stack down");
+    check(r.box->scrollPosition().x == 0.0f, "a stack never moves sideways");
+    r.lift();
+    r.kernel.frame(r.st);
+    check(r.box->scrollPosition().x == 0.0f, "nor does its inertia");
+}
+
 // A flick keeps going after the finger leaves, and settles.
 void aFlickKeepsScrollingAfterTheLift() {
     PanRig r;
@@ -973,6 +1052,8 @@ int main() {
     anAnccestorTakesWhatTheChildDeclines();
     aSmallDragStillClicks();
     aMouseDragDoesNotPan();
+    aFlowContainerPansAlongItsLine();
+    aStackedContainerPansDownItsLine();
     aFlickKeepsScrollingAfterTheLift();
     aSlowLiftDoesNotFling();
     aNewPressStopsTheFling();

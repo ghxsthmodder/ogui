@@ -1092,8 +1092,19 @@ compatibilidade e capacidade de manutenção.
     o quadro parar de consumir as barras e entregar os números; o
     `onApplyWindowInsets` lê `systemBars() | displayCutout()` e `ime()`, e o
     teclado *substitui* a barra de navegação, então o fundo é `max(bars, ime)` e
-    não a soma. Os valores chegam em pixels do aparelho, no thread da UI, e ficam
-    como último valor, não fila: `takeWindowInsets` só reporta uma barra uma vez e
+    não a soma. O que se reporta é o `getRootWindowInsets()` e não o argumento que
+    o view recebeu, porque um filho do content recebe o que os pais resolveram
+    passar: no M2101K7AI (MIUI, API 31) o decor é despachado com `top=93` e todo
+    filho abaixo dele com `top=0` --- o decor consumiu a barra por ter encaixado o
+    *próprio* content view debaixo dela, enquanto a superfície de um
+    `NativeActivity` continua sendo a janela inteira (1080x2400 para o native,
+    1080x2246 em y=154 para a árvore de views), de modo que o app desenha debaixo
+    do relógio e é informado de que não há nada a evitar. A raiz guarda o número
+    antes de alguém consumi-lo, certo naquele aparelho e no Samsung, onde os dois
+    concordam; o argumento só vale enquanto a raiz é nula, isto é, com o view
+    destacado, que nunca é despachado. Os valores chegam em pixels do aparelho, no
+    thread da UI, e ficam como último valor, não fila: `takeWindowInsets` só
+    reporta uma barra uma vez e
     só quando ela mudou, `AndroidHost::applyWindowInsets` divide pela escala e
     `setInsets` invalida quando algo se moveu, não sessenta vezes por segundo
     enquanto nada se move. A conversão e a regra de drenagem vivem fora do
@@ -1102,7 +1113,10 @@ compatibilidade e capacidade de manutenção.
     desenho, o hover no ponto convertido, o clamp do toast, o overrun além da
     janela) e `debug/tests/android_test.cpp` (o último-valor, o só-uma-vez, o
     negativo lido como zero); controles negativos mostram cada regra derrubando
-    exatamente a asserção escrita para ela.
+    exatamente a asserção escrita para ela. A regra da raiz é Java e não tem teste
+    de host: o que ela provou ser foi no aparelho, com `ins=[0,69,0,96]` chegando
+    ao `Kernel` e a primeira linha da galeria parando debaixo do relógio em vez de
+    embaixo da barra.
 -   [x] A galeria cabe no telefone: as telas são autoradas para um canvas fixo de
     800 unidades lógicas, e na densidade do aparelho 1080 px são só 384 lógicos,
     então a borda direita de cada linha caía fora da tela. Em vez de remanejar um

@@ -75,13 +75,28 @@ public final class OguiEditorView extends View {
      * pixels, and an inset that counted both would lift the layout twice.
      */
     @Override public WindowInsets onApplyWindowInsets(WindowInsets insets) {
+        // The window's own numbers, not the ones this view was handed.
+        //
+        // A view added to the content receives what its parents decided to pass
+        // down, and MIUI's decor consumes the status bar on the way: on the
+        // M2101K7AI this was found on, the decor is dispatched top=93 and every
+        // child under it top=0, because the decor fitted *its* content view below
+        // the bar. A NativeActivity's surface is not that content view -- the
+        // window stays the whole display, 1080x2400 to native while the view tree
+        // reports a 1080x2246 box at y=154 -- so the app draws under the clock
+        // while being told there is nothing to avoid. getRootWindowInsets() is
+        // what the view root holds before anybody consumed it, which is right on
+        // that build and on the Samsung, where the two agree anyway; it is null
+        // only while detached, and a detached view is never dispatched to.
+        final WindowInsets root = getRootWindowInsets();
+        final WindowInsets source = root != null ? root : insets;
         if (Build.VERSION.SDK_INT >= 30) {
-            reportModernInsets(insets);
+            reportModernInsets(source);
         } else {
-            OguiJni.nativeSetWindowInsets(insets.getSystemWindowInsetLeft(),
-                                          insets.getSystemWindowInsetTop(),
-                                          insets.getSystemWindowInsetRight(),
-                                          insets.getSystemWindowInsetBottom());
+            OguiJni.nativeSetWindowInsets(source.getSystemWindowInsetLeft(),
+                                          source.getSystemWindowInsetTop(),
+                                          source.getSystemWindowInsetRight(),
+                                          source.getSystemWindowInsetBottom());
         }
         // Returned untouched: this view is not the one that has to live inside
         // the bars, and consuming them here would hide them from the window.
