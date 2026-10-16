@@ -205,6 +205,20 @@ public:
     void releaseWindow();
     bool hasWindow() const;
 
+    // The other half of a resize: a window whose *size* changed without the
+    // activity going away. An app that survives orientation changes through
+    // configChanges -- as this host's own manifest does -- is told about it as
+    // APP_CMD_WINDOW_RESIZED on the same ANativeWindow and the same EGLSurface:
+    // no TERM_WINDOW, no INIT_WINDOW, nothing that would come back through
+    // setWindow() and re-read the geometry. Without this call the surface grows
+    // or shrinks under a width() and height() that stayed where they were, the
+    // viewport is then the old rectangle on the new buffer, and a portrait
+    // screen rotated to landscape draws its whole layout above the top of the
+    // frame: black, at a steady sixty frames a second. Returns false when there
+    // is no surface to ask; the size it read is what width() and height() say
+    // afterwards, so the app re-fits its screen from them.
+    bool refreshWindowSize();
+
     // Device pixels of the current surface, 0 while there is none.
     int width() const { return m_width; }
     int height() const { return m_height; }

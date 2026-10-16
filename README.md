@@ -1001,8 +1001,11 @@ ANDROID_NDK=/opt/android-ndk-r30 ANDROID_SDK=/opt/android-sdk ./scripts/build.sh
 
 `build.sh android` cross-compiles `oggui_app` for every ABI in `ANDROID_ABIS`
 (default `arm64-v8a`, one CMake tree per ABI, `-DANDROID_STL=c++_static`), strips
-what the dynamic linker never asks for, stages the screens the demo loads under
-`assets/`, links `android/AndroidManifest.xml` with `aapt2`, appends the `.so`s
+what the dynamic linker never asks for, stages what the demo loads — the screens
+and the `assets/` pictures and fonts, each under the name the layouts author it
+by, which is the repository-relative one, so the archive carries
+`assets/assets/checker.png` for a layout that says `source="assets/checker.png"`
+— links `android/AndroidManifest.xml` with `aapt2`, appends the `.so`s
 stored — uncompressed, because `extractNativeLibs` is false and the loader mmaps
 them straight out of the archive — then `zipalign -p 4`, `apksigner sign`,
 `apksigner verify`. No Gradle and no Java: `android.app.NativeActivity` is a
@@ -1021,7 +1024,7 @@ cmake -S . -B build-android -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/andr
 and `find_package(ogui)` links `EGL`, `GLESv3`, `android` and `log` for you —
 the library still links no GL of any kind on every other platform.
 
-Two splits make the interesting half of it testable without a phone:
+Three splits make the interesting half of it testable without a phone:
 
 * **`AndroidInputBridge` versus the device getters.** Which finger the tree
   sees, that a lift drops by id and not by index, that `ACTION_CANCEL` is not a
@@ -1053,10 +1056,26 @@ Two splits make the interesting half of it testable without a phone:
   a pair, which stops before it rather than landing in the middle and cutting
   half an emoji out.
 
+Rotation is the command sequence nobody documents: an activity that survives it
+through `configChanges` is told by `APP_CMD_WINDOW_RESIZED` on the *same*
+`ANativeWindow` and the same `EGLSurface` — no `TERM_WINDOW`, no `INIT_WINDOW`,
+so `setWindow()` never runs again and the geometry cached from it stays the
+portrait one. A rotated layout then draws above the top of the frame: black, at
+a steady sixty frames a second. `refreshWindowSize()` re-reads
+`ANativeWindow_getWidth/Height`, because at that moment the window already
+reports the new size while `eglQuerySurface` still reports the old one, and
+`examples/android_main.cpp` calls it on every resize, content-rect and
+configuration command.
+
 `present()` renders with `flipY = false`: the draw list's `y = 0` is the top of
 the screen and a window framebuffer's `y = 0` is its bottom, which cancel out.
-`dpiScale()` reads the density bucket off the `AAssetManager` configuration, and
-the font manager searches `/system/fonts` for the faces that are actually there
+`dpiScale()` reads the density off the `AAssetManager` configuration and divides
+it by 160: the `ACONFIGURATION_DENSITY_*` constants *are* dpi numbers
+(`LOW` = 120, `HIGH` = 240, `XXHIGH` = 480), and so is every density the header
+has no name for — the phone this ran on reports 450, unnamed, and a switch over
+the seven named buckets answered `1.0` for it, drawing the whole layout at mdpi
+size on a screen three times as dense. Anything outside 100..4000 is treated as
+a broken report and scaled 1.0. The font manager searches `/system/fonts` for the faces that are actually there
 (`Roboto-Regular`, `RobotoMono-Regular`, `DroidSansMono`, `NotoSerif-Regular`,
 `DroidSerif-Regular`) before falling through to the desktop candidates.
 `examples/android_main.cpp` is the whole app: the gallery demo, `fit()` on the

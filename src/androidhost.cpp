@@ -254,6 +254,18 @@ void AndroidHost::releaseWindow() {
 
 bool AndroidHost::hasWindow() const { return m_surface != nullptr; }
 
+bool AndroidHost::refreshWindowSize() {
+    if (!m_window || !m_surface) return false;
+    // The window is the thing that was resized; the surface is the same object
+    // it was before, so the geometry is read from the window.
+    const int32_t w = ANativeWindow_getWidth(m_window);
+    const int32_t h = ANativeWindow_getHeight(m_window);
+    if (w <= 0 || h <= 0) return false;
+    m_width = w;
+    m_height = h;
+    return true;
+}
+
 bool AndroidHost::makeCurrent() {
     auto dpy = static_cast<EGLDisplay>(m_display);
     if (!eglMakeCurrent(dpy, static_cast<EGLSurface>(m_surface),
@@ -276,19 +288,18 @@ float AndroidHost::dpiScale() const {
     AConfiguration_fromAssetManager(cfg, m_activity->assetManager);
     const int32_t d = AConfiguration_getDensity(cfg);
     AConfiguration_delete(cfg);
-    // The density buckets, not the raw dpi: Screen::scale is pixels per logical
-    // unit, and a layout authored in those units then measures out the same
-    // physical size on every bucket. An unknown bucket draws at 1.0.
-    switch (d) {
-    case ACONFIGURATION_DENSITY_LOW:     return 0.75f;
-    case ACONFIGURATION_DENSITY_MEDIUM:  return 1.0f;
-    case ACONFIGURATION_DENSITY_TV:      return 1.3333f;
-    case ACONFIGURATION_DENSITY_HIGH:    return 1.5f;
-    case ACONFIGURATION_DENSITY_XHIGH:   return 2.0f;
-    case ACONFIGURATION_DENSITY_XXHIGH:  return 3.0f;
-    case ACONFIGURATION_DENSITY_XXXHIGH: return 4.0f;
-    default:                             return 1.0f;
-    }
+    // The constants in <android/configuration.h> *are* the dpi numbers --
+    // DENSITY_LOW is 120, DENSITY_HIGH 240, DENSITY_XXHIGH 480 -- and so is
+    // every density the header has no name for, which is the half of the
+    // question that matters: the phone this was first run on reports 450, one
+    // of the unnamed ones, and a switch over the seven named buckets answered
+    // 1.0 for it, drawing a whole layout at mdpi size on a screen three times
+    // as dense. Screen::scale is device pixels per logical unit, and mdpi is
+    // the unit a layout is authored in, so the answer is the division. The
+    // sentinels (DEFAULT 0, ANY 0xfffe, NONE 0xffff) are not densities and stay
+    // at 1.0, and so does anything else that could not be one.
+    if (d >= 100 && d <= 4000) return static_cast<float>(d) / 160.0f;
+    return 1.0f;
 }
 
 bool AndroidHost::installAssetReader() {
@@ -408,6 +419,7 @@ bool AndroidHost::setWindow(ANativeWindow*) {
 }
 void AndroidHost::releaseWindow() {}
 bool AndroidHost::hasWindow() const { return false; }
+bool AndroidHost::refreshWindowSize() { return false; }
 float AndroidHost::elapsed() const { return 0.0f; }
 float AndroidHost::dpiScale() const { return 1.0f; }
 bool AndroidHost::installAssetReader() {

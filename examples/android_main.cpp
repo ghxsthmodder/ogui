@@ -86,7 +86,12 @@ void onAppCmd(struct android_app* app, int32_t cmd) {
     case APP_CMD_WINDOW_RESIZED:
     case APP_CMD_CONTENT_RECT_CHANGED:
     case APP_CMD_CONFIG_CHANGED:
+        // The geometry is read again here because a rotation that the activity
+        // survives through configChanges never comes back through setWindow():
+        // same window, same surface, new size, and only these commands say so.
+        a.host.refreshWindowSize();
         fit(a);
+        frame(a);
         break;
     case APP_CMD_WINDOW_REDRAW_NEEDED:
         frame(a);

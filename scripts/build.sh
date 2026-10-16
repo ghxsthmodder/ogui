@@ -163,10 +163,19 @@ build_android() {
 
     # ---- 2. the screens, inside the archive --------------------------------
     # The asset reader installed by the host is what makes these names work;
-    # nothing on the device has a filesystem the app may read.
+    # nothing on the device has a filesystem the app may read. The names have to
+    # be the ones the layouts author, which are repository-relative: a layout
+    # says `assets/checker.png` because that is where the file sits next to
+    # manifest.xml, so the archive's asset root -- the directory
+    # AAssetManager_open looks inside, whose own contents are named without a
+    # prefix -- has to carry it as assets/assets/checker.png. Getting this wrong
+    # is not an error anywhere: the image draws its empty bounds and the font
+    # falls back, which is what the two blank boxes on the first screen of a
+    # phone were.
     cp -f "$ROOT/manifest.xml" "$ROOT/layout_demo.xml" "$stage/assets/"
     cp -r "$ROOT/layouts" "$stage/assets/layouts"
     [ -d "$ROOT/themes" ] && cp -r "$ROOT/themes" "$stage/assets/themes"
+    [ -d "$ROOT/assets" ] && cp -r "$ROOT/assets" "$stage/assets/assets"
 
     # ---- 3. manifest + assets into an archive ------------------------------
     local out="$stage/ogui-demo-debug.apk"

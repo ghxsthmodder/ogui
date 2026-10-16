@@ -942,10 +942,25 @@ compatibilidade e capacidade de manutenção.
     verificado por `apksigner`: sem Gradle e sem Java (`android:hasCode="false"`),
     a `liboggui_app.so` armazenada sem comprimir porque o carregador a faz
     `mmap` direto do arquivo, e uma etapa de `strip` antes de empacotar porque a
-    biblioteca sem desbastar é dez vezes o que o vinculador precisa. **Nunca foi
-    instalado num aparelho**: o que foi provado aqui é que compila para
-    `arm64-v8a`, que o APK é bem-formado e assinado, e que as regras de entrada
-    fazem o que dizem.
+    biblioteca sem desbastar é dez vezes o que o vinculador precisa. **Foi
+    instalado num aparelho** — um SM-A155M, API 36, 1080x2340 a 450dpi — e o
+    `screencap` mostrou as três coisas que nenhum teste de host alcança: a
+    rotação, porque o `configChanges` entrega `WINDOW_RESIZED` na *mesma*
+    `ANativeWindow` e na mesma `EGLSurface`, sem `TERM_WINDOW` nem
+    `INIT_WINDOW`, de modo que `setWindow()` nunca roda de novo e a geometria
+    velha fica em cache — um layout retrato girado para pais desenha-se inteiro
+    acima do topo do quadro: preto, a sessenta quadros por segundo;
+    `refreshWindowSize()` relê `ANativeWindow_getWidth/Height`, que nesse
+    instante já são os novos enquanto `eglQuerySurface` ainda responde os
+    velhos. A densidade, porque os `ACONFIGURATION_DENSITY_*` do NDK *são*
+    números de dpi (120/240/320/480/640) e o aparelho reporta 450, um deles sem
+    nome no header: um `switch` sobre os sete baldes respondia `1.0` e desenhava
+    a árvore inteira em mdpi num écran três vezes mais denso. E o empacotamento
+    dos assets, porque `aapt2 -A dir` nomeia as entradas sem o prefixo `assets/`
+    mas os nomes que os layouts autoram têm-no — `source="assets/checker.png"`
+    pede `assets/assets/checker.png` no arquivo, e sem isso eram duas caixas em
+    branco. O que falta é a conexão de entrada: o teclado aparece e não escreve
+    em parte alguma (item abaixo).
 -   [x] Toque no `InputState`: a lista de dedos entra pelo estado
     (`touches[]` com o id do `AMotionEvent` e a posição em pixels de
     dispositivo, `touchCount`, `touchCancelled`) e o `Kernel` a dobra no único
@@ -1020,7 +1035,10 @@ compatibilidade e capacidade de manutenção.
     `InputMethodManager` e chama `showSoftInput(mNativeContentView, ...)`, sendo
     `mNativeContentView` um `View` comum que `requestFocus()` no `onCreate`. A
     conexão que o IME recebe é portanto a vazia de um `View` qualquer: o teclado
-    aparece e não escreve em lugar nenhum. Fechoi primeiro o que não depende de
+    aparece e não escreve em lugar nenhum --- é o que o aparelho mostra, um
+    `dumpsys input_method` com `EditorInfo{packageName=dev.ogui.demo,
+    inputType=0, isTextEditor=false, hasInputConnection=true}`. Fechoi primeiro
+    o que não depende de
     aparelho --- `imeRequestFor()` responde os dois ints que a
     `InputMethodManager` quer (`TYPE_CLASS_TEXT`, os bits de multilinha do
     `TextArea`, `IME_ACTION_DONE`/`IME_ACTION_SEARCH`,
