@@ -339,6 +339,25 @@ int keyFromAndroidKey(int32_t androidKeyCode);
 //
 // Off Android every entry point fails cleanly with a message in lastError(),
 // so a single code base compiles for both targets.
+//
+// Fit an authored design canvas to a device of the given pixel width.
+//
+// A layout designed for a fixed logical width (the gallery's 800) overflows a
+// narrow phone when that width is shown at the device's own density: 1080 px at
+// 2.8125 is 384 logical, so the right edge of an 800-wide screen is never seen.
+// The answer is a zoom-out, not a re-layout -- map designWidth onto the screen
+// width so nothing clips horizontally and the top-anchored content keeps its
+// vertical rhythm. But never zoom *in* past the density: on a screen wide enough
+// that dpiScale already fits the design, dpiScale is returned and the layout
+// keeps its physical size. The taller-than-design canvas that leaves is what the
+// safe area then has room to subtract the bars from.
+inline float fitToWidthScale(float deviceWidthPx, float designWidth,
+                             float dpiScale) {
+    if (designWidth <= 0.0f || deviceWidthPx <= 0.0f) return dpiScale;
+    const float fit = deviceWidthPx / designWidth;
+    return fit < dpiScale ? fit : dpiScale;
+}
+
 class AndroidHost {
 public:
     AndroidHost() = default;

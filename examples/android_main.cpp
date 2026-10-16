@@ -33,16 +33,23 @@ App& of(struct android_app* app) {
     return *static_cast<App*>(app->userData);
 }
 
+// The gallery screens are authored for this fixed logical canvas. fit() maps it
+// onto the device, so it is the one number the demo's layout and its scale share.
+constexpr float kDesignWidth = 800.0f;
+constexpr float kDesignHeight = 600.0f;
+
 // The screen is sized in device pixels and laid out in logical units, so a
-// phone's smaller canvas is the scale's business, not the layout's. The gallery
-// screens are authored for 800x600 logical; a narrow phone clips the right edge
-// of the widest row until someone authors a phone layout for them.
+// phone's smaller canvas is the scale's business, not the layout's. A narrow
+// phone would otherwise clip the right edge of the widest row: fitToWidthScale
+// zooms the 800-wide design out until it spans the screen, and leaves the
+// density alone wherever the density already fits.
 void fit(App& a) {
     auto screen = a.kernel.currentScreen();
     if (!screen || !a.host.hasWindow()) return;
     screen->width = static_cast<float>(a.host.width());
     screen->height = static_cast<float>(a.host.height());
-    screen->scale = a.host.dpiScale();
+    screen->scale =
+        ogui::fitToWidthScale(screen->width, kDesignWidth, a.host.dpiScale());
     a.kernel.invalidate();
 }
 
@@ -130,9 +137,9 @@ extern "C" void android_main(struct android_app* app) {
     }
     a.host.installAssetReader();
 
-    a.gallery = gallery::loadAll(800.0f, 600.0f);
+    a.gallery = gallery::loadAll(kDesignWidth, kDesignHeight);
     int navIndex = 0;
-    gallery::install(a.kernel, a.gallery, navIndex, 0, 800.0f, 600.0f);
+    gallery::install(a.kernel, a.gallery, navIndex, 0, kDesignWidth, kDesignHeight);
 
     const ogui::Color& bg = ogui::activeTheme().palette.screen;
     a.host.setClearColor(bg.r / 255.0f, bg.g / 255.0f, bg.b / 255.0f);

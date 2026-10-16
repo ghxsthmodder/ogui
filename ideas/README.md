@@ -1103,6 +1103,23 @@ compatibilidade e capacidade de manutenção.
     janela) e `debug/tests/android_test.cpp` (o último-valor, o só-uma-vez, o
     negativo lido como zero); controles negativos mostram cada regra derrubando
     exatamente a asserção escrita para ela.
+-   [x] A galeria cabe no telefone: as telas são autoradas para um canvas fixo de
+    800 unidades lógicas, e na densidade do aparelho 1080 px são só 384 lógicos,
+    então a borda direita de cada linha caía fora da tela. Em vez de remanejar um
+    design que não foi feito para telefone, `fit()` dá zoom:
+    `fitToWidthScale(deviceWidthPx, designWidth, dpiScale)` devolve a escala que
+    mapeia a largura do design sobre a da tela --- um zoom-out num telefone
+    estreito --- mas nunca acima de `dpiScale`, para que uma tela já larga o
+    bastante na própria densidade mantenha o tamanho físico e não seja ampliada. A
+    largura lógica termina no width do design, então nada corta na direita; o canvas
+    alto que sobra abaixo do design (ancorado no topo) é de onde a área segura
+    desconta as barras. O custo é uma caixa de altura `%` esticada no canvas mais
+    alto --- um layout de desktop num telefone 19.5:9 tem mais sala do que foi
+    desenhado --- troca menor contra conteúdo que simplesmente não aparecia. A
+    regra é aritmética e está em `debug/tests/android_test.cpp` (zoom-out no
+    estreito, densidade no largo, guarda de width zero, e a largura lógica saindo
+    no design com a barra de status ainda virando unidades do design); no aparelho
+    as telas Basico, Containers e Game agora ocupam a largura inteira sem corte.
 
 **Resultado esperado:** o mesmo `DrawList` renderiza em desktop GL, GLES 3.0 e
 CPU, com a portabilidade coberta por teste em vez de suposição.

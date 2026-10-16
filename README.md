@@ -1107,6 +1107,20 @@ device size, one frame per input event and per `APP_CMD_REDRAW_NEEDED`, and a
 hand-drained `ALooper_pollOnce` loop with a 16 ms budget while a window is up
 (`ALooper_pollAll` is documented as obsoleted: it "may ignore wakes").
 
+`fit()` is where a desktop-authored layout meets a phone. The gallery screens are
+built for a fixed 800-unit canvas, and at the device's own density 1080 px is only
+384 logical units, so the right edge of every row would fall off the screen. Rather
+than re-lay out a design that was not made for a phone, `fit()` zooms it:
+`fitToWidthScale(deviceWidthPx, designWidth, dpiScale)` returns the scale that maps
+the design width onto the screen width — a zoom-out on a narrow phone — but never
+more than `dpiScale`, so a screen already wide enough at its density keeps its
+physical size and is not blown up. The logical width ends at the design width, so
+nothing clips horizontally; the tall canvas left over below the (top-anchored)
+design is what the safe area then subtracts the bars from. The tradeoff is that a
+`%`-height box stretches to that taller canvas — a desktop layout shown on a
+19.5:9 phone has more room than it was drawn for — which is the lesser cost against
+content that was simply off the edge.
+
 A window on a phone is not the whole window: a status bar, a notch and the
 keyboard each take a strip of it, and a layout that does not know that draws a
 button under the bar or an input field under the keyboard. `Kernel` carries that

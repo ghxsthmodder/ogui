@@ -688,6 +688,51 @@ void theWindowTellsTheTreeWhereItsBarsAre() {
           "an inset that would enlarge the window is read as no inset");
 }
 
+// A layout authored for a fixed 800-unit canvas overflows a narrow phone shown
+// at the phone's own density, so the host zooms the design out to span the
+// screen -- but never in past the density, because a screen wide enough to fit
+// at dpi should keep its physical size. The rule is arithmetic, so it is checked
+// here rather than by squinting at a phone.
+void theDesignFitsTheScreenItIsShownOn() {
+    const float d = 2.8125f;      // the SM-A155M's 450 dpi
+    const float design = 800.0f;
+
+    check(std::fabs(fitToWidthScale(1080.0f, design, d) - 1080.0f / design) < 0.0001f,
+          "a phone narrower than the design at dpi zooms out to the width");
+    check(fitToWidthScale(3000.0f, design, d) == d,
+          "a screen wide enough at dpi keeps the density and is not zoomed in");
+    check(fitToWidthScale(1080.0f, 0.0f, d) == d,
+          "a design with no authored width is left at the density");
+    check(fitToWidthScale(0.0f, design, d) == d,
+          "and so is a window that has no width yet");
+
+    // End to end: at the fit scale the logical canvas is exactly the design
+    // width, so a widget authored near its right edge is on screen rather than
+    // clipped -- which is the whole point of the zoom.
+    AndroidHost host;
+    Kernel kernel;
+    kernel.init();
+    auto phone = std::make_shared<Screen>("phone");
+    phone->width = 1080.0f;
+    phone->height = 2340.0f;
+    phone->scale = fitToWidthScale(phone->width, design, d);
+    kernel.pushScreen(phone);
+    check(std::fabs(kernel.logicalWidth() - design) < 0.001f,
+          "the design width spans the screen: nothing is cut off at the right");
+    check(kernel.logicalHeight() > design,
+          "the tall canvas that leaves is room, not a crop");
+
+    // The bars are still device pixels and still divide by the scale that is now
+    // in force, so the safe area keeps its meaning at the zoomed-out size.
+    host.input().setWindowInsets(WindowInsets{0, 72, 0, 135});
+    host.applyWindowInsets(kernel);
+    const float sc = 1080.0f / design;
+    check(std::fabs(kernel.insets().top - 72.0f / sc) < 0.001f,
+          "a status bar measured in pixels becomes design units at the fit scale");
+    check(std::fabs(kernel.safeRect().w - design) < 0.001f,
+          "and the safe rectangle still spans the whole design width");
+}
+
 } // namespace
 
 int main() {
@@ -714,6 +759,7 @@ int main() {
     theKeyboardMatchesTheFieldThatHasTheFocus();
     theImeCountsInCodeUnitsAndTheWidgetInBytes();
     theWindowTellsTheTreeWhereItsBarsAre();
+    theDesignFitsTheScreenItIsShownOn();
 
     if (g_failures) {
         std::cout << "android_test: " << g_failures << " checks failed\n";
