@@ -385,11 +385,18 @@ public:
     const std::string& tooltip() const { return m_tooltip; }
 
     // ---- keyboard focus / accessibility ----
-    // Interactive widgets mark themselves focusable at construction (the
-    // built-in factories do this), so Tab/Shift+Tab cycle only real controls.
-    // The Kernel still honours isEnabled()/isVisible() when traversing.
-    void setFocusable(bool f) { m_focusable = f; }
-    bool isFocusable() const { return m_focusable; }
+    // Whether this class is a Tab stop when nothing has said otherwise. The
+    // interactive classes override it to true, so a widget a host built in C++
+    // behaves like the same widget authored in XML -- the tag factory used to
+    // mark it, which left the class itself non-focusable. The Kernel still
+    // honours isEnabled()/isVisible() when traversing.
+    virtual bool focusableByDefault() const { return false; }
+    // An explicit answer beats the class default in both directions: a Button
+    // can leave the ring, a Label can join it.
+    void setFocusable(bool f) { m_focusable = f; m_focusableSet = true; }
+    bool isFocusable() const {
+        return m_focusableSet ? m_focusable : focusableByDefault();
+    }
 
     // Short human name for tooling/automation (aria-label style); the tooltip
     // acts as the longer description.
@@ -445,6 +452,7 @@ protected:
     void tickVisualTransition(float dt);
     bool m_enabled = true;
     bool m_focusable = false;
+    bool m_focusableSet = false;
     std::string m_accessibleName;
     uint8_t m_visualBits = 0;
     std::map<std::string, VisualColorProp> m_visualColors;

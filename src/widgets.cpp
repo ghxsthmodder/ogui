@@ -396,87 +396,87 @@ void Separator::onDraw(Rasterizer& r) const {
 // ------------------------------------------------------------------
 using WidgetFactory = std::shared_ptr<Widget> (*)(const Style&, const std::map<std::string, std::string>&);
 
-// Factory helper: build an interactive widget and mark it focusable so the
-// Kernel's Tab/Shift+Tab traversal stops on it (see Widget::isFocusable).
+// Factory helper: build one widget of a class with the default style. Whether
+// it joins the Tab ring is the class's own answer (Widget::focusableByDefault),
+// not something this table decides, so a host that news the same class up in
+// C++ is a stop exactly where the tag would have put it.
 template <typename W>
-std::shared_ptr<Widget> fw(const Style&, const std::map<std::string, std::string>&) {
-    auto w = std::make_shared<W>();
-    w->setFocusable(true);
-    return w;
+std::shared_ptr<Widget> mk(const Style&, const std::map<std::string, std::string>&) {
+    return std::make_shared<W>();
 }
 
 std::map<std::string, WidgetFactory>& widgetRegistry() {
     static std::map<std::string, WidgetFactory> reg;
     if (reg.empty()) {
-        reg["screen"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Widget>(); };
+        reg["screen"] = mk<Widget>;
         // Data-only root for a list of screens; children carry title/path in
         // their raw attributes (see Widget::rawAttributes).
-        reg["manifest"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Widget>(); };
-        reg["label"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Label>(); };
-        reg["button"] = fw<Button>;
-        reg["image"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Image>(); };
-        reg["panel"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Panel>(); };
-        reg["window"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Window>(); };
-        reg["scrollview"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<ScrollView>(); };
-        reg["textinput"] = fw<TextInput>;
-        reg["column"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Column>(); };
-        reg["row"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Row>(); };
-        reg["group"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Group>(); };
-        reg["checkbox"] = fw<Checkbox>;
-        reg["separator"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Separator>(); };
-        reg["radiobutton"] = fw<RadioButton>;
-        reg["progress"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<ProgressBar>(); };
-        reg["slider"] = fw<Slider>;
-        reg["tabs"] = fw<Tabs>;
-        reg["tab"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Tab>(); };
-        reg["combobox"] = fw<ComboBox>;
-        reg["option"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<ComboOption>(); };
-        reg["toggleswitch"] = fw<ToggleSwitch>;
-        reg["toggle"] = fw<ToggleSwitch>;
-        reg["textarea"] = fw<TextArea>;
-        reg["listbox"] = fw<ListBox>;
-        reg["virtuallist"] = fw<ListBox>;   // same virtualised row engine
-        reg["propertygrid"] = fw<PropertyGrid>;
-        reg["property"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<PropertyItem>(); };
-        reg["console"] = fw<Console>;
-        reg["item"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<ListItem>(); };
-        reg["tree"] = fw<TreeView>;
-        reg["treetable"] = fw<TreeTable>;
-        reg["tnode"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<TreeTableNode>(); };
-        reg["statusbar"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<StatusBar>(); };
-        reg["breadcrumb"] = fw<Breadcrumb>;
-        reg["crumb"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<CrumbItem>(); };
-        reg["keybind"] = fw<Keybind>;
-        reg["commandpalette"] = fw<CommandPalette>;
-        reg["cmd"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<CommandAction>(); };
-        reg["table"] = fw<Table>;
-        reg["th"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<TableColumn>(); };
-        reg["tr"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<TableRow>(); };
-        reg["cell"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<TableCell>(); };
-        reg["treeitem"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<TreeItem>(); };
-        reg["spinbox"] = fw<SpinBox>;
-        reg["optionspin"] = fw<OptionSpin>;
-        reg["rangeslider"] = fw<RangeSlider>;
-        reg["splitter"] = fw<Splitter>;
-        reg["grid"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Grid>(); };
-        reg["badge"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Badge>(); };
-        reg["spinner"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Spinner>(); };
-        reg["searchinput"] = fw<SearchInput>;
-        reg["accordion"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Accordion>(); };
-        reg["section"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<AccordionSection>(); };
-        reg["modal"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Modal>(); };
-        reg["sparkline"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<Sparkline>(); };
-        reg["menubar"] = fw<MenuBar>;
-        reg["menu"] = fw<Menu>;
-        reg["menuitem"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<MenuItem>(); };
+        reg["manifest"] = mk<Widget>;
+        reg["label"] = mk<Label>;
+        reg["button"] = mk<Button>;
+        reg["image"] = mk<Image>;
+        reg["panel"] = mk<Panel>;
+        reg["window"] = mk<Window>;
+        reg["scrollview"] = mk<ScrollView>;
+        reg["textinput"] = mk<TextInput>;
+        reg["column"] = mk<Column>;
+        reg["row"] = mk<Row>;
+        reg["group"] = mk<Group>;
+        reg["checkbox"] = mk<Checkbox>;
+        reg["separator"] = mk<Separator>;
+        reg["radiobutton"] = mk<RadioButton>;
+        reg["progress"] = mk<ProgressBar>;
+        reg["slider"] = mk<Slider>;
+        reg["tabs"] = mk<Tabs>;
+        reg["tab"] = mk<Tab>;
+        reg["combobox"] = mk<ComboBox>;
+        reg["option"] = mk<ComboOption>;
+        reg["toggleswitch"] = mk<ToggleSwitch>;
+        reg["toggle"] = mk<ToggleSwitch>;
+        reg["textarea"] = mk<TextArea>;
+        reg["listbox"] = mk<ListBox>;
+        reg["virtuallist"] = mk<ListBox>;   // same virtualised row engine
+        reg["propertygrid"] = mk<PropertyGrid>;
+        reg["property"] = mk<PropertyItem>;
+        reg["console"] = mk<Console>;
+        reg["item"] = mk<ListItem>;
+        reg["tree"] = mk<TreeView>;
+        reg["treetable"] = mk<TreeTable>;
+        reg["tnode"] = mk<TreeTableNode>;
+        reg["statusbar"] = mk<StatusBar>;
+        reg["breadcrumb"] = mk<Breadcrumb>;
+        reg["crumb"] = mk<CrumbItem>;
+        reg["keybind"] = mk<Keybind>;
+        reg["commandpalette"] = mk<CommandPalette>;
+        reg["cmd"] = mk<CommandAction>;
+        reg["table"] = mk<Table>;
+        reg["th"] = mk<TableColumn>;
+        reg["tr"] = mk<TableRow>;
+        reg["cell"] = mk<TableCell>;
+        reg["treeitem"] = mk<TreeItem>;
+        reg["spinbox"] = mk<SpinBox>;
+        reg["optionspin"] = mk<OptionSpin>;
+        reg["rangeslider"] = mk<RangeSlider>;
+        reg["splitter"] = mk<Splitter>;
+        reg["grid"] = mk<Grid>;
+        reg["badge"] = mk<Badge>;
+        reg["spinner"] = mk<Spinner>;
+        reg["searchinput"] = mk<SearchInput>;
+        reg["accordion"] = mk<Accordion>;
+        reg["section"] = mk<AccordionSection>;
+        reg["modal"] = mk<Modal>;
+        reg["sparkline"] = mk<Sparkline>;
+        reg["menubar"] = mk<MenuBar>;
+        reg["menu"] = mk<Menu>;
+        reg["menuitem"] = mk<MenuItem>;
         reg["menuseparator"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { auto m = std::make_shared<MenuItem>(); m->setSeparator(true); return m; };
-        reg["contextmenu"] = [](const Style&, const std::map<std::string, std::string>&) -> std::shared_ptr<Widget> { return std::make_shared<ContextMenu>(); };
-        reg["colorpicker"] = fw<ColorPicker>;
-        reg["pathpicker"] = fw<PathPicker>;
-        reg["rampeditor"] = fw<RampEditor>;
-        reg["ramp"] = fw<RampEditor>;
-        reg["curveeditor"] = fw<CurveEditor>;
-        reg["curve"] = fw<CurveEditor>;
+        reg["contextmenu"] = mk<ContextMenu>;
+        reg["colorpicker"] = mk<ColorPicker>;
+        reg["pathpicker"] = mk<PathPicker>;
+        reg["rampeditor"] = mk<RampEditor>;
+        reg["ramp"] = mk<RampEditor>;
+        reg["curveeditor"] = mk<CurveEditor>;
+        reg["curve"] = mk<CurveEditor>;
     }
     return reg;
 }

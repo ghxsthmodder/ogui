@@ -722,11 +722,11 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
     if (const std::string* v = get("bind")) w->setBinding(*v);
     if (const std::string* v = get("contextmenu")) w->setContextMenuName(*v);
     if (const std::string* v = get("tooltip")) w->setTooltip(*v);
-    // Focus/opt-in override (interactive factories already mark themselves
-    // focusable; this lets a screen author add a stop or remove one) and an
-    // accessible short name for tooling.
-    if (const std::string* v = get("focusable"))
-        w->setFocusable(*v == "true" || *v == "1");
+    // Focus override: the class already answered whether it is a Tab stop
+    // (Widget::focusableByDefault), so this only adds a stop or removes one.
+    // The value is read with the registry's boolean vocabulary, the same one
+    // `ogui.set` and the value lint use.
+    if (const std::string* v = get("focusable")) w->setFocusable(toBool(*v));
     if (const std::string* v = get("accessible")) w->setAccessibleName(*v);
     else if (const std::string* v = get("aria-label")) w->setAccessibleName(*v);
 
@@ -1298,7 +1298,7 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
             toInt(*v, idx);
             tb->setSelectedIndex(idx);
         }
-        if (const std::string* v = get("sortable")) tb->setSortable(*v == "true" || *v == "1");
+        if (const std::string* v = get("sortable")) tb->setSortable(toBool(*v));
         if (const std::string* v = get("color")) tb->setTextColor(colorOf(*v));
         if (const std::string* v = get("background")) tb->setBgColor(colorOf(*v));
         if (const std::string* v = get("headerbackground")) tb->setHeaderBgColor(colorOf(*v));

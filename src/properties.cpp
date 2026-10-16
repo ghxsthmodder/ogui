@@ -704,7 +704,8 @@ std::vector<PropertyDef> widgetProps() {
                              w.setFocusable(v);
                              return true;
                          },
-                         "whether Tab can stop on this widget"),
+                         "whether Tab can stop on this widget; the class "
+                         "answers for itself until this says otherwise"),
         stringProp<Widget>("accessible",
                            [](const Widget& w) { return w.accessibleName(); },
                            [](Widget& w, const std::string& v) {

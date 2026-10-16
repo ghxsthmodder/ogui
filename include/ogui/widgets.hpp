@@ -90,6 +90,8 @@ private:
 // ------------------------------------------------------------------
 class Button : public Widget {
 public:
+    bool focusableByDefault() const override { return true; }
+
     Button();
     virtual ~Button() override;
 
@@ -354,6 +356,8 @@ private:
 // ------------------------------------------------------------------
 class TextInput : public Widget {
 public:
+    bool focusableByDefault() const override { return true; }
+
     TextInput();
     virtual ~TextInput() override;
 
@@ -539,6 +543,8 @@ private:
 // ------------------------------------------------------------------
 class Checkbox : public Widget {
 public:
+    bool focusableByDefault() const override { return true; }
+
     using ValueCallback = std::function<void(bool)>;
 
     Checkbox();
@@ -644,6 +650,8 @@ private:
 // ------------------------------------------------------------------
 class Slider : public Widget {
 public:
+    bool focusableByDefault() const override { return true; }
+
     using ValueCallback = std::function<void(float)>;
 
     Slider();
@@ -693,6 +701,8 @@ private:
 // ------------------------------------------------------------------
 class SpinBox : public Widget {
 public:
+    bool focusableByDefault() const override { return true; }
+
     using ValueCallback = std::function<void(float)>;
 
     SpinBox();
@@ -759,6 +769,8 @@ private:
 // ------------------------------------------------------------------
 class OptionSpin : public Widget {
 public:
+    bool focusableByDefault() const override { return true; }
+
     using OptionCallback = std::function<void(int index, const std::string& value)>;
 
     OptionSpin();
@@ -810,6 +822,8 @@ private:
 // ------------------------------------------------------------------
 class RangeSlider : public Widget {
 public:
+    bool focusableByDefault() const override { return true; }
+
     using RangeCallback = std::function<void(float, float)>;
 
     RangeSlider();
@@ -860,6 +874,8 @@ private:
 // ------------------------------------------------------------------
 class Splitter : public Widget {
 public:
+    bool focusableByDefault() const override { return true; }
+
     Splitter();
     virtual ~Splitter() override;
 
@@ -1003,6 +1019,8 @@ private:
 // ------------------------------------------------------------------
 class ComboBox : public Widget {
 public:
+    bool focusableByDefault() const override { return true; }
+
     using ChangedCallback = std::function<void(int)>;
 
     ComboBox();
@@ -1097,6 +1115,8 @@ private:
 // ------------------------------------------------------------------
 class Tabs : public Widget {
 public:
+    bool focusableByDefault() const override { return true; }
+
     using ChangedCallback = std::function<void(int)>;
 
     Tabs();
@@ -1185,6 +1205,8 @@ private:
 // ------------------------------------------------------------------
 class RadioButton : public Widget {
 public:
+    bool focusableByDefault() const override { return true; }
+
     RadioButton();
     ~RadioButton() override;
     virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
@@ -1308,6 +1330,8 @@ private:
 // ------------------------------------------------------------------
 class Console : public Widget {
 public:
+    bool focusableByDefault() const override { return true; }
+
     Console();
     virtual ~Console() override;
 
@@ -1360,6 +1384,8 @@ private:
 // ------------------------------------------------------------------
 class ListBox : public Widget {
 public:
+    bool focusableByDefault() const override { return true; }
+
     using ChangedCallback = std::function<void(int)>;
 
     ListBox();
@@ -1492,6 +1518,8 @@ private:
 // ------------------------------------------------------------------
 class PropertyGrid : public Widget {
 public:
+    bool focusableByDefault() const override { return true; }
+
     using ValueCallback = std::function<void(const std::string& name,
                                              const std::string& value)>;
 
@@ -1686,6 +1714,8 @@ private:
 // ------------------------------------------------------------------
 class Table : public Widget {
 public:
+    bool focusableByDefault() const override { return true; }
+
     using ChangedCallback = std::function<void(int)>;
     struct Column {
         std::string label;
@@ -1877,6 +1907,8 @@ private:
 // ------------------------------------------------------------------
 class TreeView : public Widget {
 public:
+    bool focusableByDefault() const override { return true; }
+
     using ChangedCallback = std::function<void(int)>;
 
     TreeView();
@@ -2058,6 +2090,8 @@ private:
 // ------------------------------------------------------------------
 class TreeTable : public Widget {
 public:
+    bool focusableByDefault() const override { return true; }
+
     using ChangedCallback = std::function<void(int)>;
     struct Column {
         std::string label;
@@ -2182,6 +2216,8 @@ private:
 // ------------------------------------------------------------------
 class ToggleSwitch : public Widget {
 public:
+    bool focusableByDefault() const override { return true; }
+
     ToggleSwitch();
     virtual ~ToggleSwitch();
 
@@ -2320,6 +2356,8 @@ private:
 // ------------------------------------------------------------------
 class Breadcrumb : public Widget {
 public:
+    bool focusableByDefault() const override { return true; }
+
     using SegmentCallback = std::function<void(int)>;
 
     Breadcrumb();
@@ -2377,6 +2415,8 @@ private:
 // ------------------------------------------------------------------
 class Keybind : public Widget {
 public:
+    bool focusableByDefault() const override { return true; }
+
     using ValueCallback = std::function<void(const std::string&)>;
 
     Keybind();
@@ -2463,6 +2503,8 @@ private:
 // ------------------------------------------------------------------
 class CommandPalette : public Widget {
 public:
+    bool focusableByDefault() const override { return true; }
+
     using RunCallback = std::function<void(const std::string&)>;
 
     CommandPalette();
@@ -2840,6 +2882,8 @@ private:
 // A top-level <menu label="Arquivo"> inside a MenuBar: holds MenuItem kids.
 class Menu : public Widget {
 public:
+    bool focusableByDefault() const override { return true; }
+
     Menu();
     virtual ~Menu() override;
 
@@ -2852,6 +2896,8 @@ private:
 
 class MenuBar : public Widget {
 public:
+    bool focusableByDefault() const override { return true; }
+
     MenuBar();
     virtual ~MenuBar() override;
 
@@ -2938,6 +2984,8 @@ private:
 
 class ColorPicker : public Widget {
 public:
+    bool focusableByDefault() const override { return true; }
+
     ColorPicker();
     virtual ~ColorPicker() override;
 
@@ -2967,6 +3015,8 @@ private:
 // ------------------------------------------------------------------
 class PathPicker : public Widget {
 public:
+    bool focusableByDefault() const override { return true; }
+
     PathPicker();
     virtual ~PathPicker() override;
 
@@ -3008,6 +3058,8 @@ private:
 // ------------------------------------------------------------------
 class RampEditor : public Widget {
 public:
+    bool focusableByDefault() const override { return true; }
+
     struct Stop { float pos = 0.0f; Color color{}; };
 
     RampEditor();
@@ -3044,6 +3096,8 @@ private:
 // ------------------------------------------------------------------
 class CurveEditor : public Widget {
 public:
+    bool focusableByDefault() const override { return true; }
+
     struct Point { float x = 0.0f, y = 0.0f; };   // normalised, y up
 
     CurveEditor();

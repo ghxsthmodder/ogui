@@ -341,6 +341,9 @@ public:
     void onPointerUp(ogui::MouseButton btn) override { // click toggles
         if (btn == ogui::Mouse_Left) m_on = !m_on;
     }
+    // A control answers for itself: the Tab ring takes it without the host
+    // calling setFocusable(), from the registry or from `new Led`.
+    bool focusableByDefault() const override { return true; }
     void onDraw(ogui::Rasterizer& r) const override {
         const ogui::Rect b = bounds();
         const float d = std::min(b.w, b.h);
@@ -360,8 +363,11 @@ std::shared_ptr<ogui::Widget> makeLed(const ogui::Style&,
                                       const std::map<std::string, std::string>& attrs) {
     auto led = std::make_shared<Led>();
     auto on = attrs.find("on");
-    if (on != attrs.end()) led->setOn(on->second == "true" || on->second == "1");
-    led->setFocusable(true);
+    if (on != attrs.end()) {
+        bool v = false;
+        ogui::parseBool(on->second, v);   // the registry's true/1/yes/on
+        led->setOn(v);
+    }
     return led;
 }
 

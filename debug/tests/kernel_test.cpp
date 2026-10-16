@@ -1,6 +1,7 @@
 // ogui_kernel_test.cpp : input dispatch, focus, bindings and draw list.
 #include "ogui/kernel.hpp"
 #include "ogui/widgets.hpp"
+#include "ogui/properties.hpp"
 #include "ogui/xmlparser.hpp"
 #include "ogui/clipboard.hpp"
 #include "ogui/font.hpp"
@@ -3527,6 +3528,57 @@ static void testIdIndex() {
     CHECK(k.getText("btn") == "Ok");
 }
 
+// The Tab stop is the class's own answer, not a mark the tag factory paints:
+// a button a host news in C++ is in the ring exactly like <button>, and the
+// attribute only ever overrides, in the registry's boolean vocabulary --
+// `yes`/`on` used to read as false here while `ogui.set` accepted them.
+static void testFocusableDefault() {
+    Button btn;
+    CHECK(btn.isFocusable());
+    Label lbl;
+    CHECK(!lbl.isFocusable());
+    Panel panel;
+    CHECK(!panel.isFocusable());
+
+    std::string err;
+    CHECK(setWidgetProperty(lbl, "focusable", "on", &err));
+    CHECK(lbl.isFocusable());
+    CHECK(setWidgetProperty(btn, "focusable", "off", &err));
+    CHECK(!btn.isFocusable());
+
+    Kernel k;
+    k.init();
+    XmlParser p;
+    auto res = p.parse(R"XML(<screen id="s">
+  <label id="l1" x="10" y="10" width="80" height="20"/>
+  <button id="b1" x="10" y="40" width="80" height="24" focusable="off"/>
+  <label id="l2" x="10" y="70" width="80" height="20" focusable="yes"/>
+  <checkbox id="c1" x="10" y="100" width="80" height="20"/>
+</screen>)XML");
+    CHECK(res.root != nullptr);
+    if (!res.root) return;
+    auto s = std::make_shared<Screen>("s");
+    s->widgets.push_back(res.root);
+    s->width = 800;
+    s->height = 600;
+    k.pushScreen(s);
+    InputState st = makeInput();
+    idle(k, st);
+    auto* l1 = k.findWidget("l1");
+    auto* b1 = k.findWidget("b1");
+    auto* l2 = k.findWidget("l2");
+    auto* c1 = k.findWidget("c1");
+    CHECK(l1 && b1 && l2 && c1);
+    if (!l1 || !b1 || !l2 || !c1) return;
+    CHECK(!l1->isFocusable());
+    CHECK(!b1->isFocusable());   // an interactive class can still leave
+    CHECK(l2->isFocusable());    // a decorative one can still join
+    CHECK(c1->isFocusable());
+    CHECK(k.focusNext()); CHECK(k.focusedWidget() == l2);
+    CHECK(k.focusNext()); CHECK(k.focusedWidget() == c1);
+    CHECK(k.focusNext()); CHECK(k.focusedWidget() == l2);   // wraps the two
+}
+
 static void testKeyboardNavigation() {
     Kernel k;
     k.init();
@@ -3999,6 +4051,7 @@ int main() {
     testOnDemandWidgets();
     testCommandPalette();
     testKeyboardNavigation();
+    testFocusableDefault();
     testEventPropagation();
     testIdIndex();
     testDpiScale();

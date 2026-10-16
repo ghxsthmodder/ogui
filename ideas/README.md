@@ -819,7 +819,13 @@ configuração, ferramentas e aplicações com dados extensos.
 -   [x] Tab/Shift+Tab com ordem de foco previsível (document order, com
     wrap), `focusable`, `accessible`/`aria-label`, anel de foco via estados
     visuais `focus:`, Enter/Espaço ativando botão pelo mesmo caminho do
-    clique, `ogui.focus("next"/"prev"/id)`. Limitação de plataforma
+    clique, `ogui.focus("next"/"prev"/id)`. Quem é parada sem ninguém pedir é a
+    classe que responde (`Widget::focusableByDefault`, overridden pelas 27
+    classes interativas), não a fábrica de tags — um `Button` criado em C++ entra
+    no anel igual ao `<button>`, e o atributo só sobrescreve nos dois sentidos,
+    com o vocabulário bool do registro (`yes`/`on`/`off` e não só `true`/`1`),
+    que é o que `debug/tests/kernel_test.cpp::testFocusableDefault` fixa.
+    Limitação de plataforma
     (sem UIA/ATK) documentada no README.
 -   [x] DPI e unidades lógicas: tudo o que o widget vê (XML, `bounds()`,
     ponteiro, fontes) é unidade lógica; `Screen::width/height` ficam em pixels

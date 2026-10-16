@@ -741,7 +741,11 @@ library can rotate a subtree, so there is nothing to hand an angle to.
 document order and wrap; `Kernel::focusNext(backwards)` exposes the same
 movement and `Kernel::setFocusWidget()` / `Widget::isFocusable()` /
 `accessibleName()` carry the exact target and the per-widget flags authors
-set with `focusable` and `accessible`. `Enter`/`Space` activate a focused
+set with `focusable` and `accessible`. Which widgets are in the ring without
+being asked is each class's own answer — `Widget::focusableByDefault()`, which
+the interactive classes override — so a `Button` a host constructs in C++ is a
+tab stop exactly like `<button>`, and the attribute only adds a stop or removes
+one, in the registry's boolean vocabulary. `Enter`/`Space` activate a focused
 `button` through `Kernel::clickWidget()` — the same path a mouse release
 takes — while a `keybind` mid-capture keeps the keys for itself.
 

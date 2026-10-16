@@ -197,7 +197,7 @@ deliberately left out.
 | `onClick` / `bind` | action name fired on click |
 | `contextMenu` | id of a `<contextmenu>` to pop on right-click, or on a finger held half a second |
 | `tooltip` | hover text |
-| `focusable` | `true`/`1` forces a tab stop, `false` removes one; interactive widgets are focusable by default, decorative ones are not |
+| `focusable` | `true`/`1`/`yes`/`on` makes the widget a tab stop, `false`/`0`/`no`/`off` removes one; whether a widget is one when nobody says is the class's own answer (`Widget::focusableByDefault`) — the interactive classes say yes, the decorative ones no |
 | `accessible` / `aria-label` | accessible name for tooling and screen readers (no visual effect) |
 | `visible` | show/hide |
 | `background` | fill colour |
@@ -342,7 +342,9 @@ Tab press-edge unless the focused widget declares `consumesTab()` (a `keybind`
 still captures a bare Tab while recording). Invisible and disabled widgets —
 and the whole subtree of a disabled one — are never tab stops, mirroring the
 hit-test rules. Clicking a widget still focuses it as before. `focusable`
-overrides which widgets join the ring; `accessible`/`aria-label` give a widget
+overrides the class's own answer in either direction, so a `button` can be kept
+out of the ring and a `label` put in it; a widget built in C++ joins exactly
+where its class says, without waiting for the tag factory. `accessible`/`aria-label` give a widget
 a name for tooling without affecting rendering.
 
 `Enter` and `Space` activate a focused `button` through the same click path

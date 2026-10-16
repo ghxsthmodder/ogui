@@ -11,6 +11,7 @@
 // push, frame, click — and checks the result, so the file doubles as its own
 // test (`ctest` runs it as `custom-widget`).
 #include "ogui/kernel.hpp"
+#include "ogui/properties.hpp"
 #include "ogui/xmlparser.hpp"
 #include "ogui/widgets.hpp"
 #include "ogui/rasterizer.hpp"
@@ -38,6 +39,11 @@ int g_failures = 0;
 // ---------------------------------------------------------------------------
 class Led : public ogui::Widget {
 public:
+    // A click toggles it, so it is a control: declaring the default here puts
+    // it in the Tab ring for every host, whether the widget came from the tag
+    // registry or from `std::make_shared<Led>()`.
+    bool focusableByDefault() const override { return true; }
+
     void setOn(bool on) { m_on = on; }
     bool on() const { return m_on; }
 
@@ -82,9 +88,12 @@ std::shared_ptr<ogui::Widget> makeLed(const ogui::Style&,
                                       const std::map<std::string, std::string>& attrs) {
     auto led = std::make_shared<Led>();
     auto on = attrs.find("on");
-    if (on != attrs.end()) led->setOn(on->second == "true" || on->second == "1");
-    led->setFocusable(true);   // interactive widgets opt into the Tab ring
-    return led;
+    if (on != attrs.end()) {
+        bool v = false;
+        ogui::parseBool(on->second, v);   // the registry's true/1/yes/on
+        led->setOn(v);
+    }
+    return led;   // focusable by the class's own focusableByDefault()
 }
 
 } // namespace
