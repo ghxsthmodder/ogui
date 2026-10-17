@@ -1168,7 +1168,11 @@ compatibilidade e capacidade de manutenção.
     trava do eixo cruzado vista em pixels reais em vez de num `InputState`
     montado. A vertical não tinha o que testar no aparelho: com a altura em `%`
     esticada pelo canvas alto do telefone, as oito linhas cabem no viewport e não
-    transbordam, então o empilhamento para baixo fica provado só no host.
+    transbordam, então o empilhamento para baixo foi provado num render do host
+    --- doze cartões de 60 num viewport de 200, arrastados 160 unidades para a
+    esquerda e 100 para cima --- onde as bordas dos cartões continuam em x=10 e
+    x=190 exatamente como antes do gesto, com banda deslocada 49,6 para cima
+    (o resto do scroll virou a barra que apareceu na borda direita).
 
 **Resultado esperado:** o mesmo `DrawList` renderiza em desktop GL, GLES 3.0 e
 CPU, com a portabilidade coberta por teste em vez de suposição.
