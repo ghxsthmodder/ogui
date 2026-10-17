@@ -878,7 +878,9 @@ configuração, ferramentas e aplicações com dados extensos.
     erro típico. `examples/hello.xml` e `examples/counter.xml` rodam num
     `Kernel` real e o teste `examples` extrai e executa cada bloco XML/Lua da
     documentação, então a doc não apodrece em silêncio. `ogui_validate` valida
-    os layouts enviados. Faltam benchmarks.
+    os layouts enviados. O custo de um quadro agora é medido, não suposto:
+    `debug/tests/bench.cpp` (teste `bench`) imprime o tempo de `update()` e de
+    `buildDrawList()` e as dimensões do `DrawList` para pilha, linha e página.
 
 **Resultado esperado:** melhor experiência de desenvolvimento,
 compatibilidade e capacidade de manutenção.
@@ -1173,6 +1175,28 @@ compatibilidade e capacidade de manutenção.
     esquerda e 100 para cima --- onde as bordas dos cartões continuam em x=10 e
     x=190 exatamente como antes do gesto, com banda deslocada 49,6 para cima
     (o resto do scroll virou a barra que apareceu na borda direita).
+-   [x] Segurar, no aparelho. Na tela Widgets (7/12) um `input swipe` de 2,5 s
+    sobre a célula Formulario --- o mesmo ponto de início e de fim, portanto um
+    dedo que não anda e não vira arrasto --- abriu `cm_form` exatamente sob o
+    dedo, com "Limpar busca", "Adicionar badge", o separador e "Propriedades...",
+    e o menu continuou aberto depois da soltura: um `longPress` entrega a
+    liberação sem clique, então segurar não pode também ser um toque. Um
+    `input tap` no item fechou o menu *e* rodou o comando, e o badge
+    `Instancing` foi de (4) a (5) --- a única coisa que prova que o gesto entregou
+    a captura a quem podia clicar, e não só desenhou um popup. A pinça continua
+    sem prova no aparelho, e o que falta é a injeção, não a biblioteca:
+    `input motionevent` não aceita id de ponteiro (um dedo por comando),
+    `sendevent` em `/dev/input/event3` é negado ao uid shell, e o
+    `/system/bin/uinput` da AOSP --- que funciona, com `register`/`inject` em
+    JSON e um dispositivo que o EventHub chega a abrir --- não expande
+    `INPUT_PROP_DIRECT`, então o InputReader não lhe dá mapper de toque nenhum e
+    nenhum MotionEvent nasce dele. Quem injeta os dois dedos de verdade é
+    `monkey --pct-pinchzoom`: `ACTION_DOWN` e `ACTION_POINTER_DOWN` com duas
+    coordenadas, o par que `updatePinch` procura. Falta pousar o primeiro dedo
+    sobre `img_demo`, que são 243x121 px de 1080x2400 --- ~1% da tela --- e o
+    centro do gesto é sorteado, então a busca por seed (`-s`, que é determinística
+    e imprimível) estava em andamento quando o aparelho caiu da rede. Até lá a
+    pinça fica provada em `debug/tests/touch_test.cpp`.
 
 **Resultado esperado:** o mesmo `DrawList` renderiza em desktop GL, GLES 3.0 e
 CPU, com a portabilidade coberta por teste em vez de suposição.

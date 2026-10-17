@@ -6,6 +6,7 @@ build-android*/
 build-apk/
 debug/build-win-objs/
 debug/build-msvc/
+debug/screenshots/
 *.o
 *.a
 
