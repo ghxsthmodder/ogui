@@ -142,7 +142,8 @@ Win32 + WGL demo directly (the project compiles the library sources itself).
 cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-bad,
                                         # custom-widget, kernel, unicode, screens,
                                         # scrollbar, script, properties, templates,
-                                        # examples, golden, gl, touch, asset, android
+                                        # examples, golden, gl, touch, asset,
+                                        # android, bench
 ```
 
 * `parser` — XML tokenizer, attributes, styles, error reporting, and the value
@@ -260,6 +261,15 @@ cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-b
   data in `AndroidInputBridge`; only the JNI and the four Java classes need a
   device, so the semantics are covered here and the shell that calls the
   getters is thin.
+* `bench` — what a frame costs, measured. One box of N panels on the phone's own
+  canvas, dragged by a synthetic finger: a `scrollview` page against the two flow
+  containers, the row at 200/800/3200 cards, the shipped `layout_containers.xml`,
+  an idle frame against one forced to rebuild, and the draw list before a pan
+  against after it. The absolute numbers are printed for the record and belong to
+  whichever machine ran them; every assertion is a ratio, so the check that a
+  container laying its own children out costs a constant multiple of the page it
+  replaces — and that 16× the cards does not cost 256× the frame — holds on a
+  slow one too.
 
 Regenerate the golden after an intentional visual change:
 
@@ -278,7 +288,10 @@ objects that carried it are out of scope.
 Removing a widget is the same class of problem in the other direction: the
 kernel and the widgets both keep raw pointers into the tree. `forgetWidget()`
 walks the whole subtree before the last `shared_ptr` dies (focus, hover, the
-press, the pan, the fling, the hold, the pinch and the tooltip), every screen
+press, the pan, the fling, the hold, the pinch and the tooltip), and
+`removeChild()`/`takeChildren()` call it themselves — a host that simply drops a
+widget has no later moment to report it, because the handle it would name is the
+memory that just went. Every screen
 change drops its pointers *before* the outgoing tree is released, and a popup
 callback that was built with `[this]` also captures `weak_from_this()` and
 returns when the owner is gone, because the kernel holds the floating layer as

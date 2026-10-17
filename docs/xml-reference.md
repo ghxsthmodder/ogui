@@ -321,9 +321,11 @@ the tree, so the tree is where the question belongs.
 Widgets handed back by a lookup are borrowed —
 the tree owns them: removing a widget from the tree — `ogui.remove`, any
 `removeChild` that drops the last `shared_ptr`, a screen switch — expires its
-entry, so the id reports `nullptr` rather than a dangling pointer. If you keep
-a raw `Widget*` of your own, clear it through `Kernel::forgetWidget` before the
-widget leaves the tree.
+entry, so the id reports `nullptr` rather than a dangling pointer, and the
+removal clears the kernel's own pointers into that subtree on its own. A raw
+`Widget*` you kept is still yours to drop: `Kernel::forgetWidget` is what the
+kernel runs for itself, and calling it early only means your own handle stops
+being the one thing that outlives the widget.
 
 That call is the same promise for the kernel's own caches: it drops every
 pointer the frame holds at a widget *and at everything under it* — focus,

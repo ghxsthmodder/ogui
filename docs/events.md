@@ -111,7 +111,9 @@ route over a tree that no longer contains its target, and the widget is freed
 afterwards. `Kernel::forgetWidget` additionally clears the cached pointers —
 press, focus, hover, pan, fling, hold, pinch and the tooltip — over the whole
 subtree the removal takes with it, which is why the kernel does not click into
-freed memory on the next frame. A handler that clicks *another* widget nests: the inner route finishes
+freed memory on the next frame. `Widget::removeChild` and `Widget::takeChildren`
+call it before the last reference can drop, so a host that removes a widget in C++
+is covered by the same promise `ogui.remove` makes in Lua. A handler that clicks *another* widget nests: the inner route finishes
 and restores the outer one, so the original click still travels.
 
 ## The two gestures a finger holds instead of moving

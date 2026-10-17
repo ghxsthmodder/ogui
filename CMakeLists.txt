@@ -276,6 +276,13 @@ if(OGUI_BUILD_TESTS)
     target_compile_definitions(ogui_examples_test PRIVATE
         OGUI_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 
+    # What a frame costs. The numbers are printed for the record and the
+    # assertions are ratios, so the check holds on a machine ten times slower.
+    add_executable(ogui_bench_test debug/tests/bench.cpp)
+    target_link_libraries(ogui_bench_test PRIVATE ogui)
+    target_compile_definitions(ogui_bench_test PRIVATE
+        OGUI_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+
     # Golden-image test: renders a fixed layout and diffs it against
     # debug/tests/golden/basic.png (regenerate with OGUI_UPDATE_GOLDEN=1).
     if(OGUI_USE_STATIC_STB)
@@ -343,6 +350,7 @@ if(OGUI_BUILD_TESTS)
     add_test(NAME properties COMMAND ogui_properties_test)
     add_test(NAME templates COMMAND ogui_templates_test)
     add_test(NAME examples COMMAND ogui_examples_test)
+    add_test(NAME bench COMMAND ogui_bench_test)
     add_test(NAME android COMMAND ogui_android_test)
     if(TARGET ogui_golden_test)
         add_test(NAME golden COMMAND ogui_golden_test)

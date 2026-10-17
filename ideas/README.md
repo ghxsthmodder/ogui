@@ -1161,7 +1161,14 @@ compatibilidade e capacidade de manutenção.
     que não rola, a caixa pequena que não quebra, e as duas tags parseando e
     herdando `scrollStep`/`gap`) e a varredura de round-trip de `properties_test`,
     que agora declara as duas classes e lê as 40 propriedades do `ScrollView`
-    nelas.
+    nelas. No aparelho o arrasto de dedo fechou o ciclo: um swipe diagonal sobre
+    `shc_demo` (400 px na horizontal, 29 px para cima) moveu a linha de cartões e
+    o polegar da barra inferior, e a borda de cima da linha continuou em
+    y=2118 --- a mesma coordenada antes, depois e no swipe de volta ---, que é a
+    trava do eixo cruzado vista em pixels reais em vez de num `InputState`
+    montado. A vertical não tinha o que testar no aparelho: com a altura em `%`
+    esticada pelo canvas alto do telefone, as oito linhas cabem no viewport e não
+    transbordam, então o empilhamento para baixo fica provado só no host.
 
 **Resultado esperado:** o mesmo `DrawList` renderiza em desktop GL, GLES 3.0 e
 CPU, com a portabilidade coberta por teste em vez de suposição.
@@ -1173,7 +1180,13 @@ CPU, com a portabilidade coberta por teste em vez de suposição.
 Uma funcionalidade não deve ser considerada concluída apenas porque o
 exemplo básico funciona. Sempre que aplicável, verificar:
 
--   [ ] A API está documentada e segue as convenções da biblioteca.
+-   [x] A API está documentada e segue as convenções da biblioteca. (Cada tag e
+    cada propriedade tem linha em `docs/xml-reference.md`, a tabela de widgets do
+    `README.md` espelha o `PropertyRegistry` --- é o mesmo dado que a varredura de
+    round-trip lê ---, e as regras que não cabem numa tabela de atributos estão
+    comentadas no header onde moram: o contrato de remoção em `widget.hpp`, a
+    escala lógica/aparelho em `kernel.hpp`, o fluxo de eventos em
+    `docs/events.md`.)
 -   [x] Os valores e argumentos inválidos produzem erros úteis. (O
     `XmlParser` agora passa cada atributo autoral pelo `PropertyRegistry` —
     `checkWidgetProperty()` olha o tipo declarado e as choices sem aplicar nada
@@ -1196,15 +1209,66 @@ exemplo básico funciona. Sempre que aplicável, verificar:
     `forgetWidget` desce a árvore e limpa o tooltip, a troca de tela solta o
     popup e o foco *antes* de liberar a tela que sai, o callback de popup
     captura `weak_from_this()` e o snapshot de animação do `treeview` segura as
-    linhas fracamente. Falta ainda: um host que chama `removeChild` sozinho tem
-    que chamar `Kernel::forgetWidget` antes — a biblioteca não observa a remoção.)
--   [ ] O comportamento por mouse, teclado e foco está definido.
--   [ ] A integração com XML, Lua e estilos é consistente.
--   [ ] Há testes automatizados para o comportamento principal e
-    casos-limite.
--   [ ] O desempenho foi medido quando a funcionalidade pode afetar a
-    árvore ou o desenho.
--   [ ] Existe ao menos um exemplo pequeno e reproduzível.
+    linhas fracamente. O buraco que faltava está fechado: `Widget::removeChild()`
+    e `Widget::takeChildren()` chamam `forgetWidget()` *antes* do `erase`, porque
+    apagar o último `shared_ptr` pode liberar o widget ali mesmo e não existe
+    depois do quê um host pudesse avisar --- o identificador que ele nomearia é a
+    memória que acabou de ir. É a mesma promessa que `ogui.remove()` já fazia em
+    Lua, agora no caminho C++ onde `widgets_list.cpp` reconstrói linhas e
+    `ScrollView::setContent()` troca o conteúdo. Dois testes novos
+    (`testRemoveChildNeedsNoHelp`, `testTakeChildrenNeedsNoHelp`) removem um
+    painel que segura foco e tooltip sem chamar nada além do `removeChild`, e um
+    controle negativo que tira as duas chamadas derruba exatamente as três
+    asserções novas --- e só elas, em toda a suíte.)
+-   [x] O comportamento por mouse, teclado e foco está definido. (Definido e
+    testado quadro a quadro: `kernel_test` cobre despacho, foco/captura, edição de
+    texto, abas, tooltip e a propagação que `stopPropagation` corta; `touch_test`
+    cobre o dedo --- o tap que é clique, o arrasto que fica com o dedo que
+    começou, o slop antes do pan, quem reclama o gesto, o flick que continua e
+    para, o segundo dedo que não rouba a pressão; `scrollbar_test` cobre a barra
+    que rola em vez de selecionar. O que cada caminho significa está escrito em
+    `docs/events.md`.)
+-   [x] A integração com XML, Lua e estilos é consistente. (É a mesma tabela dos
+    dois lados: `properties_test` escreve e relê as 2531 propriedades que a
+    varredura percorre, `testNameDrift()` exige que todo nome que `applyAttributes()`
+    pergunta seja propriedade declarada da classe que o parser construiu, e
+    `script_test`/`templates_test`/`examples_test` rodam layout, `<script>`,
+    `@token` de tema e `<template>` juntos --- inclusive o `ogui.get`/`ogui.set`
+    caindo no registry quando o widget não tem hook próprio.)
+-   [x] Há testes automatizados para o comportamento principal e
+    casos-limite. (17 binários `ogui_*_test`, cada um no `ctest` e rodando duas
+    vezes --- uma normal, uma sob AddressSanitizer, porque metade dos casos-limite
+    é ponteiro que sobrevive ao dono. Toda regra tem controle negativo: quebrá-la
+    derruba exatamente a asserção escrita para ela, e o `bench` só aceita
+    proporções, para o verde não depender da máquina.)
+-   [x] O desempenho foi medido quando a funcionalidade pode afetar a
+    árvore ou o desenho. (`debug/tests/bench.cpp`, o `ogui_bench_test`: uma caixa
+    de N painéis no canvas do telefone --- 800×1600 lógicos --- arrastada por um
+    dedo sintético, e a tela real da galeria. Os números absolutos são da máquina
+    onde rodou e ficam impressos; o que a suíte exige são proporções, para valer
+    também numa dez vezes mais lenta. Com 800 cartões: página `scrollview`
+    414 µs/quadro, container vertical 423, horizontal 423 --- deitar os próprios
+    filhos custa ~2% a mais que a página que a classe substitui, não uma classe
+    nova de custo. A linha crescendo: 200 cartões 138 µs, 800 423, 3200 1860, ou
+    seja 16× os filhos por 13,5× o tempo (linear; quadrático seriam 256×). O
+    desenho não acompanha a linha: 154 vértices com 200 cartões e 154 com 3200,
+    porque o que não entra no clip é descartado no rasterizador, e um pan de 120
+    quadros muda isso para 158 --- a geometria do viewport, não a da fila
+    inteira. Um quadro que não muda nada reaproveita a lista: 0,0003 ms contra
+    0,29 ms depois de um `invalidate()`. A tela `Containers` inteira, com janelas,
+    abas, splitter e os dois contêineres, custa 13 µs/quadro ociosa, 54 widgets,
+    7470 vértices. Três controles negativos, cada um derrubando exatamente a
+    asserção da regra que ele quebra: tirar o cache de redraw (`if (!m_dirty)`
+    nunca mais) derruba a do quadro ocioso; descartar por clip desligado derruba a
+    do tamanho do draw list; e um `flowHorizontal()` que recalcula o offset de
+    cada filho percorrendo os anteriores --- mesma saída, O(n²) --- derruba as
+    duas de custo e só elas.)
+-   [x] Existe ao menos um exemplo pequeno e reproduzível. (`examples/hello.xml`
+    e `examples/counter.xml` são executados por `examples_test` dentro de um
+    `Kernel` real --- load/show, um botão clicado, um binding vivo ---, cada bloco
+    `xml`/`lua` de `docs/examples.md` é parseado no mesmo teste, e a galeria dos
+    `layouts/*.xml` é o exemplo grande, validado por `ogui_validate --manifest`
+    com zero erros e zero avisos.)
 
 ------------------------------------------------------------------------
 

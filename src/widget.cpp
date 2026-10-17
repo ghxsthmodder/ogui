@@ -84,9 +84,20 @@ void Widget::removeChild(Widget* child) {
     if (!child) return;
     for (auto it = m_children.begin(); it != m_children.end(); ++it) {
         if (it->get() == child) {
+            // Before the erase, not after: dropping the last shared_ptr here can
+            // free the widget, and the kernel holds raw pointers into the tree —
+            // focus, hover, the press, the pan, the tooltip, the fling — which
+            // would then be pointing at memory that is already gone. A host that
+            // removes a widget has no later moment to report it in, because the
+            // handle it would name is the thing that died: this is the one place
+            // the library can see the removal, and it is the same call
+            // `ogui.remove()` makes by hand.
+            if (m_kernel) {
+                m_kernel->forgetWidget(child);
+                m_kernel->invalidate();
+            }
             if (child->m_parent == this) child->m_parent = nullptr;
             m_children.erase(it);
-            if (m_kernel) m_kernel->invalidate();
             break;
         }
     }
@@ -97,7 +108,13 @@ std::vector<Widget::Ptr> Widget::takeChildren() {
     out.swap(m_children);
     for (auto& c : out)
         if (c && c->m_parent == this) c->m_parent = nullptr;
-    if (m_kernel) m_kernel->invalidate();
+    // The children left the tree, whoever ends up owning them: the same
+    // bookkeeping a single removal needs.
+    if (m_kernel) {
+        for (const auto& c : out)
+            if (c) m_kernel->forgetWidget(c.get());
+        m_kernel->invalidate();
+    }
     return out;
 }
 

@@ -143,6 +143,9 @@ public:
     const std::vector<Ptr>& children() const { return m_children; }
 
     void addChild(Ptr child);
+    // Removal clears the kernel's pointers into the widget (focus, hover, the
+    // press, the pan, the tooltip) before the last reference can drop, so a host
+    // does not have to call Kernel::forgetWidget() itself.
     void removeChild(Ptr child);
     // Raw-pointer identity removal (script-driven ogui.remove): no shared_ptr
     // at hand to compare against.

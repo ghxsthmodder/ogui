@@ -345,11 +345,70 @@ static void testTreeRowsOutliveNodes() {
     CHECK(tr->rowCount() == 4);
 }
 
+// The host that never heard of forgetWidget: a plain removeChild(), the only
+// reference going with it. Everything the kernel cached inside that panel has
+// to be gone by the time the call returns, because the memory it pointed at
+// may already be back in the allocator.
+static void testRemoveChildNeedsNoHelp() {
+    Kernel k;
+    k.init();
+    k.pushScreen(mk("plain",
+        "<panel id=\"bg\" x=\"0\" y=\"0\" width=\"800\" height=\"600\"/>"
+        "<panel id=\"box\" x=\"0\" y=\"0\" width=\"400\" height=\"300\">"
+        "  <textinput id=\"inp\" x=\"20\" y=\"20\" width=\"200\" height=\"30\" "
+        "tooltip=\"field tip\"/>"
+        "</panel>"));
+    InputState st = makeInput();
+    idle(k, st);
+    pressAt(k, st, 30.0f, 30.0f);
+    releaseAt(k, st);
+    CHECK(k.focusedWidget() != nullptr);
+    st.time = 1.0f;
+    idle(k, st);
+    st.time = 2.0f;
+    idle(k, st);
+    CHECK(k.tooltipVisible());
+
+    Widget* box = k.findWidget("box");
+    CHECK(box && box->parent());
+    if (box && box->parent()) box->parent()->removeChild(box);
+    CHECK(k.focusedWidget() == nullptr);
+    CHECK(!k.tooltipVisible());
+    idle(k, st);
+    k.buildDrawList();
+}
+
+// The same, for the bulk form: a container emptied with takeChildren() and the
+// vector dropped at the end of the statement.
+static void testTakeChildrenNeedsNoHelp() {
+    Kernel k;
+    k.init();
+    k.pushScreen(mk("bulk",
+        "<panel id=\"bg\" x=\"0\" y=\"0\" width=\"800\" height=\"600\"/>"
+        "<panel id=\"box\" x=\"0\" y=\"0\" width=\"400\" height=\"300\">"
+        "  <textinput id=\"inp\" x=\"20\" y=\"20\" width=\"200\" height=\"30\"/>"
+        "</panel>"));
+    InputState st = makeInput();
+    idle(k, st);
+    pressAt(k, st, 30.0f, 30.0f);
+    releaseAt(k, st);
+    CHECK(k.focusedWidget() != nullptr);
+
+    Widget* box = k.findWidget("box");
+    CHECK(box && box->parent());
+    if (box && box->parent()) box->parent()->takeChildren();
+    CHECK(k.focusedWidget() == nullptr);
+    idle(k, st);
+    k.buildDrawList();
+}
+
 int main() {
     testScreenTeardownOrder();
     testTooltipAfterRemove();
     testForgetDescendants();
     testForgetPressedDescendant();
+    testRemoveChildNeedsNoHelp();
+    testTakeChildrenNeedsNoHelp();
     testPopupOutlivesOwner();
     testTreeRowsOutliveNodes();
 
