@@ -52,6 +52,10 @@ jobs:
 
       - name: Fetch the stb headers
         run: |
+          # thirdparty/stb is checked in as a symlink to a developer's home
+          # directory, which no runner has; drop it so the headers can land in
+          # a real directory (on Windows the checkout is a plain file instead).
+          rm -rf thirdparty/stb
           mkdir -p thirdparty/stb
           for f in stb_truetype.h stb_image.h stb_image_write.h; do
             curl -fsSL --retry 3 -o "thirdparty/stb/$f" \
@@ -99,6 +103,9 @@ jobs:
 
       - name: Fetch the stb headers
         run: |
+          # Same as the Windows job: the tracked thirdparty/stb symlink points
+          # at a path only the original developer has.
+          rm -rf thirdparty/stb
           mkdir -p thirdparty/stb
           for f in stb_truetype.h stb_image.h stb_image_write.h; do
             curl -fsSL --retry 3 -o "thirdparty/stb/$f" \
