@@ -85,7 +85,11 @@ build_win() {
     done
 
     echo "  AR  libogui.a"
-    "$WIN_AR" rcs debug/build-win-objs/libogui.a "${objs[@]}"
+    # MSYS2 keeps binutils unprefixed (only gcc ships a prefixed driver), so the
+    # prefixed archiver may be missing even though the compiler is right there.
+    local ar="$WIN_AR"
+    command -v "$ar" >/dev/null 2>&1 || ar=ar
+    "$ar" rcs debug/build-win-objs/libogui.a "${objs[@]}"
 
     echo "  CXX examples/demo_win32.cpp -> debug/demo.exe"
     # -mwindows: GUI subsystem (no stray console window), like the MSVC project.
