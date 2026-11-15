@@ -549,6 +549,26 @@ and expands in place:
 | `rampeditor` | `stops` (`ramp` is an alias) | — |
 | `curveeditor` | `points` (`curve` is an alias) | — |
 
+### Vehicle cockpit
+
+The driving controls a farm simulator HUD is built from. None of them holds a
+vehicle model: the wheel and the pedal expose a number a host or a script
+reads, and the speedometer displays a number it is given.
+
+| Element | Typed attributes | Children |
+|---|---|---|
+| `steeringwheel` | `angle` (degrees, negative = left), `maxAngle` (half of lock-to-lock, default 180), `autoCenter` (default true), `label`, `rimColor`, `hubColor`, `spokeColor`; drag the rim or use `Left`/`Right` (`Home` recentres) | — |
+| `pedal` | `label`, `value` (travel 0..1), `speed` (full presses per second, default 7), `plateColor`, `accent`, `housingColor` (`background` also fills the housing); hold the pointer or `Space`/`Enter` to press it | — |
+| `speedometer` | `value`, `min`, `max`, `redline` (value the red zone starts at; max = none), `unit` (default `km/h`), `label`, `needleColor`, `tickColor`, `dialColor` (`background` also fills the dial) | — |
+
+`steeringwheel` turns by the shortest arc from where it is, so a drag across
+the ±180° seam does not spin the rim the long way round; a release eases it
+back to 0 when `autoCenter` is on. `pedal` reports 1 the moment it is pressed
+and 0 on release — the plate's travel is a drawn animation, not the value —
+while `setValue()`/`ogui.set` can drive an analog value in between. The wheel
+and the pedal fire `change` on user interaction, so a script can react instead
+of polling; the speedometer is read-only apart from its `value` property.
+
 ### Options & toggles
 
 | Element | Typed attributes | Children |

@@ -32,6 +32,7 @@ LIB_SRCS=(
     src/widgets_input.cpp
     src/widgets_list.cpp
     src/widgets_editor.cpp
+    src/widgets_vehicle.cpp
     src/clipboard.cpp
     src/software.cpp
     src/kernel.cpp

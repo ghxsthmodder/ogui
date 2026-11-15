@@ -1090,6 +1090,52 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         if (const std::string* v = get("max")) { int n = 60; toInt(*v, n); sl->setMaxSamples(n); }
         if (const std::string* v = get("color")) sl->setLineColor(colorOf(*v));
         if (const std::string* v = get("background")) sl->setBgColor(colorOf(*v));
+    } else if (auto* sw = dynamic_cast<SteeringWheel*>(w.get())) {
+        // maxAngle first: authoring both must not clamp the authored angle
+        // against the default lock-to-lock.
+        if (const std::string* v = get("maxangle")) {
+            float m = 180.0f;
+            toFloat(*v, m);
+            sw->setMaxAngle(m);
+        }
+        if (const std::string* v = get("angle")) { float a = 0.0f; toFloat(*v, a); sw->setAngle(a); }
+        if (const std::string* v = get("autocenter")) sw->setAutoCenter(toBool(*v));
+        if (const std::string* v = get("label")) sw->setLabel(*v);
+        if (const std::string* v = get("rimcolor")) sw->setRimColor(colorOf(*v));
+        if (const std::string* v = get("spokecolor")) sw->setSpokeColor(colorOf(*v));
+        if (const std::string* v = get("hubcolor")) sw->setHubColor(colorOf(*v));
+        if (hasStyle) {
+            sw->setFontFamily(st.fontFamily); sw->setFontSize(st.fontSize);
+            sw->setTextColor(st.textColor);
+        }
+    } else if (auto* pd = dynamic_cast<Pedal*>(w.get())) {
+        if (const std::string* v = get("label")) pd->setLabel(*v);
+        if (const std::string* v = get("value")) { float x = 0.0f; toFloat(*v, x); pd->setValue(x); }
+        if (const std::string* v = get("speed")) { float s = 7.0f; toFloat(*v, s); pd->setSpeed(s); }
+        if (const std::string* v = get("platecolor")) pd->setPlateColor(colorOf(*v));
+        if (const std::string* v = get("housingcolor")) pd->setHousingColor(colorOf(*v));
+        if (const std::string* v = get("accent")) pd->setAccentColor(colorOf(*v));
+        if (hasStyle) {
+            pd->setHousingColor(st.backgroundColor); pd->setTextColor(st.textColor);
+            pd->setFontFamily(st.fontFamily); pd->setFontSize(st.fontSize);
+        }
+    } else if (auto* sm = dynamic_cast<Speedometer*>(w.get())) {
+        float lo = sm->minimum(), hi = sm->maximum();
+        bool hasRange = false;
+        if (const std::string* v = get("min")) { toFloat(*v, lo); hasRange = true; }
+        if (const std::string* v = get("max")) { toFloat(*v, hi); hasRange = true; }
+        if (hasRange) sm->setRange(lo, hi);
+        if (const std::string* v = get("value")) { float x = 0.0f; toFloat(*v, x); sm->setValue(x); }
+        if (const std::string* v = get("unit")) sm->setUnit(*v);
+        if (const std::string* v = get("label")) sm->setLabel(*v);
+        if (const std::string* v = get("redline")) { float r = 0.0f; toFloat(*v, r); sm->setRedline(r); }
+        if (const std::string* v = get("needlecolor")) sm->setNeedleColor(colorOf(*v));
+        if (const std::string* v = get("tickcolor")) sm->setTickColor(colorOf(*v));
+        if (const std::string* v = get("dialcolor")) sm->setDialColor(colorOf(*v));
+        if (hasStyle) {
+            sm->setFontFamily(st.fontFamily); sm->setFontSize(st.fontSize);
+            sm->setTextColor(st.textColor);
+        }
     } else if (auto* mn = dynamic_cast<Menu*>(w.get())) {
         if (const std::string* v = get("label")) mn->setLabel(*v);
         if (const std::string* v = get("text")) mn->setLabel(*v);

@@ -479,6 +479,10 @@ std::map<std::string, WidgetFactory>& widgetRegistry() {
         reg["ramp"] = mk<RampEditor>;
         reg["curveeditor"] = mk<CurveEditor>;
         reg["curve"] = mk<CurveEditor>;
+        // Vehicle cockpit: a farm simulator's driving HUD.
+        reg["steeringwheel"] = mk<SteeringWheel>;
+        reg["pedal"] = mk<Pedal>;
+        reg["speedometer"] = mk<Speedometer>;
     }
     return reg;
 }

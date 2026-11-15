@@ -93,6 +93,7 @@ add_library(ogui STATIC
     src/widgets_input.cpp
     src/widgets_list.cpp
     src/widgets_editor.cpp
+    src/widgets_vehicle.cpp
     src/clipboard.cpp
     src/software.cpp
     src/kernel.cpp
@@ -265,6 +266,12 @@ if(OGUI_BUILD_TESTS)
     add_executable(ogui_properties_test debug/tests/properties_test.cpp)
     target_link_libraries(ogui_properties_test PRIVATE ogui)
 
+    # The vehicle cockpit controls: a dragged wheel, a held pedal, a dial.
+    add_executable(ogui_cockpit_test debug/tests/cockpit_test.cpp)
+    target_link_libraries(ogui_cockpit_test PRIVATE ogui)
+    target_compile_definitions(ogui_cockpit_test PRIVATE
+        OGUI_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+
     # Reusable components: <template>, parameters, slots and scoped ids.
     add_executable(ogui_templates_test debug/tests/templates_test.cpp)
     target_link_libraries(ogui_templates_test PRIVATE ogui)
@@ -348,6 +355,7 @@ if(OGUI_BUILD_TESTS)
     add_test(NAME scrollbar COMMAND ogui_scrollbar_test)
     add_test(NAME script COMMAND ogui_script_test)
     add_test(NAME properties COMMAND ogui_properties_test)
+    add_test(NAME cockpit COMMAND ogui_cockpit_test)
     add_test(NAME templates COMMAND ogui_templates_test)
     add_test(NAME examples COMMAND ogui_examples_test)
     add_test(NAME bench COMMAND ogui_bench_test)

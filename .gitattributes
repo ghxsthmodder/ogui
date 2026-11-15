@@ -1,0 +1,3 @@
+# A Windows checkout must not hand CRLF to the scripts CI runs with bash:
+# an `eol=crlf` script fails on its shebang line before any build starts.
+*.sh text eol=lf

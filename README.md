@@ -211,6 +211,12 @@ cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-b
   error text, the side-effect-free
   `checkWidgetProperty()` the XML parser screens attributes with, and the Lua
   `ogui.get`/`ogui.set` fallback plus `ogui.props`.
+* `cockpit` — the vehicle controls: authored `angle`/`maxAngle`/`redline` land
+  on the widgets and not just the style, the pedal reads 1 the frame it is
+  pressed while its plate keeps travelling, a dragged wheel turns by the
+  shortest arc to full lock and auto-centres after release, the gauge clamps
+  and survives an explicit red zone across a range change, and the three tags
+  resolve to declared property tables.
 * `templates` — reusable components: parameter defaults and instance
   overrides, `<slot/>` with fallback markup, id scopes that nest with the
   components that own them, attribute and style fall-through to the generated
@@ -619,6 +625,9 @@ theme default.
 | `pathpicker` | read-only path field with a `...` button that opens a file-browser popup (folders first with a trailing `/`, `..` to go up, capped at 40 entries); picking a file fires the widget's `bind()` | `value`, `placeholder`, `path` (start folder), `filter` (extension, e.g. `.png`) |
 | `rampeditor` / `ramp` | horizontal color-gradient bar built from movable stops; click the bar to add a stop, drag a stop to reposition it, colours blend piecewise-linearly between neighbours; a change fires the widget's `bind()` | `stops` (`pos:#rrggbb pos:#rrggbb ...`, pos 0..1) |
 | `curveeditor` / `curve` | cubic-Bézier curve in a unit box with four draggable control points (endpoints cyan, handles yellow); `evaluate(t)` samples the eased output for animation | `points` (`x,y x,y x,y x,y`, normalised 0..1, y up) |
+| `steeringwheel` | draggable rim that turns the wheel by the shortest arc and eases back to centre on release; arrow keys steer, `Home` recentres; fires `change` with the angle | `angle` (degrees, negative = left), `maxAngle` (half of lock-to-lock, default 180), `autoCenter`, `label`, `rimColor`, `hubColor`, `spokeColor` |
+| `pedal` | foot pedal with a plate that travels while held; reports `value` 1 on press and 0 on release (or any analog value a script writes), `Space`/`Enter` also press it | `label`, `value` (0..1), `speed` (travel rate), `plateColor`, `accent`, `housingColor` |
+| `speedometer` | dial gauge over a 270° sweep: ticks and labels, optional red zone, needle and the number + unit printed in the middle | `value`, `min`, `max`, `redline`, `unit`, `label`, `needleColor`, `tickColor`, `dialColor` |
 | `separator` | rule, horizontal or vertical | `thickness`, `color` |
 | `tabs` / `tab` | header strip over stacked pages (inactive pages take no input); pages that don't fit the width collapse into a `...` popup menu, or with `scrolling="true"` the header becomes a drag/wheel-scrollable strip that keeps every tab visible | `active`, `tabHeight`, `headerColor`, `tabColor`, `activeColor`, `accent`, `scrolling` / `label` |
 | `group` | titled grouping box | `name` |

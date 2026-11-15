@@ -2827,6 +2827,207 @@ private:
 };
 
 // ------------------------------------------------------------------
+// Vehicle cockpit controls
+//
+// The three pieces a driving HUD is built from: a steering wheel whose rim
+// can be dragged (and springs back to centre), a pedal that travels while it
+// is held, and a dial gauge that turns a value into a needle angle. They
+// carry no vehicle model of their own -- a script or the host reads
+// `angle`/`value` and writes `value` back, exactly like the other controls.
+// ------------------------------------------------------------------
+
+// A steering wheel with a grab-and-turn rim. `angle` is in degrees, negative
+// turning left, clamped to +/- maxAngle (half of lock-to-lock: 180 means a
+// 360-degree wheel, 450 a 900-degree one). With autoCenter the rim eases back
+// to 0 after the finger/button is released, the way a real wheel does.
+class SteeringWheel : public Widget {
+public:
+    bool focusableByDefault() const override { return true; }
+
+    using AngleCallback = std::function<void(float)>;
+
+    SteeringWheel();
+    virtual ~SteeringWheel() override;
+
+    void setMaxAngle(float deg);          // clamped to >= 1
+    float maxAngle() const { return m_maxAngle; }
+    // Clamped into [-maxAngle, maxAngle]; programmatic, so no notification.
+    void setAngle(float deg);
+    float angle() const { return m_angle; }
+    // The same angle normalised to -1 (full left) .. 1 (full right), which is
+    // what a vehicle model wants to consume.
+    float steering() const;
+    void setAutoCenter(bool on) { m_autoCenter = on; }
+    bool autoCenter() const { return m_autoCenter; }
+
+    void setLabel(const std::string& l) { m_label = l; }
+    const std::string& label() const { return m_label; }
+    void setRimColor(const Color& c) { m_rimColor = c; }
+    Color rimColor() const { return m_rimColor; }
+    void setSpokeColor(const Color& c) { m_spokeColor = c; }
+    Color spokeColor() const { return m_spokeColor; }
+    void setHubColor(const Color& c) { m_hubColor = c; }
+    Color hubColor() const { return m_hubColor; }
+    void setTextColor(const Color& c) { m_textColor = c; }
+    Color textColor() const { return m_textColor; }
+    void setFontFamily(const std::string& f) { m_fontFam = f; }
+    const std::string& fontFamily() const { return m_fontFam; }
+    void setFontSize(int s) { m_fontSize = s; }
+    int fontSize() const { return m_fontSize; }
+
+    // Fires while the wheel is turned by the user (drag or arrow keys).
+    void setOnChanged(AngleCallback cb) { m_onChanged = std::move(cb); }
+
+    virtual void onTick(float dt) override;
+    virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
+    virtual void onPointerUp(MouseButton btn) override;
+    virtual void onPointerMove(const Offset2D& p) override;
+    virtual void onKeyDown(KeyCode key, uint32_t mods) override;
+    virtual void onDraw(Rasterizer& r) const override;
+    virtual bool isAnimating() const override {
+        return m_dragging || m_angle != 0.0f || Widget::isAnimating();
+    }
+
+private:
+    void commit(float deg);      // clamp + store + notify
+    Offset2D centre() const;     // hub centre, parent space
+
+    float m_angle = 0.0f;
+    float m_maxAngle = 180.0f;
+    bool m_autoCenter = true;
+    bool m_dragging = false;
+    // Wheel-angle offset of the press, so the rim turns with the finger
+    // instead of snapping the grabbed point to the top.
+    float m_grabAngle = 0.0f;
+
+    std::string m_label;
+    std::string m_fontFam = "sans";
+    int m_fontSize = 12;
+    Color m_rimColor{ogui::hexColor("#2b2b2b")};
+    Color m_spokeColor{ogui::hexColor("#8a8a8a")};
+    Color m_hubColor{ogui::hexColor("#3c3c3c")};
+    Color m_textColor{ogui::palette().text};
+    AngleCallback m_onChanged;
+};
+
+// A foot pedal: `value` is the travel in 0..1 (what a vehicle model reads),
+// while the plate is drawn eased toward it, so a press reads as a press
+// instead of a jump. Holding the pointer/key sets value 1 and releasing sets
+// 0; a script may also drive intermediate travel directly.
+class Pedal : public Widget {
+public:
+    bool focusableByDefault() const override { return true; }
+
+    using ValueCallback = std::function<void(float)>;
+
+    Pedal();
+    virtual ~Pedal() override;
+
+    void setLabel(const std::string& l) { m_label = l; }
+    const std::string& label() const { return m_label; }
+    // Clamped to 0..1; programmatic, so no notification.
+    void setValue(float v);
+    float value() const { return m_value; }
+    bool pressed() const { return m_held; }
+    // Travel animation speed, in units of full travel per second.
+    void setSpeed(float unitsPerSecond);
+    float speed() const { return m_speed; }
+
+    void setPlateColor(const Color& c) { m_plateColor = c; }
+    Color plateColor() const { return m_plateColor; }
+    void setAccentColor(const Color& c) { m_accentColor = c; }
+    Color accentColor() const { return m_accentColor; }
+    void setHousingColor(const Color& c) { m_housingColor = c; }
+    Color housingColor() const { return m_housingColor; }
+    void setTextColor(const Color& c) { m_textColor = c; }
+    Color textColor() const { return m_textColor; }
+    void setFontFamily(const std::string& f) { m_fontFam = f; }
+    const std::string& fontFamily() const { return m_fontFam; }
+    void setFontSize(int s) { m_fontSize = s; }
+    int fontSize() const { return m_fontSize; }
+
+    void setOnChanged(ValueCallback cb) { m_onChanged = std::move(cb); }
+
+    virtual void onTick(float dt) override;
+    virtual void onPointerDown(MouseButton btn, const Offset2D& p) override;
+    virtual void onPointerUp(MouseButton btn) override;
+    virtual void onKeyDown(KeyCode key, uint32_t mods) override;
+    virtual void onKeyUp(KeyCode key) override;
+    virtual void onDraw(Rasterizer& r) const override;
+    virtual bool isAnimating() const override {
+        return m_display != m_value || Widget::isAnimating();
+    }
+
+private:
+    void hold(bool down);        // user press/release: value 0 or 1 + notify
+
+    std::string m_label;
+    std::string m_fontFam = "sans";
+    int m_fontSize = 12;
+    float m_value = 0.0f;
+    float m_display = 0.0f;
+    float m_speed = 7.0f;
+    bool m_held = false;
+    Color m_plateColor{ogui::hexColor("#252525")};
+    Color m_accentColor{ogui::palette().accent};
+    Color m_housingColor{ogui::hexColor("#101010")};
+    Color m_textColor{ogui::palette().text};
+    ValueCallback m_onChanged;
+};
+
+// A dial gauge: `value` in `min`..`max` becomes a needle angle over a 270-degree
+// sweep, with tick labels, an optional red zone from `redline` and the number +
+// `unit` printed in the middle.
+class Speedometer : public Widget {
+public:
+    Speedometer();
+    virtual ~Speedometer() override;
+
+    void setValue(float v);
+    float value() const { return m_value; }
+    void setRange(float lo, float hi);   // hi > lo; re-clamps the value
+    float minimum() const { return m_min; }
+    float maximum() const { return m_max; }
+    void setUnit(const std::string& u) { m_unit = u; }
+    const std::string& unit() const { return m_unit; }
+    void setLabel(const std::string& l) { m_label = l; }
+    const std::string& label() const { return m_label; }
+    // Value at which the red zone starts; >= max draws none.
+    void setRedline(float v);
+    float redline() const { return m_redline; }
+
+    void setDialColor(const Color& c) { m_dialColor = c; }
+    Color dialColor() const { return m_dialColor; }
+    void setTickColor(const Color& c) { m_tickColor = c; }
+    Color tickColor() const { return m_tickColor; }
+    void setNeedleColor(const Color& c) { m_needleColor = c; }
+    Color needleColor() const { return m_needleColor; }
+    void setTextColor(const Color& c) { m_textColor = c; }
+    Color textColor() const { return m_textColor; }
+    void setFontFamily(const std::string& f) { m_fontFam = f; }
+    const std::string& fontFamily() const { return m_fontFam; }
+    void setFontSize(int s) { m_fontSize = s; }
+    int fontSize() const { return m_fontSize; }
+
+    virtual void onDraw(Rasterizer& r) const override;
+
+private:
+    float m_value = 0.0f;
+    float m_min = 0.0f;
+    float m_max = 40.0f;
+    float m_redline = 40.0f;
+    bool m_redlineSet = false;   // false = no red zone, whatever the range is
+    std::string m_unit = "km/h";
+    std::string m_label;
+    std::string m_fontFam = "sans";
+    int m_fontSize = 24;
+    Color m_dialColor{ogui::hexColor("#141414")};
+    Color m_tickColor{ogui::hexColor("#b9b9b9")};
+    Color m_needleColor{ogui::hexColor("#e0612a")};
+    Color m_textColor{ogui::palette().white};
+};
+
+// ------------------------------------------------------------------
 // Menu system: MenuPopup is the floating list (owned by whoever opens
 // it); MenuBar/Menu/MenuItem describe the XML tree; ContextMenu is an
 // invisible holder opened by the Kernel on right-click.

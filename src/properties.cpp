@@ -2933,6 +2933,175 @@ std::vector<PropertyDef> sparklineProps() {
     };
 }
 
+std::vector<PropertyDef> steeringwheelProps() {
+    return {
+        numberProp<SteeringWheel>(
+            "angle", [](const SteeringWheel& s) { return static_cast<double>(s.angle()); },
+            [](SteeringWheel& s, double v) {
+                s.setAngle(static_cast<float>(v));
+                return true;
+            },
+            "wheel rotation in degrees, negative = left"),
+        numberProp<SteeringWheel>(
+            "maxangle", [](const SteeringWheel& s) { return static_cast<double>(s.maxAngle()); },
+            [](SteeringWheel& s, double v) {
+                s.setMaxAngle(static_cast<float>(v));
+                return true;
+            },
+            "half of the lock-to-lock travel, in degrees"),
+        boolProp<SteeringWheel>(
+            "autocenter", [](const SteeringWheel& s) { return s.autoCenter(); },
+            [](SteeringWheel& s, bool v) {
+                s.setAutoCenter(v);
+                return true;
+            },
+            "ease the rim back to centre after release"),
+        stringProp<SteeringWheel>(
+            "label", [](const SteeringWheel& s) { return s.label(); },
+            [](SteeringWheel& s, const std::string& v) {
+                s.setLabel(v);
+                return true;
+            },
+            "caption under the hub"),
+        colorProp<SteeringWheel>(
+            "rimcolor", [](const SteeringWheel& s) { return s.rimColor(); },
+            [](SteeringWheel& s, const Color& c) {
+                s.setRimColor(c);
+                return true;
+            },
+            "colour of the rim"),
+        colorProp<SteeringWheel>(
+            "hubcolor", [](const SteeringWheel& s) { return s.hubColor(); },
+            [](SteeringWheel& s, const Color& c) {
+                s.setHubColor(c);
+                return true;
+            },
+            "colour of the hub"),
+        colorProp<SteeringWheel>(
+            "spokecolor", [](const SteeringWheel& s) { return s.spokeColor(); },
+            [](SteeringWheel& s, const Color& c) {
+                s.setSpokeColor(c);
+                return true;
+            },
+            "colour of the three spokes"),
+    };
+}
+
+std::vector<PropertyDef> pedalProps() {
+    return {
+        stringProp<Pedal>(
+            "label", [](const Pedal& p) { return p.label(); },
+            [](Pedal& p, const std::string& v) {
+                p.setLabel(v);
+                return true;
+            },
+            "caption under the pedal"),
+        numberProp<Pedal>(
+            "value", [](const Pedal& p) { return static_cast<double>(p.value()); },
+            [](Pedal& p, double v) {
+                p.setValue(static_cast<float>(v));
+                return true;
+            },
+            "travel in 0..1 (the amount a vehicle model reads)"),
+        numberProp<Pedal>(
+            "speed", [](const Pedal& p) { return static_cast<double>(p.speed()); },
+            [](Pedal& p, double v) {
+                p.setSpeed(static_cast<float>(v));
+                return true;
+            },
+            "how fast the plate travels, in full presses per second"),
+        colorProp<Pedal>(
+            "housingcolor", [](const Pedal& p) { return p.housingColor(); },
+            [](Pedal& p, const Color& c) {
+                p.setHousingColor(c);
+                return true;
+            },
+            "colour of the fixed housing (also `background`)"),
+        colorProp<Pedal>(
+            "platecolor", [](const Pedal& p) { return p.plateColor(); },
+            [](Pedal& p, const Color& c) {
+                p.setPlateColor(c);
+                return true;
+            },
+            "colour of the moving plate"),
+        colorProp<Pedal>(
+            "accent", [](const Pedal& p) { return p.accentColor(); },
+            [](Pedal& p, const Color& c) {
+                p.setAccentColor(c);
+                return true;
+            },
+            "colour of the travel rail fill"),
+    };
+}
+
+std::vector<PropertyDef> speedometerProps() {
+    return {
+        numberProp<Speedometer>(
+            "value", [](const Speedometer& s) { return static_cast<double>(s.value()); },
+            [](Speedometer& s, double v) {
+                s.setValue(static_cast<float>(v));
+                return true;
+            },
+            "reading the needle points at"),
+        numberProp<Speedometer>(
+            "min", [](const Speedometer& s) { return static_cast<double>(s.minimum()); },
+            [](Speedometer& s, double v) {
+                s.setRange(static_cast<float>(v), s.maximum());
+                return true;
+            },
+            "low end of the dial"),
+        numberProp<Speedometer>(
+            "max", [](const Speedometer& s) { return static_cast<double>(s.maximum()); },
+            [](Speedometer& s, double v) {
+                s.setRange(s.minimum(), static_cast<float>(v));
+                return true;
+            },
+            "high end of the dial"),
+        stringProp<Speedometer>(
+            "unit", [](const Speedometer& s) { return s.unit(); },
+            [](Speedometer& s, const std::string& v) {
+                s.setUnit(v);
+                return true;
+            },
+            "unit printed under the number"),
+        stringProp<Speedometer>(
+            "label", [](const Speedometer& s) { return s.label(); },
+            [](Speedometer& s, const std::string& v) {
+                s.setLabel(v);
+                return true;
+            },
+            "caption above the hub"),
+        numberProp<Speedometer>(
+            "redline", [](const Speedometer& s) { return static_cast<double>(s.redline()); },
+            [](Speedometer& s, double v) {
+                s.setRedline(static_cast<float>(v));
+                return true;
+            },
+            "value the red zone starts at (max = none)"),
+        colorProp<Speedometer>(
+            "needlecolor", [](const Speedometer& s) { return s.needleColor(); },
+            [](Speedometer& s, const Color& c) {
+                s.setNeedleColor(c);
+                return true;
+            },
+            "colour of the needle"),
+        colorProp<Speedometer>(
+            "tickcolor", [](const Speedometer& s) { return s.tickColor(); },
+            [](Speedometer& s, const Color& c) {
+                s.setTickColor(c);
+                return true;
+            },
+            "colour of the tick marks"),
+        colorProp<Speedometer>(
+            "dialcolor", [](const Speedometer& s) { return s.dialColor(); },
+            [](Speedometer& s, const Color& c) {
+                s.setDialColor(c);
+                return true;
+            },
+            "colour of the dial face (also `background`)"),
+    };
+}
+
 }  // namespace
 
 void PropertyRegistry::loadBuiltins() {
@@ -3006,6 +3175,11 @@ void PropertyRegistry::loadBuiltins() {
     self.declare(typeid(CurveEditor), typeid(Widget), curveeditorProps());
     self.declare(typeid(Spinner), typeid(Widget), spinnerProps());
     self.declare(typeid(Sparkline), typeid(Widget), sparklineProps());
+
+    // Vehicle cockpit controls.
+    self.declare(typeid(SteeringWheel), typeid(Widget), steeringwheelProps());
+    self.declare(typeid(Pedal), typeid(Widget), pedalProps());
+    self.declare(typeid(Speedometer), typeid(Widget), speedometerProps());
 }
 
 }  // namespace ogui

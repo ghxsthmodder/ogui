@@ -83,6 +83,10 @@ bool numValueGet(Widget* w, double& out) {
     if (auto* s = dynamic_cast<Slider*>(w))       { out = s->value(); return true; }
     if (auto* p = dynamic_cast<ProgressBar*>(w))  { out = p->value(); return true; }
     if (auto* b = dynamic_cast<SpinBox*>(w))      { out = b->value(); return true; }
+    // The cockpit controls carry the same `value` a script reads and writes:
+    // pedal travel and the gauge reading (the wheel's is `angle`).
+    if (auto* pd = dynamic_cast<Pedal*>(w))       { out = pd->value(); return true; }
+    if (auto* sm = dynamic_cast<Speedometer*>(w)) { out = sm->value(); return true; }
     return false;
 }
 
@@ -90,6 +94,8 @@ bool numValueSet(Widget* w, double v) {
     if (auto* s = dynamic_cast<Slider*>(w))       { s->setValue(static_cast<float>(v)); return true; }
     if (auto* p = dynamic_cast<ProgressBar*>(w))  { p->setValue(static_cast<float>(v)); return true; }
     if (auto* b = dynamic_cast<SpinBox*>(w))      { b->setValue(static_cast<float>(v)); return true; }
+    if (auto* pd = dynamic_cast<Pedal*>(w))       { pd->setValue(static_cast<float>(v)); return true; }
+    if (auto* sm = dynamic_cast<Speedometer*>(w)) { sm->setValue(static_cast<float>(v)); return true; }
     return false;
 }
 

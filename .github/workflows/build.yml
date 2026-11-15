@@ -1,0 +1,161 @@
+# Windows + Android arm64 builds of ogui.
+#
+# Both jobs run the same script a developer runs locally (`scripts/build.sh`),
+# so CI cannot drift from the documented build:
+#
+#   windows-x64   mingw-w64 x86_64 -> debug/demo.exe + debug/validate.exe
+#                 (fully static, screens copied beside the executables)
+#   android-arm64 NDK + SDK      -> build-apk/ogui-demo-debug.apk
+#                 (arm64-v8a only, debug-signed, arm64 library verified)
+#
+# stb is not vendored in the repository (thirdparty/stb), so each job fetches
+# the three headers the build compiles against before configuring. Windows has
+# no CMake configure in that path, and fetching explicitly keeps the Android
+# job from depending on CMake's silent `git clone` fallback.
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Keep the static library from being built once per core on a small runner.
+  CMAKE_BUILD_PARALLEL_LEVEL: "4"
+
+jobs:
+  windows-x64:
+    name: Windows x64 (mingw, static)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up MinGW-w64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: >-
+            mingw-w64-x86_64-gcc
+            curl
+
+      - name: Fetch the stb headers
+        run: |
+          mkdir -p thirdparty/stb
+          for f in stb_truetype.h stb_image.h stb_image_write.h; do
+            curl -fsSL --retry 3 -o "thirdparty/stb/$f" \
+              "https://raw.githubusercontent.com/nothings/stb/master/$f"
+          done
+
+      - name: Build demo.exe and validate.exe
+        id: build
+        run: ./scripts/build.sh win
+
+      # The build copies the screens next to validate.exe; parsing them proves
+      # both the executable and the layouts it ships with are intact.
+      - name: Lint the shipped layouts
+        run: cd debug && ./validate.exe --manifest --chdir . manifest.xml
+
+      - name: Upload the Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ogui-windows-x64
+          if-no-files-found: error
+          # The screens travel with the executable: debug/ is what gets copied
+          # to a Windows machine and run from there.
+          path: |
+            debug/demo.exe
+            debug/validate.exe
+            debug/manifest.xml
+            debug/layout_demo.xml
+            debug/layouts
+            debug/themes
+            debug/assets
+
+  android-arm64:
+    name: Android arm64-v8a (APK)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      # The input connection ships as bytecode (classes.dex), so the APK build
+      # needs javac/d8/apksigner from a JDK.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Fetch the stb headers
+        run: |
+          mkdir -p thirdparty/stb
+          for f in stb_truetype.h stb_image.h stb_image_write.h; do
+            curl -fsSL --retry 3 -o "thirdparty/stb/$f" \
+              "https://raw.githubusercontent.com/nothings/stb/master/$f"
+          done
+
+      # Use the NDK the runner image already carries; the SDK is the same place
+      # the image keeps build-tools and platforms.
+      - name: Locate the NDK and SDK
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          [ -n "$SDK" ] || { echo "error: no Android SDK on this runner" >&2; exit 1; }
+          # The image may name the newest NDK under any of these, and a
+          # self-hosted runner may name none: fall back to the SDK's own ndk/.
+          NDK="${ANDROID_NDK_LATEST_HOME:-${ANDROID_NDK:-${ANDROID_NDK_ROOT:-}}}"
+          if [ -z "$NDK" ]; then
+            NDK="$(ls -d "$SDK"/ndk/* 2>/dev/null | sort -V | tail -1)"
+          fi
+          [ -f "$NDK/build/cmake/android.toolchain.cmake" ] || {
+            echo "error: no NDK found under $SDK/ndk" >&2; exit 1; }
+          echo "ANDROID_SDK=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK=$NDK" >> "$GITHUB_ENV"
+          echo "using NDK $NDK"
+
+      # android/AndroidManifest.xml targets SDK 36, and aapt2 links against the
+      # newest installed platform; install it rather than hope the image has it.
+      - name: Install the target platform and build-tools
+        run: |
+          set -euo pipefail
+          SDKM="$(command -v sdkmanager || true)"
+          if [ -z "$SDKM" ]; then
+            SDKM="$ANDROID_SDK/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          [ -x "$SDKM" ] || { echo "error: no sdkmanager" >&2; exit 1; }
+          yes | "$SDKM" --licenses > /dev/null || true
+          "$SDKM" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Build the arm64-v8a APK
+        run: ANDROID_ABIS=arm64-v8a ./scripts/build.sh android
+
+      - name: Check that the APK carries arm64 code
+        run: |
+          set -euo pipefail
+          listing="$(unzip -l build-apk/ogui-demo-debug.apk)"
+          grep -E 'lib/arm64-v8a/liboggui_app\.so' <<<"$listing"
+          grep -E 'classes\.dex' <<<"$listing"
+          # One ABI only: an arm64 APK that also packed another ABI would be a
+          # different artifact than the name promises.
+          if grep -E 'lib/(armeabi-v7a|x86|x86_64)/' <<<"$listing"; then
+            echo "error: the APK carries an ABI this job did not build" >&2
+            exit 1
+          fi
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ogui-android-arm64
+          if-no-files-found: error
+          path: build-apk/ogui-demo-debug.apk

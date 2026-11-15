@@ -12,6 +12,7 @@
   <screen title="Containers" path="layouts/layout_containers.xml"/>
   <screen title="Widgets"    path="layouts/layout_widgets.xml"/>
   <screen title="Game"       path="layouts/layout_game.xml"/>
+  <screen title="Cockpit"    path="layouts/layout_cockpit.xml"/>
   <screen title="Script"     path="layouts/layout_script.xml"/>
   <screen title="Design"     path="layouts/layout_design.xml"/>
   <screen title="Form"       path="layouts/layout_form.xml"/>
