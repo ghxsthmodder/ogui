@@ -157,12 +157,26 @@ extern "C" void android_main(struct android_app* app) {
     // costing it two of the rows it has no height to spare; hiding them leaves
     // the insets at zero and the layout moves out on its own. Portrait and
     // square windows keep them, which is what an app that is also a document
-    // wants -- and the host re-decides on every rotation.
+    // wants -- and the host re-decides on every rotation. The nav bar carries a
+    // switch for the same option, so the demo can be flipped at runtime without
+    // a rebuild: the bars come back and the tree takes their insets again.
     a.host.setHideSystemBarsInLandscape(true);
 
-    a.gallery = gallery::loadAll(kDesignWidth, kDesignHeight);
+    a.gallery = gallery::loadAll(kDesignWidth, kDesignHeight, true,
+                                 a.host.hideSystemBarsInLandscape());
     int navIndex = 0;
     gallery::install(a.kernel, a.gallery, navIndex, 0, kDesignWidth, kDesignHeight);
+
+    a.kernel.bind("navBars", [&a] {
+        const bool on = !a.host.hideSystemBarsInLandscape();
+        a.host.setHideSystemBarsInLandscape(on);
+        // The gallery mirrors the switch so a hot reload re-parses the nav bar
+        // with the state the session is actually in, not the startup default.
+        a.gallery.barsOn = on;
+        a.kernel.showToast(on ? "Barras ocultas em paisagem."
+                              : "Barras do sistema sempre visiveis.",
+                           ogui::Kernel::ToastKind::Info);
+    });
 
     // ---- the 3D screen ---------------------------------------------------
     // The SceneView on screen 3D is wired exactly like the desktop demo's: the

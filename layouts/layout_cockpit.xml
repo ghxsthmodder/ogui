@@ -18,8 +18,13 @@
          font="anton" fontSize="16" color="#e8d9a8"/>
   <label id="crop" text="SOJA - TALHAO 07" x="372" y="64" width="260" height="22"
          color="#9fb08f"/>
+  <!-- anchored to the right edge, and so is everything else in the engine
+       column: a landscape canvas is 1300 units wide, and a HUD whose right
+       half stayed at x=628 would leave 500 units of empty screen. Anchors pin
+       the margins the 800-wide authoring implies (right margin 20 here) and
+       hold them while the canvas grows. -->
   <label id="clock" text="06:40" align="right" x="660" y="64" width="120" height="22"
-         color="#e8d9a8"/>
+         anchor="right" color="#e8d9a8"/>
 
   <!-- velocimetro: 0..60 km/h, zona vermelha acima de 45 -->
   <speedometer id="speedo" x="24" y="104" width="250" height="250"
@@ -46,43 +51,48 @@
   <label id="heading" text="EM LINHA RETA" x="38" y="534" width="222" height="18"
          fontSize="12" color="#9fb08f"/>
 
-  <!-- volante: 220 graus para cada lado -->
+  <!-- volante: 220 graus para cada lado. Ancorado nas duas bordas, o quadro
+       dele cresce junto com o canvas e o desenho (raio = menor lado, centrado)
+       fica no meio da folga entre os instrumentos e o painel do motor: 450 em
+       800 de largura, 700 em 1300. -->
   <steeringwheel id="steer" x="300" y="120" width="300" height="300"
-                 maxangle="220" label="VOLANTE"
+                 anchor="left,right" maxangle="220" label="VOLANTE"
                  rimcolor="#1f231d" hubcolor="#3a4034" spokecolor="#9aa28e"
                  font="anton" color="#d8d2bd" fontSize="14"
                  tooltip="Arraste o volante para estercar"/>
 
   <!-- pedais: freio a esquerda, acelerador a direita -->
-  <pedal id="brake" x="636" y="372" width="70" height="180" label="FREIO"
+  <pedal id="brake" anchor="right" x="636" y="372" width="70" height="180" label="FREIO"
          background="#1c1313" platecolor="#3d2b2b" accent="#d2503c"
          font="anton" color="#f0dede" fontSize="14" tooltip="Segure para frear"/>
-  <pedal id="accel" x="716" y="372" width="70" height="180" label="ACELERADOR"
+  <pedal id="accel" anchor="right" x="716" y="372" width="70" height="180" label="ACELERADOR"
          background="#121a12" platecolor="#2e3c2b" accent="#67c04a"
          font="anton" color="#e2efdc" fontSize="14" tooltip="Segure para acelerar"/>
 
   <!-- painel do motor -->
   <panel x="628" y="104" width="156" height="250" background="#161b16"
-         border="#2c3a2c" borderWidth="1" radius="8"/>
+         border="#2c3a2c" borderWidth="1" radius="8" anchor="right"/>
   <label text="MARCHA" x="640" y="114" width="130" height="18"
-         fontSize="12" color="#7f8c76"/>
+         fontSize="12" color="#7f8c76" anchor="right"/>
   <label id="gear" text="N" x="640" y="132" width="130" height="58"
-         font="anton" fontSize="46" color="#e8d9a8"/>
+         font="anton" fontSize="46" color="#e8d9a8" anchor="right"/>
   <label text="MOTOR" x="640" y="192" width="120" height="18"
-         fontSize="12" color="#7f8c76"/>
+         fontSize="12" color="#7f8c76" anchor="right"/>
   <label id="rpm" text="850 rpm" x="640" y="210" width="130" height="24"
-         font="anton" fontSize="20" color="#c9cdc0"/>
-  <separator x="640" y="244" width="130" height="1"/>
+         font="anton" fontSize="20" color="#c9cdc0" anchor="right"/>
+  <separator x="640" y="244" width="130" height="1" anchor="right"/>
   <label text="COMBUSTIVEL" x="640" y="254" width="130" height="18"
-         fontSize="12" color="#7f8c76"/>
-  <progress id="fuel" value="0.72" color="#c49b3c" x="640" y="278" width="130" height="14"/>
+         fontSize="12" color="#7f8c76" anchor="right"/>
+  <progress id="fuel" value="0.72" color="#c49b3c" x="640" y="278" width="130" height="14"
+            anchor="right"/>
   <label text="Fazenda Santa Rita" x="640" y="300" width="130" height="20"
-         color="#9fb08f"/>
+         color="#9fb08f" anchor="right"/>
   <label text="Cascavel - PR" x="640" y="322" width="130" height="18"
-         fontSize="12" color="#7f8c76"/>
+         fontSize="12" color="#7f8c76" anchor="right"/>
 
-  <!-- rodape -->
-  <statusbar x="0" y="562" width="100%" height="38" background="#1b211a"
+  <!-- rodape: ancorado embaixo, para um canvas alto (um telefone em pe da
+       800x1733) nao deixar a barra flutuando no meio da tela. -->
+  <statusbar x="0" y="562" width="100%" height="38" background="#1b211a" anchor="bottom"
              left="TALHAO 07 - SOJA" center="SAFRA 2026/27"
              right="Arraste o volante - segure os pedais" size="13"/>
 

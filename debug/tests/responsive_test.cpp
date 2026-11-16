@@ -62,9 +62,12 @@ ogui::Rect intersect(const ogui::Rect& a, const ogui::Rect& b) {
 }
 
 // Lays `screen` out at c.w x c.h and reports every visible widget whose bounds
-// leave that canvas.
+// leave that canvas. When `rotateTo` is given the same screen is handed a second
+// canvas after the first layout, which is what a rotation does to a running app
+// -- and the only way to exercise the edge anchors, whose margins are captured
+// on a layout pass and held across later resizes.
 int offCanvasWidgets(std::shared_ptr<ogui::Screen> screen, const Canvas& c,
-                     std::string* first) {
+                     std::string* first, const Canvas* rotateTo = nullptr) {
     screen->width = c.w;
     screen->height = c.h;
     screen->scale = 1.0f;
@@ -74,6 +77,13 @@ int offCanvasWidgets(std::shared_ptr<ogui::Screen> screen, const Canvas& c,
     kernel.pushScreen(screen);
     ogui::InputState input{};
     kernel.frame(input);
+
+    if (rotateTo) {
+        screen->width = rotateTo->w;
+        screen->height = rotateTo->h;
+        input.time += 0.1f;
+        kernel.frame(input);
+    }
 
     const ogui::Rect canvas{0, 0, kernel.logicalWidth(), kernel.logicalHeight()};
     int off = 0;
@@ -158,8 +168,86 @@ int main() {
         }
     }
 
+    // Rotations. A freshly parsed screen captures its anchor margins on the
+    // canvas it is first laid out on, so the audit above never moves anything;
+    // these lay out at the design size first and then hand the screen the
+    // landscape canvas a phone gives it (1300x600) and the portrait one
+    // (800x1733). Anything anchored to the edge lands outside the canvas here if
+    // the anchors are wrong, which is exactly the bug this file is for.
+    const std::vector<Canvas> rotations = {
+        {"landscape", 1300.0f, 600.0f},
+        {"portrait", 800.0f, 1733.0f},
+    };
+    for (const Canvas& to : rotations) {
+        gallery::Gallery g = gallery::loadAll(designW, designH);
+        for (size_t i = 0; i < g.screens.size(); ++i) {
+            std::string first;
+            const int off = offCanvasWidgets(g.screens[i],
+                                             Canvas{"design", 800.0f, 600.0f},
+                                             &first, &to);
+            if (off) {
+                fail(std::string(to.name) + " (after a rotation): " +
+                     g.titles[i] + " has " + std::to_string(off) +
+                     " widget(s) outside the canvas: " + first);
+            }
+        }
+    }
+
+    // The point of the anchors, in pixels: on the landscape canvas the 3D
+    // viewport has to reach the right margin and the cockpit's engine column has
+    // to sit against it. A layout left at its authored 800 would pass the audit
+    // and still leave 500 units of screen unused.
+    {
+        gallery::Gallery g = gallery::loadAll(designW, designH);
+        auto screen = g.screens[9];  // "3D" in manifest.xml
+        ogui::Kernel kernel;
+        kernel.init();
+        kernel.pushScreen(screen);
+        screen->width = 800.0f;
+        screen->height = 600.0f;
+        screen->scale = 1.0f;
+        ogui::InputState input{};
+        kernel.frame(input);
+        screen->width = 1300.0f;
+        input.time += 0.1f;
+        kernel.frame(input);
+        auto* view = kernel.findWidget("view3d");
+        if (!view) {
+            fail("the 3D screen lost its viewport");
+        } else if (view->bounds().w < 1200.0f) {
+            fail("the 3D viewport did not grow into a landscape canvas: width " +
+                 std::to_string(view->bounds().w));
+        }
+
+        // The cockpit's engine column is anchored to the right edge, so its
+        // right margin (30 units at 800) has to hold at 1300.
+        auto hud = g.screens[8];  // "Cockpit"
+        ogui::Kernel k2;
+        k2.init();
+        k2.pushScreen(hud);
+        hud->width = 800.0f;
+        hud->height = 600.0f;
+        hud->scale = 1.0f;
+        ogui::InputState in2{};
+        k2.frame(in2);
+        hud->width = 1300.0f;
+        in2.time += 0.1f;
+        k2.frame(in2);
+        auto* gear = k2.findWidget("gear");
+        if (!gear) {
+            fail("the cockpit lost its gear label");
+        } else {
+            const float right = gear->bounds().x + gear->bounds().w;
+            if (right < 1250.0f) {
+                fail("the cockpit's engine column did not follow the right edge: "
+                     "gear ends at " + std::to_string(right));
+            }
+        }
+    }
+
     if (g_failures == 0) {
-        std::cout << "responsive: every screen fits the desktop and phone canvases\n";
+        std::cout << "responsive: every screen fits the desktop and phone canvases,"
+                     " before and after a rotation\n";
         return 0;
     }
     std::cerr << "responsive: " << g_failures << " failure(s)\n";

@@ -97,22 +97,35 @@ inline void applyManifestTheme(const std::string& file = "manifest.xml") {
 
 // A Prev / Title / Next bar laid out as a Row across the top of a screen.
 // Returns the title label so the caller can stamp the group name on it.
+//
+// `barsToggle` adds the control the phone demo needs -- one switch that says
+// whether the system bars are hidden in landscape -- and is off elsewhere, so a
+// host that has no system bars does not show a button that cannot do anything.
 inline ogui::Label* addNavBar(const ogui::Widget::Ptr& root, float width,
-                              bool light) {
+                              bool light, bool barsToggle = false,
+                              bool barsOn = false) {
     auto bar = std::make_shared<ogui::Row>();
     bar->setId("navbar");
-    bar->setBounds(ogui::Rect{10.0f, 10.0f, width - 20.0f, 32.0f});
-    // Fully absolute: the screen may be laid out at the design minimum while
-    // the host window is narrower, and the bar must stay inside the visible
-    // edge rather than stretch across the clamped layout width.
-    bar->setGeometrySpec(ogui::Rect{10.0f, 10.0f, width - 20.0f, 32.0f},
+    // A percent width and not `width - 20`: the gallery is parsed at 800 units
+    // and laid out on wider canvases -- a landscape phone gets 1300 -- where an
+    // absolute bar stopped 500 units short of the edge and the title sat in the
+    // middle of nothing. Percent is re-resolved on every layout pass, so the bar
+    // follows the screen; the 10px insets the old absolute bar expressed as
+    // geometry are the Row's padding now.
+    bar->setBounds(ogui::Rect{0.0f, 10.0f, width, 32.0f});
+    bar->setGeometrySpec(ogui::Rect{0.0f, 10.0f, 100.0f, 32.0f},
                          ogui::Widget::GeomAbsolute, ogui::Widget::GeomAbsolute,
-                         ogui::Widget::GeomAbsolute, ogui::Widget::GeomAbsolute);
+                         ogui::Widget::GeomPercent, ogui::Widget::GeomAbsolute);
+    {
+        ogui::Style barStyle;
+        barStyle.padding = 10.0f;
+        bar->applyStyle(barStyle);
+    }
 
     auto prev = std::make_shared<ogui::Button>();
     prev->setId("nav_prev");
     prev->setText("< Voltar");
-    prev->setBounds(ogui::Rect{0.0f, 0.0f, 120.0f, 32.0f});
+    prev->setBounds(ogui::Rect{0.0f, 0.0f, 96.0f, 32.0f});
     prev->setBinding("navPrev");
     prev->setBgColor(ogui::palette().surfaceHi);
     prev->setTextColor(ogui::palette().textBright);
@@ -120,16 +133,19 @@ inline ogui::Label* addNavBar(const ogui::Widget::Ptr& root, float width,
 
     auto title = std::make_shared<ogui::Label>();
     title->setId("nav_title");
-    // 380, not 420: with the two buttons and the theme toggle the old widths
-    // summed past the bar, and the toggle's label was drawn off the right edge.
-    title->setBounds(ogui::Rect{0.0f, 0.0f, 380.0f, 32.0f});
+    // Weighted rather than a fixed 380: the bar is 780 units wide on the desktop
+    // and 1280 on a phone in landscape, and the title is what has to absorb the
+    // difference. Authored at 180 so a bar with no leftover (a window narrower
+    // than the design) still has somewhere to put the text.
+    title->setBounds(ogui::Rect{0.0f, 0.0f, 180.0f, 32.0f});
+    title->setWeight(1.0f);
     title->setTextColor(ogui::palette().text);
     title->setFontSize(16);
 
     auto next = std::make_shared<ogui::Button>();
     next->setId("nav_next");
     next->setText("Avancar >");
-    next->setBounds(ogui::Rect{0.0f, 0.0f, 120.0f, 32.0f});
+    next->setBounds(ogui::Rect{0.0f, 0.0f, 96.0f, 32.0f});
     next->setBinding("navNext");
     next->setBgColor(ogui::palette().surfaceHi);
     next->setTextColor(ogui::palette().textBright);
@@ -137,15 +153,40 @@ inline ogui::Label* addNavBar(const ogui::Widget::Ptr& root, float width,
 
     auto theme = std::make_shared<ogui::ToggleSwitch>();
     theme->setId("nav_theme");
-    theme->setBounds(ogui::Rect{0.0f, 0.0f, 140.0f, 32.0f});
+    theme->setBounds(ogui::Rect{0.0f, 0.0f, 130.0f, 32.0f});
     theme->setText("Tema claro");
     theme->setState(light);
     theme->setBinding("navTheme");
+
+    // Re-parse every screen from its XML on a press: the demo's edit loop. On a
+    // desktop that reads the files again, so a layout saved in an editor is on
+    // screen one press later; on a phone it re-reads the APK's assets, which is
+    // the same call doing nothing visible until the APK changes.
+    auto reload = std::make_shared<ogui::Button>();
+    reload->setId("nav_reload");
+    reload->setText("Recarregar");
+    reload->setBounds(ogui::Rect{0.0f, 0.0f, 104.0f, 32.0f});
+    reload->setBinding("navReload");
+    reload->setBgColor(ogui::palette().surfaceHi);
+    reload->setTextColor(ogui::palette().textBright);
+    reload->setRadius(6.0f);
 
     bar->addChild(prev);
     bar->addChild(title);
     bar->addChild(next);
     bar->addChild(theme);
+    bar->addChild(reload);
+
+    if (barsToggle) {
+        auto bars = std::make_shared<ogui::ToggleSwitch>();
+        bars->setId("nav_bars");
+        bars->setBounds(ogui::Rect{0.0f, 0.0f, 135.0f, 32.0f});
+        bars->setText("Barras");
+        bars->setState(barsOn);
+        bars->setBinding("navBars");
+        bar->addChild(bars);
+    }
+
     root->addChild(bar);
     return title.get();
 }
@@ -156,7 +197,9 @@ inline ogui::Label* addNavBar(const ogui::Widget::Ptr& root, float width,
 struct Gallery {
     std::vector<std::string> titles;
     std::vector<std::shared_ptr<ogui::Screen>> screens;
-    bool light = false;  // current theme, kept across re-parses
+    bool light = false;       // current theme, kept across re-parses
+    bool barsToggle = false;  // host has system bars and wants the switch
+    bool barsOn = false;      // what that switch says, kept across re-parses
 };
 
 // setActiveTheme() copies the preset, so identity must be checked by palette
@@ -167,7 +210,8 @@ inline bool activeThemeIsLight() {
     return a.r == b.r && a.g == b.g && a.b == b.b;
 }
 
-inline Gallery loadAll(float width, float height) {
+inline Gallery loadAll(float width, float height, bool barsToggle = false,
+                       bool barsOn = false) {
     applyManifestTheme();
     // The layouts mix fixed-px rows with %-height boxes; below roughly this
     // design size the percentage rows slide up into the boxes above them.
@@ -176,6 +220,8 @@ inline Gallery loadAll(float width, float height) {
     const float contentH = std::max(height, 600.0f);
     Gallery g;
     g.light = activeThemeIsLight();
+    g.barsToggle = barsToggle;
+    g.barsOn = barsOn;
     ogui::XmlParser parser;
     for (const auto& [title, path] : manifest()) {
         auto contents = text(path);
@@ -189,7 +235,7 @@ inline Gallery loadAll(float width, float height) {
             for (const auto& e : res.errors) std::cerr << "  - " << e << "\n";
             continue;
         }
-        addNavBar(res.root, width, g.light);
+        addNavBar(res.root, width, g.light, barsToggle, barsOn);
         auto screen = std::make_shared<ogui::Screen>(title);
         screen->width = contentW;
         screen->height = contentH;
@@ -230,25 +276,42 @@ inline void install(ogui::Kernel& k, Gallery& g, int& index, int start = 0,
         (*show)();
     });
 
-    // Dark <-> light: install the preset, re-parse every layout so @tokens
-    // and defaultStyle re-resolve, then re-show the current screen. The old
-    // trees are parked in a graveyard because the clicked toggle is still
-    // mid-dispatch inside one of them.
-    k.bind("navTheme", [&k, &g, &index, show, width, height] {
-        const bool light = !g.light;
-        ogui::setActiveTheme(light ? ogui::lightTheme() : ogui::darkTheme());
-        g.light = light;
-        Gallery ng = loadAll(width, height);
+    // One re-parse serves both the theme toggle and the hot reload: fresh trees
+    // out of the same XML, on the same canvas. The canvas is copied over
+    // because the screens are parsed at the design size and the host may have
+    // laid them out on a phone 1300 units wide -- a re-parse that kept the
+    // parse-time size shrank the whole gallery to 800 units on the frame after
+    // a theme switch. The old trees are parked in a graveyard because the
+    // clicked button is still mid-dispatch inside one of them.
+    auto reload = [&k, &g, &index, show, width, height](const char* toast) {
+        Gallery ng = loadAll(width, height, g.barsToggle, g.barsOn);
         if (ng.screens.empty()) return;
+        for (size_t i = 0; i < ng.screens.size() && i < g.screens.size(); ++i) {
+            ng.screens[i]->width = g.screens[i]->width;
+            ng.screens[i]->height = g.screens[i]->height;
+            ng.screens[i]->scale = g.screens[i]->scale;
+        }
         static std::vector<std::shared_ptr<ogui::Screen>> graveyard;
         graveyard = std::move(g.screens);  // previous round's trees freed here
         g.titles = std::move(ng.titles);
         g.screens = std::move(ng.screens);
         index = std::clamp(index, 0, static_cast<int>(g.screens.size()) - 1);
         (*show)();
-        k.showToast(light ? "Tema claro." : "Tema escuro.",
-                    ogui::Kernel::ToastKind::Info);
+        if (toast) k.showToast(toast, ogui::Kernel::ToastKind::Info);
+    };
+
+    k.bind("navTheme", [&g, reload] {
+        const bool light = !g.light;
+        ogui::setActiveTheme(light ? ogui::lightTheme() : ogui::darkTheme());
+        g.light = light;
+        reload(light ? "Tema claro." : "Tema escuro.");
     });
+
+    // Hot reload: the same re-parse with nothing changed first. What is on
+    // screen is then whatever the XML on disk says *now* -- edit a layout, press
+    // Recarregar, see it -- and on a phone it re-reads the APK's assets, where
+    // the same call is honest but visibly a no-op until the APK itself changes.
+    k.bind("navReload", [reload] { reload("Layouts recarregados."); });
 
     // Widgets screen: modal open/close and toast banners.
     k.bind("btn_modal", [&k] {

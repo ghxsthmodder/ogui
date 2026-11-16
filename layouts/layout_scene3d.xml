@@ -10,21 +10,30 @@
   <label text="3D: cubo girando dentro de um widget" x="20" y="58" width="500" height="24"
          font sans 16 color="#e8d9a8"/>
   <label id="lbl3d_stats" text="camera 0,2.4,-6  -  fov 50" x="520" y="60" width="260" height="20"
-         align="right" fontSize="12" color="#7f8c76"/>
+         align="right" anchor="right" fontSize="12" color="#7f8c76"/>
 
+  <!-- O viewport toma tudo o que sobra: ancorado nas quatro bordas, ele
+       cresce na largura de um telefone deitado (1300) e na altura de um em pe
+       (1733), e a camera recebe o aspecto novo porque o host submete
+       bounds x escala a cada quadro. A margem de baixo e a faixa que as duas
+       legendas e os botoes ocupam, e esses tres estao ancorados embaixo para
+       ficarem logo abaixo do viewport em qualquer canvas. -->
   <sceneview id="view3d" x="20" y="88" width="760" height="380"
+             anchor="left,right,top,bottom"
              camera="0,2.4,-6" target="0,0,0" fov="50" near="0.1" far="100"
              light="-0.4,-1,-0.6" ambient="0.25" background="#141a20"/>
 
   <label text="O cubo vem de GlBackend::uploadMesh(cubeMesh()) e entra na cena com uma matriz de modelo;"
-         x="20" y="476" width="760" height="20" fontSize="13" color="#9fb08f"/>
+         x="20" y="476" width="760" height="20" anchor="left,right,bottom"
+         fontSize="13" color="#9fb08f"/>
   <label text="o widget so ve um quad texturizado, por isso rola, recorta e empilha como qualquer caixa."
-         x="20" y="498" width="760" height="20" fontSize="13" color="#9fb08f"/>
+         x="20" y="498" width="760" height="20" anchor="left,right,bottom"
+         fontSize="13" color="#9fb08f"/>
 
   <button id="btn3d_spin" text="Inverter giro" x="20" y="530" width="150" height="30"
-          background="#2c3a2c" color="#e8d9a8" radius="6"/>
+          anchor="left,bottom" background="#2c3a2c" color="#e8d9a8" radius="6"/>
   <button id="btn3d_cull" text="Mover fora da tela" x="186" y="530" width="170" height="30"
-          background="#2c3a2c" color="#e8d9a8" radius="6"/>
+          anchor="left,bottom" background="#2c3a2c" color="#e8d9a8" radius="6"/>
   <label id="lbl3d_culled" text="culled: 0" x="372" y="536" width="300" height="20"
-         fontSize="13" color="#c49b3c"/>
+         anchor="left,bottom" fontSize="13" color="#c49b3c"/>
 </screen>

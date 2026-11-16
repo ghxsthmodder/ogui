@@ -36,10 +36,12 @@
        a galeria autora -- o design original (1228x700) punha o rodape em
        y=630 e o aviso da direita em x=888, os dois fora da tela em qualquer
        host de 800x600. -->
+  <!-- ancorado embaixo: o rodape fica no pe da tela tambem quando o canvas e
+       mais alto que os 600 do design (um telefone em pe). -->
   <label text="EARLY DEVELOPMENT BUILD" font="anton" fontSize="20" color="#ffffff"
-         x="40" y="556" width="260" height="24"/>
+         x="40" y="556" width="260" height="24" anchor="left,bottom"/>
   <label text="V0.1.0.0" font="anton" fontSize="20" color="#ffffff"
-         x="304" y="556" width="116" height="24"/>
+         x="304" y="556" width="116" height="24" anchor="left,bottom"/>
   <label text="WORK IN PROGRESS" font="anton" fontSize="20" color="#ffffff"
-         align="right" x="420" y="556" width="340" height="24"/>
+         align="right" x="420" y="556" width="340" height="24" anchor="right,bottom"/>
 </screen>

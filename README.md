@@ -495,6 +495,15 @@ screens with `Kernel::switchScreen` (bindings key off widget ids, so the nav
 works on every screen). `ogui_screenshot out.png W H [screenIndex] [light]`
 renders any one of those screens headless, optionally with the light theme.
 
+The bar also carries a `Recarregar` button, which is the demo's hot reload:
+same call as the theme switch with nothing changed first, so what appears is
+whatever the XML on disk says *now* — edit a layout, press it, see it. The
+re-parse copies the current canvas onto the new trees, because the screens are
+parsed at 800x600 and a running app may have laid them out on a phone 1300 units
+wide. The phone build adds one more control, a `Barras` switch that flips
+`AndroidHost::setHideSystemBarsInLandscape` at runtime, so whether the system
+bars leave in landscape can be tried without rebuilding (binding `navBars`).
+
 ## Animations
 
 `Widget::animateTo(target, duration, ease)` tweens bounds over the input
@@ -1239,11 +1248,29 @@ a resize. The tradeoff is that a `%`-height box stretches to a taller portrait
 canvas — a desktop layout on a 19.5:9 phone has more room than it was drawn for —
 which is the lesser cost against content that was simply off the edge.
 
+The extra canvas is not a dead strip: a phone in landscape is 1300x600 logical
+units, so the screens that are a *view* rather than a page stretch into it. The
+3D screen's `<sceneview>` is anchored on all four edges — 1260 wide on that
+canvas, 1513 tall on the portrait one — and the host submits `bounds x scale`
+every frame, so the camera aspect follows for free. The cockpit spreads instead:
+the engine column and both pedals are anchored right, the wheel is anchored on
+both edges so it draws in the middle of whatever gap is left (x=450 at 800,
+x=700 at 1300), and the status bar is anchored to the bottom so a portrait
+canvas does not leave it floating mid-screen. The nav bar is a percent width for
+the same reason. None of that is a second layout: `anchor` margins are captured
+on the first layout pass and held, so the reflow happens on the frame after the
+rotation.
+
 The design still has to be *authored* inside its canvas. `ogui_responsive_test`
 lays every screen in `manifest.xml` out on the desktop canvas and on the portrait
 and landscape canvases the fit rule produces, and fails on any visible widget whose
 box leaves the canvas (skipping scrolled content, where the clip makes the overflow
-legal). The audit it formalises found four real offenders, all fixed: the game menu,
+legal). It then does the same thing a rotation does — lay out at 800x600, then
+hand the same tree the landscape and portrait canvases — because anchor margins
+are captured per instance and a screen laid out once at its final size never
+exercises them, and it asserts the two things the anchors are for: the 3D
+viewport reaches the landscape margin and the cockpit's engine column follows the
+right edge. The audit it formalises found four real offenders, all fixed: the game menu,
 authored 1228x700; the cockpit HUD, authored 1200x800; the widgets grid, taller than
 the window; and `<column>`, which claimed the parent's width and height even when it
 was authored smaller — so a component at `x=300 width=240` reported an 800-wide box
