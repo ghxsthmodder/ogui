@@ -385,6 +385,24 @@ inline float fitToDesignScale(float deviceWidthPx, float deviceHeightPx,
     return fit < dpiScale ? fit : dpiScale;
 }
 
+// Whether the system's bars should be hidden for a window of this size.
+//
+// Landscape is width > height and nothing else: a square window -- a phone in
+// multi-window, a tablet beside its split -- is tall enough to keep the bars
+// without them costing a row of content, and guessing an orientation from an
+// aspect ratio near 1.0 would flip the bars on and off as the divider is
+// dragged. A window that has no size yet is not landscape either, so the bars
+// stay until there is a rectangle to judge.
+//
+// The setters are what make this a rule of its own: they are the window's size,
+// not the phone's, because the surface a landscape activity is given may still
+// be taller than it is wide in a split screen, and the bars that a fullscreen
+// game wants hidden are the ones that sit over *this* window.
+inline bool hideSystemBarsFor(int deviceWidthPx, int deviceHeightPx,
+                              bool hideInLandscape) {
+    return hideInLandscape && deviceWidthPx > deviceHeightPx;
+}
+
 class AndroidHost {
 public:
     AndroidHost() = default;
@@ -429,6 +447,26 @@ public:
     // Device pixels of the current surface, 0 while there is none.
     int width() const { return m_width; }
     int height() const { return m_height; }
+
+    // ---- the system's bars ------------------------------------------------
+    // Hide the status bar and the navigation bar while the window is wider
+    // than it is tall, so a landscape screen spends the whole display on the
+    // layout instead of losing its top row to the clock and its bottom row to
+    // the gesture bar. Off by default: a host that says nothing keeps the bars
+    // and receives their insets, which is what a non-immersive app wants.
+    //
+    // The decision is re-made every time the window's rectangle is read -- a
+    // rotation reaches refreshWindowSize() and nothing else -- and the bars
+    // come back the moment the phone is upright again. No layout has to know:
+    // hiding a bar stops it from being reported as an inset, so the tree moves
+    // into the space on the frame that follows. A cutout is not a bar and is
+    // still reported, so nothing hides under the camera hole.
+    //
+    // The bars are drawn by the system, so the request is handed to the Java
+    // half (OguiActivity); without it -- a build with no classes.dex -- this
+    // does nothing and the bars stay where they are.
+    void setHideSystemBarsInLandscape(bool on);
+    bool hideSystemBarsInLandscape() const { return m_hideBarsInLandscape; }
 
     // Seconds since create(), for InputState::time (the Kernel's animation and
     // tooltip clock, and the flick's sample window).
@@ -515,6 +553,10 @@ public:
   private:
     bool makeCurrent();
     void sendImeRequest(const ImeRequest& request);
+    // Hand the window's current rectangle to the Java half, if it says
+    // something it has not been told already. Called from every place that
+    // learns the size, so a rotation is one call and not a frame hunt.
+    void applySystemBars();
 
     std::string m_error;
     ANativeActivity* m_activity = nullptr;
@@ -538,6 +580,13 @@ public:
     ImeRequest m_imeSent;
     bool m_imeSentKnown = false;
     std::function<void(Kernel&, int, int)> m_beforeDraw;
+    // The bars, as the app asked for them and as the Java half last accepted
+    // them. Two flags for the same reason the IME has two: "nothing has been
+    // asked" and "nothing has changed" are different, and the first is what
+    // asks again after a window comes back to a host that had none.
+    bool m_hideBarsInLandscape = false;
+    bool m_barsHiddenSent = false;
+    bool m_barsHiddenKnown = false;
 };
 
 } // namespace ogui

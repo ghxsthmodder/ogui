@@ -152,6 +152,14 @@ extern "C" void android_main(struct android_app* app) {
     }
     a.host.installAssetReader();
 
+    // Landscape gets the whole display. The gallery is authored for 800x600 and
+    // a phone on its side is short, so the status bar and the gesture bar were
+    // costing it two of the rows it has no height to spare; hiding them leaves
+    // the insets at zero and the layout moves out on its own. Portrait and
+    // square windows keep them, which is what an app that is also a document
+    // wants -- and the host re-decides on every rotation.
+    a.host.setHideSystemBarsInLandscape(true);
+
     a.gallery = gallery::loadAll(kDesignWidth, kDesignHeight);
     int navIndex = 0;
     gallery::install(a.kernel, a.gallery, navIndex, 0, kDesignWidth, kDesignHeight);

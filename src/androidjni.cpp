@@ -39,6 +39,9 @@ JavaVM* g_vm = nullptr;
 // Both are made in JNI_OnLoad and never released: the process outlives them.
 jclass g_jniClass = nullptr;
 jmethodID g_requestKeyboard = nullptr;
+// The one method native calls that is not about the keyboard: the bars are the
+// activity's window, and the activity is the only thing that may touch it.
+jmethodID g_setBarsHidden = nullptr;
 
 AndroidInputBridge* bridge() {
     std::lock_guard<std::mutex> lk(g_stateMutex);
@@ -326,6 +329,18 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*) {
                             "OguiJni.requestKeyboard(int, int, boolean) is missing");
         return JNI_ERR;
     }
+
+    // (hidden) -> taken or not. Not fatal when it is absent: an app that never
+    // asks for the bars to move still types, and a host that did ask finds out
+    // by getting false and leaving them alone.
+    g_setBarsHidden = env->GetStaticMethodID(
+        g_jniClass, "setSystemBarsHidden", "(Z)Z");
+    if (!g_setBarsHidden) {
+        if (env->ExceptionCheck()) env->ExceptionClear();
+        __android_log_print(ANDROID_LOG_WARN, "ogui",
+                            "OguiJni.setSystemBarsHidden(boolean) is missing: "
+                            "the system bars cannot be hidden");
+    }
     return JNI_VERSION_1_6;
 }
 
@@ -363,6 +378,28 @@ void androidImeDetach() {
 }
 
 bool androidImeAvailable() { return javaReady(); }
+
+bool androidSetSystemBarsHidden(bool hidden) {
+    jclass clazz = nullptr;
+    jmethodID method = nullptr;
+    {
+        std::lock_guard<std::mutex> lk(g_stateMutex);
+        clazz = g_jniClass;
+        method = g_setBarsHidden;
+    }
+    JNIEnv* env = appEnv();
+    if (!env || !clazz || !method) return false;
+    const jboolean delivered = env->CallStaticBooleanMethod(
+        clazz, method, hidden ? JNI_TRUE : JNI_FALSE);
+    if (env->ExceptionCheck()) {
+        // Same rule as the keyboard request: a Java-side failure is reported as
+        // a failure and its pending exception is cleared, because the next JNI
+        // call would refuse to run with it set.
+        env->ExceptionClear();
+        return false;
+    }
+    return delivered == JNI_TRUE;
+}
 
 bool androidImeSendRequest(const ImeRequest& request) {
     jclass clazz = nullptr;

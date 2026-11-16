@@ -213,6 +213,18 @@ build_android() {
     [ -n "$decl" ] || { echo "error: no native methods found to bind" >&2; exit 1; }
     echo "  bound: $(printf '%s\n' "$decl" | wc -l) natives, in agreement"
 
+    # The one direction the diff above cannot see: the methods native *calls*
+    # are ordinary Java methods, so a renamed one is not a link error at build
+    # time -- it is a null method id on the phone, and the feature that used it
+    # quietly doing nothing. The list is short enough to name.
+    for method in requestKeyboard setSystemBarsHidden; do
+        grep -q "\"$method\"" "$ROOT/src/androidjni.cpp" || {
+            echo "error: src/androidjni.cpp no longer looks up $method" >&2; exit 1; }
+        grep -q "$method(" "$ROOT"/android/src/dev/ogui/android/*.java || {
+            echo "error: native calls $method, which no Java class declares" >&2
+            exit 1; }
+    done
+
     command -v javac >/dev/null 2>&1 || {
         echo "error: javac is needed to compile android/src" >&2; exit 1; }
     [ -x "${BT}d8" ] || {

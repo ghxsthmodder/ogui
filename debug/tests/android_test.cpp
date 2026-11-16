@@ -774,6 +774,42 @@ void theDesignFitsTheScreenItIsShownOn() {
           "and the safe rectangle is the design height minus the bars");
 }
 
+// The status bar and the navigation bar cost a landscape phone two rows of a
+// layout that has no height to spare, so the host can hide them there. Both
+// halves of that sentence are rules -- landscape, and only when asked -- and
+// neither needs a phone: the bar is the window's rectangle and the option is a
+// bool. A bar that is hidden is a bar no longer reported as an inset, which is
+// how the tree gets the space without a layout change.
+void theBarsLeaveOnlyInLandscapeAndOnlyWhenAsked() {
+    // A phone held upright: the status bar is the only thing keeping the first
+    // row out of the clock, and nothing is hidden whatever the option says.
+    check(!hideSystemBarsFor(1080, 2340, true),
+          "a portrait window keeps its bars");
+    // The same phone on its side, which is the case the option exists for.
+    check(hideSystemBarsFor(2340, 1080, true),
+          "a landscape window hides them");
+    // Off by default: a host that says nothing must not move the system's bars.
+    check(!hideSystemBarsFor(2340, 1080, false),
+          "without the option the bars stay put");
+    // A square window -- split screen, a foldable half open -- is not landscape,
+    // and flipping the bars on an aspect ratio near 1.0 would make dragging a
+    // splitter animate them away and back.
+    check(!hideSystemBarsFor(1080, 1080, true),
+          "a square window is not landscape");
+    // No rectangle yet: the bars stay until there is a window to judge.
+    check(!hideSystemBarsFor(0, 0, true),
+          "a window with no size yet keeps them");
+
+    AndroidHost host;
+    check(!host.hideSystemBarsInLandscape(), "the option is off until asked");
+    host.setHideSystemBarsInLandscape(true);
+    check(host.hideSystemBarsInLandscape(), "and remembers being asked");
+    // No window, no Java half: the setter is allowed to do nothing, but it may
+    // not claim the bars moved.
+    host.setHideSystemBarsInLandscape(false);
+    check(!host.hideSystemBarsInLandscape(), "and can be turned back off");
+}
+
 } // namespace
 
 int main() {
@@ -800,6 +836,7 @@ int main() {
     theKeyboardMatchesTheFieldThatHasTheFocus();
     theImeCountsInCodeUnitsAndTheWidgetInBytes();
     theWindowTellsTheTreeWhereItsBarsAre();
+    theBarsLeaveOnlyInLandscapeAndOnlyWhenAsked();
     theDesignFitsTheScreenItIsShownOn();
 
     if (g_failures) {

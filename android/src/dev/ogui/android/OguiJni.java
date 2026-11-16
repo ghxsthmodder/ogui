@@ -79,4 +79,20 @@ public final class OguiJni {
         view.applyRequest(inputType, imeOptions, visible);
         return true;
     }
+
+    /**
+     * Hide or show the status bar and the navigation bar.
+     *
+     * Native decides *when* -- a landscape window, and only when the app asked
+     * for it -- because the window's rectangle is the surface's and native is
+     * what reads it. This side only knows how: the bars belong to the activity's
+     * window, so the work is posted to the thread that owns it and the request
+     * comes back on the draw thread as true or false.
+     *
+     * `hidden` is a state rather than a toggle: being told the same thing twice
+     * is not a reason to animate two bars away twice.
+     */
+    public static boolean setSystemBarsHidden(final boolean hidden) {
+        return OguiActivity.setSystemBarsHidden(hidden);
+    }
 }

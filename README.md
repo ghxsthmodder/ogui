@@ -267,9 +267,14 @@ cd build && ctest --output-on-failure   # parser, drawlist, validate, validate-b
   lands in the field it was typed for and nowhere else, a composing span is
   replaced rather than appended to, a delete takes whole characters in the
   IME's units while the widget counts them in bytes, and the snapshot an IME
-  is told about is the one the tree just left behind. Those rules are plain
-  data in `AndroidInputBridge`; only the JNI and the four Java classes need a
-  device, so the semantics are covered here and the shell that calls the
+  is told about is the one the tree just left behind. Plus the window: a bar
+  arrives in device pixels and lands in the tree in logical units, only once
+  per move, and the design zoom-out keeps both of those true at any scale. The
+  system bars also have a rule of their own — they leave in landscape, but only
+  when the app asked and only when the *window* is wider than it is tall — and
+  it is checked here because it is arithmetic over two ints. Those rules are
+  plain data in `AndroidInputBridge`; only the JNI and the four Java classes
+  need a device, so the semantics are covered here and the shell that calls the
   getters is thin.
 * `bench` — what a frame costs, measured. One box of N panels on the phone's own
   canvas, dragged by a synthetic finger: a `scrollview` page against the two flow
@@ -1265,6 +1270,26 @@ by the scale into logical units and `setInsets` invalidates the layout exactly
 when something moved, not sixty times a second while nothing does. The conversion
 and the drain rule live outside the `__ANDROID__` guard in `androidhost.cpp`, so
 both are host-tested rather than only on a phone.
+
+The bars can also be got out of the way entirely, which is what a landscape
+phone wants: at the fit scale a 2340x1080 window is 832x384 logical units, and a
+status bar plus a gesture bar are two of the rows an 800x600 design has no
+height to spare. `AndroidHost::setHideSystemBarsInLandscape(true)` — off by
+default, and what `examples/android_main.cpp` turns on — hides both while the
+window is wider than it is tall and shows them again the moment it is not. The
+orientation is the *window's* rectangle, not the device's: a landscape activity
+in split screen that is still taller than wide keeps its bars, and so does a
+square window or one with no size yet — which is also what stops a splitter
+drag from animating them away and back. The rule is `hideSystemBarsFor(width,
+height, option)`, inline beside the fit functions and checked by the `android`
+test; the command crosses to `OguiActivity` once per change, because the bars
+belong to the activity's window — `WindowInsetsController::hide(systemBars())`
+with `BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE` on API 30+, the three legacy flags
+with `IMMERSIVE_STICKY` below it. No layout is told: a hidden bar stops being an
+inset, so `applyWindowInsets` moves the tree into the space on the next drain,
+and a cutout keeps being reported because it is not a bar — no row hides under
+the camera hole. `setWindow()` and `refreshWindowSize()` are what re-decide it,
+since a rotation reaches only the second one.
 
 The gestures are what the device is for, and the staged screens use them:
 `layout_demo.xml`'s first `<image>` carries `pinchzoom="true"`, so two fingers

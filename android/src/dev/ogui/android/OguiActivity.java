@@ -6,6 +6,8 @@ import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 
 /**
  * The activity an ogui app names in its manifest.
@@ -22,15 +24,24 @@ import android.view.Window;
  * {@code android_main} is still the entry point, and the surface still belongs
  * to the view {@code NativeActivity.onCreate} installed -- which is the reason
  * the editor below is *added* to the content rather than set as it.
+ *
+ * The one other thing this class owns is the window's system bars: hiding them
+ * is a window operation, and the window is the activity's. Native asks through
+ * {@link #setSystemBarsHidden}, stays out of the API-level split, and leaves the
+ * insets to do the talking once the bars are gone.
  */
 public class OguiActivity extends NativeActivity {
     private OguiEditorView mEditor;
+
+    /** The activity native may reach; null between onDestroy and the next create. */
+    private static volatile OguiActivity sCurrent;
 
     @Override protected void onCreate(Bundle savedState) {
         // Loads liboggui_app.so -- which binds OguiJni's natives on the way
         // through JNI_OnLoad -- and starts the thread that runs android_main.
         super.onCreate(savedState);
         claimWholeWindow();
+        sCurrent = this;
         mEditor = new OguiEditorView(this);
         // One pixel square in the corner. It has to be visible to hold focus, and
         // it has no background, so the only thing it covers is a pixel that was
@@ -73,6 +84,67 @@ public class OguiActivity extends NativeActivity {
         // native finds that out by being told, not by an NPE on the UI thread.
         OguiEditorView.clear(mEditor);
         mEditor = null;
+        if (sCurrent == this) sCurrent = null;
         super.onDestroy();
+    }
+
+    /**
+     * Hide or show the bars, from native. False when there is no activity left
+     * to ask, which is the answer that keeps native asking after a recreation.
+     */
+    static boolean setSystemBarsHidden(final boolean hidden) {
+        final OguiActivity activity = sCurrent;
+        if (activity == null) return false;
+        // The window is the UI thread's; the caller is the thread that draws.
+        activity.runOnUiThread(new Runnable() {
+            @Override public void run() { activity.applySystemBarsHidden(hidden); }
+        });
+        return true;
+    }
+
+    private void applySystemBarsHidden(boolean hidden) {
+        if (Build.VERSION.SDK_INT >= 30) {
+            applySystemBarsHiddenModern(hidden);
+        } else {
+            applySystemBarsHiddenLegacy(hidden);
+        }
+    }
+
+    /**
+     * The API 30 vocabulary. Hiding takes a behaviour as well as a flag: with
+     * {@code BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE} a swipe from an edge brings
+     * the bars back for a moment and they leave again, so reaching for the
+     * gesture bar does not permanently shrink a layout that was laid out for
+     * the space. {@code hide()} only does anything because
+     * {@link #claimWholeWindow} already told the decor not to fit the bars.
+     */
+    private void applySystemBarsHiddenModern(boolean hidden) {
+        final WindowInsetsController controller = getWindow().getInsetsController();
+        if (controller == null) return;
+        if (hidden) {
+            controller.setSystemBarsBehavior(
+                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            controller.hide(WindowInsets.Type.systemBars());
+        } else {
+            controller.show(WindowInsets.Type.systemBars());
+        }
+    }
+
+    /**
+     * The same request on a device too old for the controller: the layout flags
+     * stay (they are what keeps the surface at the full display), and the three
+     * that make the bars go are added or removed. IMMERSIVE_STICKY is what makes
+     * the swipe transient on these versions too.
+     */
+    private void applySystemBarsHiddenLegacy(boolean hidden) {
+        final View decor = getWindow().getDecorView();
+        final int layout = decor.getSystemUiVisibility()
+                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
+        final int gone = View.SYSTEM_UI_FLAG_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+        decor.setSystemUiVisibility(hidden ? (layout | gone) : (layout & ~gone));
     }
 }

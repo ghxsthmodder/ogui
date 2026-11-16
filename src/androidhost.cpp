@@ -237,6 +237,10 @@ bool AndroidHost::setWindow(ANativeWindow* window) {
     if (!makeCurrent()) return false;
     eglQuerySurface(dpy, surf, EGL_WIDTH, &m_width);
     eglQuerySurface(dpy, surf, EGL_HEIGHT, &m_height);
+    // A window that comes back is a window whose orientation may have changed
+    // while the app had none -- a landscape phone unlocked from the recents
+    // screen -- so the bars are decided here and not only on a resize.
+    applySystemBars();
 
     if (!m_gl) m_gl = new GlBackend();
     if (!m_glReady) {
@@ -263,6 +267,11 @@ void AndroidHost::releaseWindow() {
     }
     m_window = nullptr;
     m_width = m_height = 0;
+    // The bars are the system's again while the app has no window: another app
+    // was in front, and it may have brought them back. Whoever gets the window
+    // next -- this app after a resume, in whatever orientation it is now --
+    // has to ask again rather than trust what it asked before.
+    m_barsHiddenKnown = false;
 }
 
 bool AndroidHost::hasWindow() const { return m_surface != nullptr; }
@@ -276,7 +285,32 @@ bool AndroidHost::refreshWindowSize() {
     if (w <= 0 || h <= 0) return false;
     m_width = w;
     m_height = h;
+    // A rotation that the activity survives is a resize and nothing else, so
+    // this is the only place the app is told the phone is now sideways.
+    applySystemBars();
     return true;
+}
+
+void AndroidHost::setHideSystemBarsInLandscape(bool on) {
+    if (m_hideBarsInLandscape == on) return;
+    m_hideBarsInLandscape = on;
+    applySystemBars();
+}
+
+void AndroidHost::applySystemBars() {
+    if (!m_activity || !m_surface) return;
+    const bool hidden =
+        hideSystemBarsFor(m_width, m_height, m_hideBarsInLandscape);
+    // A bar the app already asked about is not asked about again: the window's
+    // size changes far more often than its orientation, and every one of these
+    // crosses to Java and posts to the UI thread.
+    if (m_barsHiddenKnown && m_barsHiddenSent == hidden) return;
+    // No Java half, or no activity yet: leave both flags alone so the next
+    // window -- a resume, a rotation -- asks again instead of believing the
+    // bars are already where they were never put.
+    if (!androidSetSystemBarsHidden(hidden)) return;
+    m_barsHiddenSent = hidden;
+    m_barsHiddenKnown = true;
 }
 
 bool AndroidHost::makeCurrent() {
@@ -478,6 +512,11 @@ bool AndroidHost::setWindow(ANativeWindow*) {
 void AndroidHost::releaseWindow() {}
 bool AndroidHost::hasWindow() const { return false; }
 bool AndroidHost::refreshWindowSize() { return false; }
+void AndroidHost::setHideSystemBarsInLandscape(bool on) {
+    // There are no system bars to hide off Android, but the answer to what the
+    // app asked for is still the app's to read back.
+    m_hideBarsInLandscape = on;
+}
 float AndroidHost::elapsed() const { return 0.0f; }
 float AndroidHost::dpiScale() const { return 1.0f; }
 bool AndroidHost::installAssetReader() {
