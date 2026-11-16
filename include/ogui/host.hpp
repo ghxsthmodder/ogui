@@ -72,6 +72,15 @@ public:
     // Optional per-frame hooks.
     void setBeforeFrame(std::function<void(Kernel&, InputState&)> fn);
     void setAfterFrame(std::function<void(Kernel&, const DrawList&)> fn);
+    // Runs after the window has been cleared and before the UI draw list is
+    // rendered: the place a host submits its own 3D scene (or SceneView
+    // targets) so it lands under the 2D interface in the same depth buffer.
+    void setBeforeDraw(std::function<void(Kernel&, int fbWidth, int fbHeight)> fn);
+
+    // The GL backend this window renders with (valid after open()). A host can
+    // use it for its own passes -- uploadMesh()/renderScene() -- without owning
+    // a second context.
+    GlBackend& backend() { return m_backend; }
 
     // Toggles borderless fullscreen (F11 inside run()). The previous window
     // position/size is restored when leaving fullscreen.
@@ -89,6 +98,7 @@ public:
     std::string m_error;
     std::function<void(Kernel&, InputState&)> m_beforeFrame;
     std::function<void(Kernel&, const DrawList&)> m_afterFrame;
+    std::function<void(Kernel&, int, int)> m_beforeDraw;
     GlBackend m_backend;
     Native* m_native = nullptr;
     float m_clearR = 0.06f, m_clearG = 0.06f, m_clearB = 0.07f;

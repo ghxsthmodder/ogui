@@ -39,17 +39,29 @@ constexpr float kDesignWidth = 800.0f;
 constexpr float kDesignHeight = 600.0f;
 
 // The screen is sized in device pixels and laid out in logical units, so a
-// phone's smaller canvas is the scale's business, not the layout's. A narrow
-// phone would otherwise clip the right edge of the widest row: fitToWidthScale
-// zooms the 800-wide design out until it spans the screen, and leaves the
-// density alone wherever the density already fits.
+// phone's smaller canvas is the scale's business, not the layout's. The gallery
+// is a fixed 800x600 design, so the scale is the one that fits *both* axes
+// (fitToDesignScale): a narrow phone zooms out until the design spans the width,
+// a landscape phone until it spans the height, and a screen wide enough at its
+// own density keeps the density. Sizing only the width used to leave a landscape
+// phone with 384 logical units of height, so everything below y=384 was off the
+// screen.
+//
+// Every gallery screen is sized, not just the active one: the nav bar swaps
+// screens without a resize, and a screen still holding the 800x600 it was parsed
+// with would lay out at the wrong scale the moment it was shown.
 void fit(App& a) {
-    auto screen = a.kernel.currentScreen();
-    if (!screen || !a.host.hasWindow()) return;
-    screen->width = static_cast<float>(a.host.width());
-    screen->height = static_cast<float>(a.host.height());
-    screen->scale =
-        ogui::fitToWidthScale(screen->width, kDesignWidth, a.host.dpiScale());
+    if (!a.host.hasWindow()) return;
+    const float w = static_cast<float>(a.host.width());
+    const float h = static_cast<float>(a.host.height());
+    const float scale = ogui::fitToDesignScale(w, h, kDesignWidth, kDesignHeight,
+                                              a.host.dpiScale());
+    for (auto& screen : a.gallery.screens) {
+        if (!screen) continue;
+        screen->width = w;
+        screen->height = h;
+        screen->scale = scale;
+    }
     a.kernel.invalidate();
 }
 

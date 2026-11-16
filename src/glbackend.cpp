@@ -92,6 +92,25 @@ constexpr GLenum GL_BLEND_DST_ALPHA    = 0x80CA;
 // string queries (profile detection, and what a shader failure is quoted with)
 constexpr GLenum GL_VERSION                  = 0x1F02;
 constexpr GLenum GL_SHADING_LANGUAGE_VERSION = 0x8B8C;
+// ---- 3D pass ----
+constexpr GLenum GL_STATIC_DRAW        = 0x88E4;
+constexpr GLenum GL_LEQUAL             = 0x0203;
+constexpr GLenum GL_BACK               = 0x0405;
+constexpr GLenum GL_CCW                = 0x0901;
+constexpr GLenum GL_DEPTH_BUFFER_BIT   = 0x00000100;
+constexpr GLenum GL_COLOR_BUFFER_BIT   = 0x00004000;
+constexpr GLenum GL_DEPTH_WRITEMASK    = 0x0B72;
+constexpr GLenum GL_DEPTH_FUNC         = 0x0B74;
+constexpr GLenum GL_CULL_FACE_MODE     = 0x0B45;
+constexpr GLenum GL_FRONT_FACE         = 0x0B46;
+constexpr GLenum GL_FRAMEBUFFER        = 0x8D40;
+constexpr GLenum GL_FRAMEBUFFER_BINDING = 0x8CA6;
+constexpr GLenum GL_RENDERBUFFER       = 0x8D41;
+constexpr GLenum GL_RENDERBUFFER_BINDING = 0x8CA7;
+constexpr GLenum GL_COLOR_ATTACHMENT0  = 0x8CE0;
+constexpr GLenum GL_DEPTH_ATTACHMENT   = 0x8D00;
+constexpr GLenum GL_FRAMEBUFFER_COMPLETE = 0x8CD5;
+constexpr GLenum GL_DEPTH_COMPONENT16  = 0x81A5;
 } // namespace
 
 // ---- function pointer table ------------------------------------------------
@@ -145,6 +164,29 @@ struct GlBackend::Api {
     void (*ActiveTexture)(GLenum) = nullptr;
     // draw
     void (*DrawElements)(GLenum, GLsizei, GLenum, const void*) = nullptr;
+    // ---- 3D pass ----
+    // Loaded but not required: a 2D-only host must keep initialising even if
+    // the context lacks one of these, and the 3D entry points report it then.
+    void (*DepthFunc)(GLenum) = nullptr;
+    void (*DepthMask)(GLboolean) = nullptr;
+    void (*CullFace)(GLenum) = nullptr;
+    void (*FrontFace)(GLenum) = nullptr;
+    void (*Clear)(unsigned) = nullptr;
+    void (*ClearColor)(GLfloat, GLfloat, GLfloat, GLfloat) = nullptr;
+    void (*Uniform1f)(GLint, GLfloat) = nullptr;
+    void (*Uniform3f)(GLint, GLfloat, GLfloat, GLfloat) = nullptr;
+    void (*Uniform4f)(GLint, GLfloat, GLfloat, GLfloat, GLfloat) = nullptr;
+    // offscreen targets (Framebuffer objects, ES 3.0 / GL 3.0 core)
+    void (*GenFramebuffers)(GLsizei, GLuint*) = nullptr;
+    void (*BindFramebuffer)(GLenum, GLuint) = nullptr;
+    void (*DeleteFramebuffers)(GLsizei, const GLuint*) = nullptr;
+    void (*FramebufferTexture2D)(GLenum, GLenum, GLenum, GLuint, GLint) = nullptr;
+    GLenum (*CheckFramebufferStatus)(GLenum) = nullptr;
+    void (*GenRenderbuffers)(GLsizei, GLuint*) = nullptr;
+    void (*BindRenderbuffer)(GLenum, GLuint) = nullptr;
+    void (*DeleteRenderbuffers)(GLsizei, const GLuint*) = nullptr;
+    void (*RenderbufferStorage)(GLenum, GLenum, GLsizei, GLsizei) = nullptr;
+    void (*FramebufferRenderbuffer)(GLenum, GLenum, GLenum, GLuint) = nullptr;
 };
 
 namespace {
@@ -280,6 +322,28 @@ bool GlBackend::loadFunctions(GetProcFn getProc) {
     // draw
     need(a.DrawElements, "glDrawElements");
 
+    // 3D: best effort. A context that lacks these still gives a working 2D
+    // backend; renderScene() then fails through lastError().
+    load(a.DepthFunc, gp, "glDepthFunc");
+    load(a.DepthMask, gp, "glDepthMask");
+    load(a.CullFace, gp, "glCullFace");
+    load(a.FrontFace, gp, "glFrontFace");
+    load(a.Clear, gp, "glClear");
+    load(a.ClearColor, gp, "glClearColor");
+    load(a.Uniform1f, gp, "glUniform1f");
+    load(a.Uniform3f, gp, "glUniform3f");
+    load(a.Uniform4f, gp, "glUniform4f");
+    load(a.GenFramebuffers, gp, "glGenFramebuffers");
+    load(a.BindFramebuffer, gp, "glBindFramebuffer");
+    load(a.DeleteFramebuffers, gp, "glDeleteFramebuffers");
+    load(a.FramebufferTexture2D, gp, "glFramebufferTexture2D");
+    load(a.CheckFramebufferStatus, gp, "glCheckFramebufferStatus");
+    load(a.GenRenderbuffers, gp, "glGenRenderbuffers");
+    load(a.BindRenderbuffer, gp, "glBindRenderbuffer");
+    load(a.DeleteRenderbuffers, gp, "glDeleteRenderbuffers");
+    load(a.RenderbufferStorage, gp, "glRenderbufferStorage");
+    load(a.FramebufferRenderbuffer, gp, "glFramebufferRenderbuffer");
+
     if (!missing.empty()) {
         m_error = "missing GL entry points: " + missing;
         return false;
@@ -287,14 +351,14 @@ bool GlBackend::loadFunctions(GetProcFn getProc) {
     return true;
 }
 
-bool GlBackend::createPipeline() {
-    Api& a = *m_api;
-
-    // One shader body, two dialects: the desktop and ES 3.00 versions of GLSL
-    // agree on everything this pipeline uses (layout locations, `in`/`out`,
-    // `texture()`), so only the #version line and the ES precision statement
-    // change. highp matches the desktop arithmetic, so both paths round alike.
-    static const char* kVsBody = R"(
+// ---- shader sources -------------------------------------------------------
+// One shader body per pass, two dialects each: the desktop and ES 3.00
+// versions of GLSL agree on everything these pipelines use (layout locations,
+// `in`/`out`, `texture()`), so only the #version line and the ES precision
+// statement change. highp matches the desktop arithmetic, so both paths round
+// alike.
+namespace {
+const char* const k2dVs = R"(
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec2 aUV;
 layout(location = 2) in vec4 aColor;
@@ -308,7 +372,7 @@ void main() {
 }
 )";
 
-    static const char* kFsBody = R"(
+const char* const k2dFs = R"(
 in vec2 vUV;
 in vec4 vColor;
 uniform sampler2D uTex;
@@ -318,12 +382,54 @@ void main() {
 }
 )";
 
+// 3D: position, normal, uv in; one directional light with an ambient term;
+// the normal matrix is derived from the model matrix so a non-uniform scale
+// still lights correctly.
+const char* const k3dVs = R"(
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNormal;
+layout(location = 2) in vec2 aUV;
+uniform mat4 uViewProj;
+uniform mat4 uModel;
+out vec3 vNormal;
+out vec2 vUV;
+void main() {
+    vNormal = transpose(inverse(mat3(uModel))) * aNormal;
+    vUV = aUV;
+    gl_Position = uViewProj * (uModel * vec4(aPos, 1.0));
+}
+)";
+
+const char* const k3dFs = R"(
+in vec3 vNormal;
+in vec2 vUV;
+uniform sampler2D uTex;
+uniform int uUseTex;
+uniform vec3 uLightDir;
+uniform vec3 uLightColor;
+uniform vec4 uTint;
+uniform float uAmbient;
+out vec4 fragColor;
+void main() {
+    float ndl = max(dot(normalize(vNormal), normalize(-uLightDir)), 0.0);
+    vec3 lit = clamp(uAmbient + ndl, 0.0, 1.0) * uLightColor;
+    vec4 base = uTint;
+    if (uUseTex != 0) base *= texture(uTex, vUV);
+    fragColor = vec4(base.rgb * lit, base.a);
+}
+)";
+} // namespace
+
+unsigned GlBackend::buildProgram(const char* vsBody, const char* fsBody,
+                                const char* what) {
+    Api& a = *m_api;
+
     const std::string srcVs = std::string(m_es ? "#version 300 es\n"
-                                               : "#version 330 core\n") + kVsBody;
+                                               : "#version 330 core\n") + vsBody;
     std::string srcFs =
         std::string(m_es ? "#version 300 es\n" : "#version 330 core\n");
     if (m_es) srcFs += "precision highp float;\n";
-    srcFs += kFsBody;
+    srcFs += fsBody;
 
     auto compile = [&](GLenum type, const std::string& src) -> GLuint {
         GLuint sh = a.CreateShader(type);
@@ -336,7 +442,7 @@ void main() {
             char log[1024] = {0};
             GLsizei n = 0;
             a.GetShaderInfoLog(sh, sizeof(log), &n, log);
-            m_error = describe() + ": shader compile failed: " + log;
+            m_error = describe() + ": " + what + " shader compile failed: " + log;
             a.DeleteShader(sh);
             return 0;
         }
@@ -344,26 +450,35 @@ void main() {
     };
 
     GLuint vs = compile(GL_VERTEX_SHADER, srcVs);
-    if (!vs) return false;
+    if (!vs) return 0;
     GLuint fs = compile(GL_FRAGMENT_SHADER, srcFs);
-    if (!fs) { a.DeleteShader(vs); return false; }
+    if (!fs) { a.DeleteShader(vs); return 0; }
 
-    m_program = a.CreateProgram();
-    a.AttachShader(m_program, vs);
-    a.AttachShader(m_program, fs);
-    a.LinkProgram(m_program);
+    GLuint prog = a.CreateProgram();
+    a.AttachShader(prog, vs);
+    a.AttachShader(prog, fs);
+    a.LinkProgram(prog);
     a.DeleteShader(vs);
     a.DeleteShader(fs);
 
     GLint ok = 0;
-    a.GetProgramiv(m_program, GL_LINK_STATUS, &ok);
+    a.GetProgramiv(prog, GL_LINK_STATUS, &ok);
     if (!ok) {
         char log[1024] = {0};
         GLsizei n = 0;
-        a.GetProgramInfoLog(m_program, sizeof(log), &n, log);
-        m_error = describe() + ": program link failed: " + log;
-        return false;
+        a.GetProgramInfoLog(prog, sizeof(log), &n, log);
+        m_error = describe() + ": " + what + " program link failed: " + log;
+        a.DeleteProgram(prog);
+        return 0;
     }
+    return prog;
+}
+
+bool GlBackend::createPipeline() {
+    Api& a = *m_api;
+
+    m_program = buildProgram(k2dVs, k2dFs, "2D");
+    if (!m_program) return false;
 
     m_uProj = a.GetUniformLocation(m_program, "uProj");
     m_uTex = a.GetUniformLocation(m_program, "uTex");
@@ -669,8 +784,13 @@ void GlBackend::render(const DrawList& list, int fbWidth, int fbHeight, bool fli
             if (it == m_fontTexs.end()) continue;   // upload failed: skip
             tex = it->second;
         } else if (cmd.texId != 0) {
+            // Host textures first: a SceneView target's slot lives here, and
+            // its id is deliberately outside ImageManager's range.
+            auto host = m_hostTexs.find(cmd.texId);
             auto it = m_imageTexs.find(cmd.texId);
-            if (it != m_imageTexs.end()) {
+            if (host != m_hostTexs.end()) {
+                tex = host->second;
+            } else if (it != m_imageTexs.end()) {
                 tex = it->second;
             } else if (ImageManager::instance().ownsSlot(cmd.texId)) {
                 continue;                           // upload failed: skip
@@ -710,9 +830,399 @@ void GlBackend::render(const DrawList& list, int fbWidth, int fbHeight, bool fli
     setCap(GL_STENCIL_TEST, wasStencil);
 }
 
+// ---- 3D pass --------------------------------------------------------------
+bool GlBackend::ensure3DProgram() {
+    if (m_3dReady) return true;
+    if (!m_ready) {
+        m_error = "GlBackend not initialised";
+        return false;
+    }
+    Api& a = *m_api;
+    // These are the entries the depth-tested pass cannot do without. They are
+    // optional in loadFunctions() so a 2D-only context still initialises.
+    if (!a.DepthFunc || !a.DepthMask || !a.CullFace || !a.FrontFace ||
+        !a.Clear || !a.ClearColor || !a.Uniform1f || !a.Uniform3f ||
+        !a.Uniform4f) {
+        m_error = "3D needs depth/cull entry points the context did not provide";
+        return false;
+    }
+
+    m_3dProgram = buildProgram(k3dVs, k3dFs, "3D");
+    if (!m_3dProgram) return false;
+
+    m_u3dViewProj   = a.GetUniformLocation(m_3dProgram, "uViewProj");
+    m_u3dModel      = a.GetUniformLocation(m_3dProgram, "uModel");
+    m_u3dLightDir   = a.GetUniformLocation(m_3dProgram, "uLightDir");
+    m_u3dLightColor = a.GetUniformLocation(m_3dProgram, "uLightColor");
+    m_u3dAmbient    = a.GetUniformLocation(m_3dProgram, "uAmbient");
+    m_u3dTint       = a.GetUniformLocation(m_3dProgram, "uTint");
+    m_u3dTex        = a.GetUniformLocation(m_3dProgram, "uTex");
+    m_u3dUseTex     = a.GetUniformLocation(m_3dProgram, "uUseTex");
+    if (m_u3dViewProj < 0 || m_u3dModel < 0 || m_u3dLightDir < 0 ||
+        m_u3dLightColor < 0 || m_u3dAmbient < 0 || m_u3dTint < 0 ||
+        m_u3dTex < 0 || m_u3dUseTex < 0) {
+        m_error = "3D shader uniforms missing";
+        a.DeleteProgram(m_3dProgram);
+        m_3dProgram = 0;
+        return false;
+    }
+    m_3dReady = true;
+    return true;
+}
+
+unsigned GlBackend::resolveTexture(int texId) const {
+    if (texId < 0) {
+        auto it = m_fontTexs.find(texId);
+        return it == m_fontTexs.end() ? m_whiteTex : it->second;
+    }
+    if (texId == 0) return m_whiteTex;
+    auto host = m_hostTexs.find(texId);
+    if (host != m_hostTexs.end()) return host->second;
+    auto img = m_imageTexs.find(texId);
+    if (img != m_imageTexs.end()) return img->second;
+    return static_cast<unsigned>(texId);
+}
+
+int GlBackend::uploadMesh(const MeshData& mesh) {
+    if (!m_ready || mesh.vertices.empty() || mesh.indices.empty()) return 0;
+    Api& a = *m_api;
+
+    GLint prevVao = 0, prevArrayBuf = 0;
+    a.GetIntegerv(GL_VERTEX_ARRAY_BINDING, &prevVao);
+    a.GetIntegerv(GL_ARRAY_BUFFER_BINDING, &prevArrayBuf);
+
+    Mesh3D m;
+    m.indexCount = static_cast<int>(mesh.indices.size());
+    mesh.bounds(m.min, m.max);
+    a.GenVertexArrays(1, &m.vao);
+    a.GenBuffers(1, &m.vbo);
+    a.GenBuffers(1, &m.ebo);
+    a.BindVertexArray(m.vao);
+    a.BindBuffer(GL_ARRAY_BUFFER, m.vbo);
+    a.BufferData(GL_ARRAY_BUFFER,
+                 static_cast<GLsizeiptr>(mesh.vertices.size() * sizeof(MeshVertex)),
+                 mesh.vertices.data(), GL_STATIC_DRAW);
+    const GLsizei stride = static_cast<GLsizei>(sizeof(MeshVertex));
+    a.EnableVertexAttribArray(0);
+    a.VertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE_, stride,
+                          reinterpret_cast<void*>(0));
+    a.EnableVertexAttribArray(1);
+    a.VertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE_, stride,
+                          reinterpret_cast<void*>(3 * sizeof(float)));
+    a.EnableVertexAttribArray(2);
+    a.VertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE_, stride,
+                          reinterpret_cast<void*>(6 * sizeof(float)));
+    a.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, m.ebo);
+    a.BufferData(GL_ELEMENT_ARRAY_BUFFER,
+                 static_cast<GLsizeiptr>(mesh.indices.size() * sizeof(uint32_t)),
+                 mesh.indices.data(), GL_STATIC_DRAW);
+
+    a.BindVertexArray(static_cast<GLuint>(prevVao));
+    a.BindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(prevArrayBuf));
+
+    const int handle = m_nextMesh++;
+    m_meshes[handle] = m;
+    return handle;
+}
+
+void GlBackend::releaseMesh(int mesh) {
+    auto it = m_meshes.find(mesh);
+    if (it == m_meshes.end() || !m_api) return;
+    Api& a = *m_api;
+    if (it->second.vbo) a.DeleteBuffers(1, &it->second.vbo);
+    if (it->second.ebo) a.DeleteBuffers(1, &it->second.ebo);
+    if (it->second.vao) a.DeleteVertexArrays(1, &it->second.vao);
+    m_meshes.erase(it);
+}
+
+void GlBackend::renderScene(const Scene3D& scene, int fbWidth, int fbHeight) {
+    if (fbWidth <= 0 || fbHeight <= 0 || scene.empty()) return;
+    if (!ensure3DProgram()) return;
+    drawScene(scene, static_cast<float>(fbWidth) / static_cast<float>(fbHeight));
+}
+
+void GlBackend::drawScene(const Scene3D& scene, float aspect) {
+    Api& a = *m_api;
+
+    // ---- capture host state -------------------------------------------
+    const bool wasDepth   = a.IsEnabled(GL_DEPTH_TEST) != 0;
+    const bool wasCull    = a.IsEnabled(GL_CULL_FACE) != 0;
+    const bool wasBlend   = a.IsEnabled(GL_BLEND) != 0;
+    const bool wasScissor = a.IsEnabled(GL_SCISSOR_TEST) != 0;
+    GLint prevProgram = 0, prevVao = 0, prevArrBuf = 0, prevElemBuf = 0;
+    GLint prevActiveTex = 0, prevTex = 0, prevTexUnit0 = 0;
+    GLint prevDepthFunc = GL_LEQUAL, prevDepthMask = 1;
+    GLint prevCullMode = GL_BACK, prevFrontFace = GL_CCW;
+    GLint prevViewport[4] = {0, 0, 0, 0};
+    a.GetIntegerv(GL_CURRENT_PROGRAM, &prevProgram);
+    a.GetIntegerv(GL_VERTEX_ARRAY_BINDING, &prevVao);
+    a.GetIntegerv(GL_ARRAY_BUFFER_BINDING, &prevArrBuf);
+    a.GetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &prevElemBuf);
+    a.GetIntegerv(GL_ACTIVE_TEXTURE, &prevActiveTex);
+    a.GetIntegerv(GL_TEXTURE_BINDING_2D, &prevTex);
+    prevTexUnit0 = prevTex;
+    if (prevActiveTex != GL_TEXTURE0) {
+        a.ActiveTexture(GL_TEXTURE0);
+        a.GetIntegerv(GL_TEXTURE_BINDING_2D, &prevTexUnit0);
+    }
+    a.GetIntegerv(GL_DEPTH_FUNC, &prevDepthFunc);
+    a.GetIntegerv(GL_DEPTH_WRITEMASK, &prevDepthMask);
+    a.GetIntegerv(GL_CULL_FACE_MODE, &prevCullMode);
+    a.GetIntegerv(GL_FRONT_FACE, &prevFrontFace);
+    a.GetIntegerv(GL_VIEWPORT, prevViewport);
+
+    // ---- setup ---------------------------------------------------------
+    a.Enable(GL_DEPTH_TEST);
+    a.DepthFunc(GL_LEQUAL);
+    a.DepthMask(1);
+    a.Enable(GL_CULL_FACE);
+    a.CullFace(GL_BACK);
+    a.FrontFace(GL_CCW);
+    a.Disable(GL_BLEND);          // opaque: depth writes want no blending
+    a.Disable(GL_SCISSOR_TEST);   // the 3D pass owns the whole viewport
+    a.UseProgram(m_3dProgram);
+
+    const Matrix4x4 vp = scene.camera.viewProjection(aspect);
+    const Frustum frustum = Frustum::fromViewProjection(vp);
+    m_sceneStats = SceneStats{};
+    a.UniformMatrix4fv(m_u3dViewProj, 1, GL_FALSE_, vp.data());
+    const Vec3 ld = normalize(scene.light.direction);
+    a.Uniform3f(m_u3dLightDir, ld.x, ld.y, ld.z);
+    a.Uniform3f(m_u3dLightColor, scene.light.color.r / 255.0f,
+                scene.light.color.g / 255.0f, scene.light.color.b / 255.0f);
+    a.Uniform1f(m_u3dAmbient, scene.light.ambient);
+    a.Uniform1i(m_u3dTex, 0);
+    a.ActiveTexture(GL_TEXTURE0);
+
+    for (const SceneItem& item : scene.items()) {
+        auto mesh = m_meshes.find(item.mesh);
+        if (mesh == m_meshes.end()) continue;   // released or never uploaded
+        // Cheap cull: one AABB per item against six planes. Conservative by
+        // construction (transformAabb never shrinks a rotated box), so it can
+        // only skip work, never visible geometry.
+        Vec3 wmin, wmax;
+        transformAabb(item.model, mesh->second.min, mesh->second.max, wmin, wmax);
+        if (!frustum.intersects(wmin, wmax)) {
+            ++m_sceneStats.culled;
+            continue;
+        }
+        ++m_sceneStats.drawn;
+        a.UniformMatrix4fv(m_u3dModel, 1, GL_FALSE_, item.model.data());
+        const Color& tint = item.material.tint;
+        a.Uniform4f(m_u3dTint, tint.r / 255.0f, tint.g / 255.0f,
+                    tint.b / 255.0f, tint.a / 255.0f);
+        const unsigned tex = resolveTexture(item.material.texId);
+        a.Uniform1i(m_u3dUseTex, item.material.texId != 0 && tex != 0 ? 1 : 0);
+        a.BindTexture(GL_TEXTURE_2D, tex != 0 ? tex : m_whiteTex);
+        a.BindVertexArray(mesh->second.vao);
+        a.DrawElements(GL_TRIANGLES, mesh->second.indexCount, GL_UNSIGNED_INT,
+                       reinterpret_cast<const void*>(0));
+    }
+
+    // ---- restore host state --------------------------------------------
+    a.BindVertexArray(static_cast<GLuint>(prevVao));
+    a.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLuint>(prevElemBuf));
+    a.BindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(prevArrBuf));
+    a.UseProgram(static_cast<GLuint>(prevProgram));
+    if (prevActiveTex != GL_TEXTURE0) {
+        a.ActiveTexture(GL_TEXTURE0);
+        a.BindTexture(GL_TEXTURE_2D, static_cast<GLuint>(prevTexUnit0));
+    }
+    a.ActiveTexture(static_cast<GLenum>(prevActiveTex));
+    a.BindTexture(GL_TEXTURE_2D, static_cast<GLuint>(prevTex));
+    a.DepthFunc(static_cast<GLenum>(prevDepthFunc));
+    a.DepthMask(prevDepthMask != 0 ? 1 : 0);
+    a.CullFace(static_cast<GLenum>(prevCullMode));
+    a.FrontFace(static_cast<GLenum>(prevFrontFace));
+    a.Viewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
+    auto setCap = [&](GLenum cap, bool on) { if (on) a.Enable(cap); else a.Disable(cap); };
+    setCap(GL_DEPTH_TEST, wasDepth);
+    setCap(GL_CULL_FACE, wasCull);
+    setCap(GL_BLEND, wasBlend);
+    setCap(GL_SCISSOR_TEST, wasScissor);
+}
+
+bool GlBackend::allocTarget(Target3D& t) {
+    Api& a = *m_api;
+
+    // A target is created in the middle of a host frame, so every binding
+    // touched here is captured and put back before returning.
+    GLint prevFbo = 0, prevActiveTex = 0, prevTexUnit0 = 0, prevRb = 0;
+    a.GetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo);
+    a.GetIntegerv(GL_ACTIVE_TEXTURE, &prevActiveTex);
+    a.GetIntegerv(GL_TEXTURE_BINDING_2D, &prevTexUnit0);
+    if (prevActiveTex != GL_TEXTURE0) {
+        a.ActiveTexture(GL_TEXTURE0);
+        a.GetIntegerv(GL_TEXTURE_BINDING_2D, &prevTexUnit0);
+    }
+    a.GetIntegerv(GL_RENDERBUFFER_BINDING, &prevRb);
+    a.ActiveTexture(GL_TEXTURE0);
+
+    a.GenTextures(1, &t.color);
+    if (!t.color) return false;
+    a.BindTexture(GL_TEXTURE_2D, t.color);
+    a.TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, t.w, t.h, 0, GL_RGBA,
+                 GL_UNSIGNED_BYTE, nullptr);
+    a.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    a.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    a.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    a.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    a.GenRenderbuffers(1, &t.depth);
+    if (!t.depth) return false;
+    a.BindRenderbuffer(GL_RENDERBUFFER, t.depth);
+    a.RenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, t.w, t.h);
+
+    a.GenFramebuffers(1, &t.fbo);
+    if (!t.fbo) return false;
+    a.BindFramebuffer(GL_FRAMEBUFFER, t.fbo);
+    a.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                           GL_TEXTURE_2D, t.color, 0);
+    a.FramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+                              GL_RENDERBUFFER, t.depth);
+    const bool complete = a.CheckFramebufferStatus(GL_FRAMEBUFFER) ==
+                          GL_FRAMEBUFFER_COMPLETE;
+
+    a.BindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
+    a.BindRenderbuffer(GL_RENDERBUFFER, static_cast<GLuint>(prevRb));
+    a.ActiveTexture(GL_TEXTURE0);
+    a.BindTexture(GL_TEXTURE_2D, static_cast<GLuint>(prevTexUnit0));
+    a.ActiveTexture(static_cast<GLenum>(prevActiveTex));
+    return complete;
+}
+
+void GlBackend::freeTarget(Target3D& t) {
+    Api& a = *m_api;
+    if (t.fbo) a.DeleteFramebuffers(1, &t.fbo);
+    if (t.color) a.DeleteTextures(1, &t.color);
+    if (t.depth) a.DeleteRenderbuffers(1, &t.depth);
+    t.fbo = t.color = t.depth = 0;
+}
+
+int GlBackend::createSceneTarget(int width, int height) {
+    if (!m_ready || !ensure3DProgram()) return 0;
+    Api& a = *m_api;
+    if (!a.GenFramebuffers || !a.BindFramebuffer || !a.DeleteFramebuffers ||
+        !a.FramebufferTexture2D || !a.CheckFramebufferStatus ||
+        !a.GenRenderbuffers || !a.BindRenderbuffer ||
+        !a.RenderbufferStorage || !a.FramebufferRenderbuffer) {
+        m_error = "scene targets need framebuffer objects (GL 3.0 / ES 3.0)";
+        return 0;
+    }
+
+    Target3D t;
+    t.w = width > 0 ? width : 1;
+    t.h = height > 0 ? height : 1;
+
+    if (!allocTarget(t)) {
+        freeTarget(t);
+        m_error = "scene target is not a complete framebuffer";
+        return 0;
+    }
+
+    t.slot = m_nextHostSlot++;
+    const int handle = m_nextTarget++;
+    m_targets[handle] = t;
+    m_hostTexs[t.slot] = t.color;
+    return handle;
+}
+
+bool GlBackend::resizeSceneTarget(int handle, int width, int height) {
+    auto it = m_targets.find(handle);
+    if (it == m_targets.end() || !m_ready) return false;
+    Target3D& t = it->second;
+    const int w = width > 0 ? width : 1;
+    const int h = height > 0 ? height : 1;
+    if (t.w == w && t.h == h) return true;
+
+    freeTarget(t);
+    t.w = w;
+    t.h = h;
+    if (!allocTarget(t)) {
+        freeTarget(t);
+        m_hostTexs.erase(t.slot);
+        m_targets.erase(it);
+        m_error = "scene target resize failed (framebuffer incomplete)";
+        return false;
+    }
+    m_hostTexs[t.slot] = t.color;
+    return true;
+}
+
+void GlBackend::destroySceneTarget(int handle) {
+    auto it = m_targets.find(handle);
+    if (it == m_targets.end() || !m_api) return;
+    freeTarget(it->second);
+    m_hostTexs.erase(it->second.slot);
+    m_targets.erase(it);
+}
+
+int GlBackend::sceneTargetSlot(int handle) const {
+    auto it = m_targets.find(handle);
+    return it == m_targets.end() ? 0 : it->second.slot;
+}
+
+bool GlBackend::renderSceneToTarget(const Scene3D& scene, int handle) {
+    auto it = m_targets.find(handle);
+    if (it == m_targets.end() || !m_ready) return false;
+    if (!ensure3DProgram()) return false;
+    Target3D& t = it->second;
+    if (t.w <= 0 || t.h <= 0) return false;
+
+    Api& a = *m_api;
+    GLint prevFbo = 0, prevViewport[4] = {0, 0, 0, 0};
+    a.GetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFbo);
+    a.GetIntegerv(GL_VIEWPORT, prevViewport);
+
+    a.BindFramebuffer(GL_FRAMEBUFFER, t.fbo);
+    a.Viewport(0, 0, t.w, t.h);
+    const Color& bg = scene.background;
+    a.ClearColor(bg.r / 255.0f, bg.g / 255.0f, bg.b / 255.0f, bg.a / 255.0f);
+    // Depth always: a stale depth buffer would hide the new frame. Colour only
+    // when the scene asked for a background, so a transparent scene can layer
+    // over whatever the target already held.
+    a.Clear(static_cast<unsigned>(GL_DEPTH_BUFFER_BIT) |
+            (bg.a > 0 ? static_cast<unsigned>(GL_COLOR_BUFFER_BIT) : 0u));
+
+    if (!scene.empty()) {
+        drawScene(scene, static_cast<float>(t.w) / static_cast<float>(t.h));
+    }
+
+    a.BindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(prevFbo));
+    a.Viewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
+    return true;
+}
+
+int GlBackend::registerTexture(unsigned glTexture) {
+    if (glTexture == 0) return 0;
+    const int slot = m_nextHostSlot++;
+    m_hostTexs[slot] = glTexture;
+    return slot;
+}
+
+void GlBackend::unregisterTexture(int slot) {
+    // Only slots this backend handed out are touched; never the GL texture
+    // itself, which belongs to the caller.
+    if (slot >= 1000000) m_hostTexs.erase(slot);
+}
+
 void GlBackend::shutdown() {
     if (!m_api) { m_ready = false; return; }
     Api& a = *m_api;
+    // 3D first: meshes and targets own buffers the 2D teardown knows nothing
+    // about, and freeTarget() still needs m_api.
+    for (auto& kv : m_meshes) {
+        if (kv.second.vbo) a.DeleteBuffers(1, &kv.second.vbo);
+        if (kv.second.ebo) a.DeleteBuffers(1, &kv.second.ebo);
+        if (kv.second.vao) a.DeleteVertexArrays(1, &kv.second.vao);
+    }
+    m_meshes.clear();
+    for (auto& kv : m_targets) freeTarget(kv.second);
+    m_targets.clear();
+    // Host textures are the caller's: only the slot mapping goes away.
+    m_hostTexs.clear();
+    if (m_3dProgram) { a.DeleteProgram(m_3dProgram); m_3dProgram = 0; }
+    m_3dReady = false;
     if (m_vbo) { a.DeleteBuffers(1, &m_vbo); m_vbo = 0; }
     if (m_ebo) { a.DeleteBuffers(1, &m_ebo); m_ebo = 0; }
     m_vboCap = m_eboCap = 0;

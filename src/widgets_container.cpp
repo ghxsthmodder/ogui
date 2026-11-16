@@ -290,6 +290,14 @@ Column::Column() = default;
 Column::~Column() = default;
 
 void Column::layout(float parentWidth, float parentHeight) {
+    // A column is at least as big as what it holds, and never grows on its own
+    // beyond that: the box starts at whatever width/height the widget already
+    // resolved (authored pixels, a percentage, fill) and only expands to fit
+    // its children. Claiming the parent's width and height instead made a
+    // <column> at x=300,width=240, near the bottom of the canvas, report an
+    // 800x600 box running off the screen (layout_templates.xml's sections) --
+    // a phantom that every overflow check then had to special-case.
+    const Rect start = m_bounds;
     float pad = m_style.padding;
     float gap = m_style.gap > 0.0f ? m_style.gap
                   : (m_style.margin > 0.0f ? m_style.margin : 4.0f);
@@ -357,10 +365,8 @@ void Column::layout(float parentWidth, float parentHeight) {
     }
 
     float totalH = y > pad ? y - gap : pad;
-    m_bounds = Rect{m_bounds.x, m_bounds.y,
-                    std::max(maxW + pad, parentWidth),
-                    std::max(totalH, parentHeight)};
-    (void)parentHeight;
+    m_bounds = Rect{start.x, start.y, std::max(maxW + pad, start.w),
+                    std::max(totalH, start.h)};
 }
 
 // ------------------------------------------------------------------

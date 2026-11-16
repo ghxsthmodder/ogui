@@ -120,7 +120,9 @@ inline ogui::Label* addNavBar(const ogui::Widget::Ptr& root, float width,
 
     auto title = std::make_shared<ogui::Label>();
     title->setId("nav_title");
-    title->setBounds(ogui::Rect{0.0f, 0.0f, 420.0f, 32.0f});
+    // 380, not 420: with the two buttons and the theme toggle the old widths
+    // summed past the bar, and the toggle's label was drawn off the right edge.
+    title->setBounds(ogui::Rect{0.0f, 0.0f, 380.0f, 32.0f});
     title->setTextColor(ogui::palette().text);
     title->setFontSize(16);
 
@@ -135,7 +137,7 @@ inline ogui::Label* addNavBar(const ogui::Widget::Ptr& root, float width,
 
     auto theme = std::make_shared<ogui::ToggleSwitch>();
     theme->setId("nav_theme");
-    theme->setBounds(ogui::Rect{0.0f, 0.0f, 110.0f, 32.0f});
+    theme->setBounds(ogui::Rect{0.0f, 0.0f, 140.0f, 32.0f});
     theme->setText("Tema claro");
     theme->setState(light);
     theme->setBinding("navTheme");

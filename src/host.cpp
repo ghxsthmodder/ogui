@@ -49,6 +49,7 @@ typedef void (WINAPI* PFNGLCLEAR)(unsigned int);
 typedef void (WINAPI* PFNGLCLEARCOLOR)(float, float, float, float);
 typedef void (WINAPI* PFNGLVIEWPORT)(int, int, int, int);
 static constexpr unsigned GL_COLOR_BUFFER_BIT_ = 0x00004000;
+static constexpr unsigned GL_DEPTH_BUFFER_BIT_ = 0x00000100;
 
 // Map a Win32 virtual key to ogui::KeyCode (subset; enough for the demo).
 KeyCode mapKey(WPARAM vk) {
@@ -454,6 +455,10 @@ void Host::setAfterFrame(std::function<void(Kernel&, const DrawList&)> fn) {
     m_afterFrame = std::move(fn);
 }
 
+void Host::setBeforeDraw(std::function<void(Kernel&, int, int)> fn) {
+    m_beforeDraw = std::move(fn);
+}
+
 void Host::toggleFullscreen() {
     if (!m_native || !m_native->hwnd) return;
     HWND hwnd = m_native->hwnd;
@@ -575,7 +580,11 @@ void Host::run(Kernel& kernel) {
         int fbh = rcClient.bottom - rcClient.top;
         if (n.glViewport) n.glViewport(0, 0, fbw, fbh);
         if (n.glClearColor) n.glClearColor(m_clearR, m_clearG, m_clearB, 1.0f);
-        if (n.glClear) n.glClear(GL_COLOR_BUFFER_BIT_);
+        // Depth too: the window was created with a 24-bit depth buffer, and a
+        // 3D pass drawn through this host needs it cleared once per frame.
+        if (n.glClear) n.glClear(GL_COLOR_BUFFER_BIT_ | GL_DEPTH_BUFFER_BIT_);
+        // Between the clear and the interface: where 3D belongs.
+        if (m_beforeDraw) m_beforeDraw(kernel, fbw, fbh);
         m_backend.render(dl, fbw, fbh, /*flipY=*/false);
 
         SwapBuffers(n.dc);
@@ -633,6 +642,10 @@ void Host::setBeforeFrame(std::function<void(Kernel&, InputState&)> fn) {
 
 void Host::setAfterFrame(std::function<void(Kernel&, const DrawList&)> fn) {
     m_afterFrame = std::move(fn);
+}
+
+void Host::setBeforeDraw(std::function<void(Kernel&, int, int)> fn) {
+    m_beforeDraw = std::move(fn);
 }
 
 void Host::toggleFullscreen() {

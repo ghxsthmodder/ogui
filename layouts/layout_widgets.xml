@@ -1,6 +1,6 @@
 <screen id="widgets">
   <panel id="bg" x="0" y="0" width="100%" height="100%" background="@screen"/>
-  <menubar id="mb" x="0" y="44" width="100%" height="24">
+  <menubar id="mb" x="0" y="52" width="100%" height="24">
     <menu label="Arquivo">
       <menuitem label="Nova cena" command="file_new"/>
       <menuitem label="Abrir cena..." command="file_open"/>
@@ -18,11 +18,15 @@
       <menuitem label="Sobre ogui" command="help_about"/>
     </menu>
   </menubar>
-  <label id="lbl_title" x="1.25%" y="78" width="97.5%" height="20"
+  <label id="lbl_title" x="1.25%" y="84" width="97.5%" height="20"
          text="Novos widgets em um grid 2 colunas (1fr 1fr)"
          font sans 16 color="#66ee66"/>
 
-  <grid id="gd_main" x="1.25%" y="104" width="97.5%" height="70%" columns="1fr 1fr" gap="10">
+  <!-- O grid e mais alto que o canvas de 600: as sete celulas empilhadas em
+       duas colunas pedem ~640 e antes a ultima fileira caia fora da tela. Uma
+       scrollview da o espaco que falta sem encolher as celulas. -->
+  <scrollview id="gd_scroll" x="1.25%" y="110" width="97.5%" height="70%" background="@screen">
+  <grid id="gd_main" x="0" y="0" width="100%" height="648" columns="1fr 1fr" gap="10">
 
     <!-- celula 1: form -->
     <panel x="0" y="0" width="100%" height="220" background="@surface" border="@border" radius="6"
@@ -111,6 +115,7 @@
                     text="VSync" bind="ts_change"/>
     </panel>
   </grid>
+  </scrollview>
 
   <!-- menu de contexto do painel Formulario (botao direito; no toque, segurar) -->
   <contextmenu id="cm_form">

@@ -213,8 +213,10 @@ int main() {
     auto cockpitScreen = std::make_shared<Screen>("cockpit_screen");
     cockpitScreen->widgets.push_back(shipped.root);
     cockpitScreen->scripts = std::move(shipped.scripts);   // as the gallery does
-    cockpitScreen->width = 1228.0f;
-    cockpitScreen->height = 700.0f;
+    // The gallery's canvas; the cockpit is authored for it (it used to be a
+    // 1200x800 design whose right column ran off an 800-wide canvas).
+    cockpitScreen->width = 800.0f;
+    cockpitScreen->height = 600.0f;
 
     Kernel hud;
     hud.init();
@@ -231,9 +233,12 @@ int main() {
     CHECK(gauge->value() == 0.0f);
     CHECK_MSG(hud.script().errors().empty(), "the cockpit script raised");
 
-    // Hold the accelerator pedal for a while. Its rect is 866,386 104x230.
-    hin.mouseX = 918.0f;
-    hin.mouseY = 501.0f;
+    // Hold the accelerator pedal for a while. The click is aimed at the pedal's
+    // own box rather than at a literal coordinate, so moving the control in the
+    // layout cannot silently turn the test into a miss.
+    const Rect pedalBox = throttle->bounds();
+    hin.mouseX = pedalBox.x + pedalBox.w * 0.5f;
+    hin.mouseY = pedalBox.y + pedalBox.h * 0.5f;
     hin.mouseDown[0] = true;
     hin.mouseButton = 0;
     for (int i = 0; i < 15; ++i) frame(hud, hin, 0.1f);

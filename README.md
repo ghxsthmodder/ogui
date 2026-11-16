@@ -33,6 +33,10 @@ creates for you (`ogui::Host`, a built-in Win32/WGL window and event loop, or
   OpenGL ES 3.0, picked from the running context, every entry point resolved
   at runtime, so the library never links against GL) and `SoftwareRenderer`
   (pure CPU, for headless tests and screenshots).
+* **A 3D layer for 3D games** — `Scene3D` + `Camera3D` + `MeshData` rendered
+  with depth testing and back-face culling by `GlBackend::renderScene()`, and
+  `SceneView` to put a scene inside a 2D layout through a backend-owned
+  offscreen target (see [3D](#3d)).
 * **Scripting** — screens embed Lua 5.4 chunks (`<script>`); the engine
   owns the loop and calls the script's `ogui_on_load`/`ogui_on_show`/`ogui_on_update`/`ogui_on_click`/
   `ogui_on_event` hooks through the `ogui` API table: widget attributes,
@@ -373,6 +377,89 @@ adds a few conveniences you opt into:
   covered when minimised and never blocks taskbar apps while maximised;
   `F11` fullscreen is likewise a top *normal* window, not a topmost one.
 
+### 3D
+
+The UI is a 2D triangle soup, but the renderer has a second layer for a game
+whose world is 3D. It is plain data plus one depth-tested GL pass, so the
+library still links no GL: the host owns the context, as it does for the UI.
+
+```cpp
+// Once: geometry is position + normal + uv, counter-clockwise front faces.
+ogui::MeshData cube = /* build or load */;
+const int mesh = backend.uploadMesh(cube);      // 0 = failed
+
+// Every frame, after your own world and before the UI:
+ogui::Scene3D scene;
+scene.camera.position = {0.0f, 1.5f, 4.0f};
+scene.camera.target   = {0.0f, 0.0f, 0.0f};
+ogui::Material paint;
+paint.tint = {200, 210, 230, 255};
+scene.addMesh(mesh, ogui::Matrix4x4::rotationY(t), paint);
+
+backend.renderScene(scene, fbWidth, fbHeight);       // depth on, culled, lit
+backend.render(kernel.drawList(), fbWidth, fbHeight); // UI paints on top
+```
+
+`renderScene()` clears nothing and restores every piece of GL state it touches
+(depth test/func/mask, cull, blend, scissor, program, buffers, textures,
+viewport). That is deliberate: the default framebuffer's depth buffer belongs
+to the host, so a game can draw its own world first and let the UI's 3D layer
+share the same depth, or draw the UI into a target of its own.
+
+Meshes are lit by one directional light plus an ambient term (`scene.light`),
+with an optional texture per material. Uniform scale is not assumed: the normal
+matrix is derived from the model matrix in the shader. `ogui::cubeMesh()` is
+the built-in cube (24 vertices, one normal per face) the demo spins.
+
+Each item is frustum-culled on the CPU before any draw call: the mesh's
+object-space bounds are transformed by the model matrix and tested against the
+six planes of the camera frustum (`Frustum`, above). `backend.sceneStats()`
+reports how many items the last pass drew and how many it skipped, which is
+what the demo's "Mover fora da tela" button displays.
+
+To show a scene **inside a layout** (a cockpit screen with a 3D model in it),
+use the `sceneview` element -- or the widget directly:
+
+```xml
+<sceneview id="view3d" x="20" y="88" width="760" height="380"
+           camera="0,2.4,-6" target="0,0,0" fov="50" background="#141a20"/>
+```
+
+```cpp
+if (auto* view = dynamic_cast<ogui::SceneView*>(kernel.findWidget("view3d"))) {
+    if (!view->scene().itemCount())
+        view->scene().addMesh(backend.uploadMesh(ogui::cubeMesh(1.7f)), model);
+    const ogui::Rect b = view->bounds();
+    const float s = kernel.scale();
+    view->submit(backend, static_cast<int>(b.w * s), static_cast<int>(b.h * s));
+}
+```
+
+`submit()` is the whole per-frame contract: it creates or resizes the widget's
+own target to the pixel box it was given, renders its scene into it and points
+the quad at the resulting texture slot. A host that owns the target itself (a
+minimap, a second camera) calls `setTarget()`/`setTextureSlot()` instead.
+
+The target clears itself with `scene.background` and owns a 16-bit depth
+buffer; the widget draws its colour texture as one textured quad in the
+y-down DrawList (the V axis is flipped for it). `resizeSceneTarget()` keeps
+the same texture slot, so a layout change does not invalidate the widget.
+Without a target -- headless, or before the first `renderSceneToTarget()` --
+the widget draws a flat panel, which is what the software renderer and golden
+frames see.
+
+What the layer deliberately does **not** do: shadows, instancing, point/spot
+lights, or any 3D in `SoftwareRenderer`. Those belong either to the game's own
+renderer or to a later increment; the `DrawList` contract stays 2D.
+
+The 3D pass is covered by `ogui_gl_test`, which opens a real (headless) EGL
+context when the machine has one: it renders a near cube first and a far cube
+second and asserts the near one still wins the centre pixel (depth, not paint
+order), moves both out of the frustum and asserts they are reported as culled
+with an untouched frame, and checks that both passes leave the host's GL state
+exactly as they found it. `ogui_scene3d_test` covers the CPU half: projection,
+view, model composition, the cube's winding/normals, and the frustum maths.
+
 `examples/screenshot.cpp` renders the same layout to a PNG with no GL at all.
 
 The Win32 demo (`examples/demo_win32.cpp`) is a **gallery**: the available
@@ -628,6 +715,7 @@ theme default.
 | `steeringwheel` | draggable rim that turns the wheel by the shortest arc and eases back to centre on release; arrow keys steer, `Home` recentres; fires `change` with the angle | `angle` (degrees, negative = left), `maxAngle` (half of lock-to-lock, default 180), `autoCenter`, `label`, `rimColor`, `hubColor`, `spokeColor` |
 | `pedal` | foot pedal with a plate that travels while held; reports `value` 1 on press and 0 on release (or any analog value a script writes), `Space`/`Enter` also press it | `label`, `value` (0..1), `speed` (travel rate), `plateColor`, `accent`, `housingColor` |
 | `speedometer` | dial gauge over a 270° sweep: ticks and labels, optional red zone, needle and the number + unit printed in the middle | `value`, `min`, `max`, `redline`, `unit`, `label`, `needleColor`, `tickColor`, `dialColor` |
+| `sceneview` | 3D viewport: owns a `Scene3D` (camera, light, clear colour) and draws its rendered target as one textured quad, so it clips, scrolls and stacks like any other box. The host uploads the meshes and calls `submit()` once per frame; without a target it draws a flat placeholder | `camera` (eye `x,y,z`), `target` (look-at), `up`, `fov`, `near`, `far`, `light` (`x,y,z`), `lightColor`, `ambient`, `background` (also the target's clear colour) |
 | `separator` | rule, horizontal or vertical | `thickness`, `color` |
 | `tabs` / `tab` | header strip over stacked pages (inactive pages take no input); pages that don't fit the width collapse into a `...` popup menu, or with `scrolling="true"` the header becomes a drag/wheel-scrollable strip that keeps every tab visible | `active`, `tabHeight`, `headerColor`, `tabColor`, `activeColor`, `accent`, `scrolling` / `label` |
 | `group` | titled grouping box | `name` |
@@ -1131,18 +1219,30 @@ hand-drained `ALooper_pollOnce` loop with a 16 ms budget while a window is up
 (`ALooper_pollAll` is documented as obsoleted: it "may ignore wakes").
 
 `fit()` is where a desktop-authored layout meets a phone. The gallery screens are
-built for a fixed 800-unit canvas, and at the device's own density 1080 px is only
+built for a fixed 800x600 canvas, and at the device's own density 1080 px is only
 384 logical units, so the right edge of every row would fall off the screen. Rather
 than re-lay out a design that was not made for a phone, `fit()` zooms it:
-`fitToWidthScale(deviceWidthPx, designWidth, dpiScale)` returns the scale that maps
-the design width onto the screen width — a zoom-out on a narrow phone — but never
-more than `dpiScale`, so a screen already wide enough at its density keeps its
-physical size and is not blown up. The logical width ends at the design width, so
-nothing clips horizontally; the tall canvas left over below the (top-anchored)
-design is what the safe area then subtracts the bars from. The tradeoff is that a
-`%`-height box stretches to that taller canvas — a desktop layout shown on a
-19.5:9 phone has more room than it was drawn for — which is the lesser cost against
-content that was simply off the edge.
+`fitToDesignScale(deviceWidthPx, deviceHeightPx, designW, designH, dpiScale)` returns
+the smaller of the width fit and the height fit — a zoom-out on a narrow phone — but
+never more than `dpiScale`, so a screen already big enough at its density keeps its
+physical size and is not blown up. Both axes matter: fitting only the width on a
+phone in landscape (2340x1080) leaves 384 logical units of height, so everything
+below y=384 is off the bottom of the screen; fitting the height as well puts the
+whole 600-unit design on the device, with leftover width on the side. Every gallery
+screen is sized, not just the active one, because the nav bar swaps screens without
+a resize. The tradeoff is that a `%`-height box stretches to a taller portrait
+canvas — a desktop layout on a 19.5:9 phone has more room than it was drawn for —
+which is the lesser cost against content that was simply off the edge.
+
+The design still has to be *authored* inside its canvas. `ogui_responsive_test`
+lays every screen in `manifest.xml` out on the desktop canvas and on the portrait
+and landscape canvases the fit rule produces, and fails on any visible widget whose
+box leaves the canvas (skipping scrolled content, where the clip makes the overflow
+legal). The audit it formalises found four real offenders, all fixed: the game menu,
+authored 1228x700; the cockpit HUD, authored 1200x800; the widgets grid, taller than
+the window; and `<column>`, which claimed the parent's width and height even when it
+was authored smaller — so a component at `x=300 width=240` reported an 800-wide box
+running off the screen.
 
 A window on a phone is not the whole window: a status bar, a notch and the
 keyboard each take a strip of it, and a layout that does not know that draws a

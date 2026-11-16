@@ -351,10 +351,36 @@ int keyFromAndroidKey(int32_t androidKeyCode);
 // that dpiScale already fits the design, dpiScale is returned and the layout
 // keeps its physical size. The taller-than-design canvas that leaves is what the
 // safe area then has room to subtract the bars from.
+//
+// Width alone is only half the question: a phone in landscape is wider than the
+// design and much shorter (2340x1080 at 2.8125 fits 832x384 logical, so every
+// row below y=384 is off the bottom). fitToDesignScale() below is the rule that
+// accounts for both axes; this one stays for hosts that deliberately pin one
+// dimension.
 inline float fitToWidthScale(float deviceWidthPx, float designWidth,
                              float dpiScale) {
     if (designWidth <= 0.0f || deviceWidthPx <= 0.0f) return dpiScale;
     const float fit = deviceWidthPx / designWidth;
+    return fit < dpiScale ? fit : dpiScale;
+}
+
+// Fit a design canvas of designWidth x designHeight into the device rectangle,
+// on both axes: the scale is the smaller of the width fit and the height fit,
+// capped at the device density (never zoom in past it). The design then fits
+// whole -- letterboxed on the axis that has room left over -- instead of being
+// clipped on the short one. Because the canvas is at least the design size in
+// both directions, an 800x600 layout is laid out on 800x600 logical units or
+// more, never less.
+//
+// A device with no size yet (window not attached) keeps the density.
+inline float fitToDesignScale(float deviceWidthPx, float deviceHeightPx,
+                              float designWidth, float designHeight,
+                              float dpiScale) {
+    if (deviceWidthPx <= 0.0f || deviceHeightPx <= 0.0f) return dpiScale;
+    if (designWidth <= 0.0f || designHeight <= 0.0f) return dpiScale;
+    const float fitW = deviceWidthPx / designWidth;
+    const float fitH = deviceHeightPx / designHeight;
+    const float fit = fitW < fitH ? fitW : fitH;
     return fit < dpiScale ? fit : dpiScale;
 }
 

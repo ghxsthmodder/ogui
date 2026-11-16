@@ -37,6 +37,114 @@ Matrix4x4 Matrix4x4::ortho(float left, float right, float bottom, float top,
     return m;
 }
 
+Matrix4x4 Matrix4x4::perspective(float fovYDegrees, float aspect,
+                                 float nearZ, float farZ) {
+    Matrix4x4 m;
+    const float f = 1.0f / std::tan(fovYDegrees * 0.5f * 3.14159265358979323846f / 180.0f);
+    const float a = aspect > 0.0f ? aspect : 1.0f;
+    const float rdepth = 1.0f / (nearZ - farZ);
+    // Column-major, OpenGL clip rules: w_clip = -z_view.
+    m.m[0]  = f / a;
+    m.m[5]  = f;
+    m.m[10] = (farZ + nearZ) * rdepth;
+    m.m[11] = -1.0f;
+    m.m[14] = 2.0f * farZ * nearZ * rdepth;
+    m.m[15] = 0.0f;
+    return m;
+}
+
+Matrix4x4 Matrix4x4::lookAt(const Vec3& eye, const Vec3& target, const Vec3& up) {
+    // The camera looks down -z, so z points back towards the eye.
+    Vec3 z = normalize(eye - target);
+    Vec3 x = normalize(cross(up, z));
+    if (dot(x, x) == 0.0f) {
+        // `up` is parallel to the view direction: any perpendicular will do,
+        // and a degenerate basis is worse than a surprising roll.
+        const Vec3 fallback = std::fabs(z.y) > 0.9f ? Vec3{0.0f, 0.0f, 1.0f}
+                                                   : Vec3{0.0f, 1.0f, 0.0f};
+        x = normalize(cross(fallback, z));
+    }
+    const Vec3 y = cross(z, x);
+
+    Matrix4x4 m;
+    m.m[0] = x.x; m.m[4] = x.y; m.m[8]  = x.z; m.m[12] = -dot(x, eye);
+    m.m[1] = y.x; m.m[5] = y.y; m.m[9]  = y.z; m.m[13] = -dot(y, eye);
+    m.m[2] = z.x; m.m[6] = z.y; m.m[10] = z.z; m.m[14] = -dot(z, eye);
+    m.m[3] = 0.0f; m.m[7] = 0.0f; m.m[11] = 0.0f; m.m[15] = 1.0f;
+    return m;
+}
+
+Matrix4x4 Matrix4x4::translation(const Vec3& t) {
+    Matrix4x4 m;
+    m.m[12] = t.x;
+    m.m[13] = t.y;
+    m.m[14] = t.z;
+    return m;
+}
+
+Matrix4x4 Matrix4x4::scaling(const Vec3& s) {
+    Matrix4x4 m;
+    m.m[0] = s.x;
+    m.m[5] = s.y;
+    m.m[10] = s.z;
+    return m;
+}
+
+Matrix4x4 Matrix4x4::rotationX(float radians) {
+    Matrix4x4 m;
+    const float c = std::cos(radians), s = std::sin(radians);
+    m.m[5] = c;  m.m[6] = s;
+    m.m[9] = -s; m.m[10] = c;
+    return m;
+}
+
+Matrix4x4 Matrix4x4::rotationY(float radians) {
+    Matrix4x4 m;
+    const float c = std::cos(radians), s = std::sin(radians);
+    m.m[0] = c;  m.m[2] = -s;
+    m.m[8] = s;  m.m[10] = c;
+    return m;
+}
+
+Matrix4x4 Matrix4x4::rotationZ(float radians) {
+    Matrix4x4 m;
+    const float c = std::cos(radians), s = std::sin(radians);
+    m.m[0] = c; m.m[1] = s;
+    m.m[4] = -s; m.m[5] = c;
+    return m;
+}
+
+Matrix4x4 Matrix4x4::operator*(const Matrix4x4& rhs) const {
+    Matrix4x4 out;
+    for (int col = 0; col < 4; ++col) {
+        for (int row = 0; row < 4; ++row) {
+            float sum = 0.0f;
+            for (int k = 0; k < 4; ++k) {
+                sum += m[k * 4 + row] * rhs.m[col * 4 + k];
+            }
+            out.m[col * 4 + row] = sum;
+        }
+    }
+    return out;
+}
+
+Vec3 Matrix4x4::transformPoint(const Vec3& p) const {
+    const float x = m[0] * p.x + m[4] * p.y + m[8]  * p.z + m[12];
+    const float y = m[1] * p.x + m[5] * p.y + m[9]  * p.z + m[13];
+    const float z = m[2] * p.x + m[6] * p.y + m[10] * p.z + m[14];
+    const float w = m[3] * p.x + m[7] * p.y + m[11] * p.z + m[15];
+    if (w == 0.0f) return {x, y, z};
+    const float inv = 1.0f / w;
+    return {x * inv, y * inv, z * inv};
+}
+
+Vec3 normalize(const Vec3& v) {
+    const float len2 = dot(v, v);
+    if (len2 <= 0.0f) return {};
+    const float inv = 1.0f / std::sqrt(len2);
+    return {v.x * inv, v.y * inv, v.z * inv};
+}
+
 // ---- vertex ---------------------------------------------------------------
 Vertex Vertex::make(float x, float y, float u, float v, const Color& col) {
     Vertex out;

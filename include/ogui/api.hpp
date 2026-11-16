@@ -56,7 +56,23 @@ struct Size2D { float w = 0.0f, h = 0.0f; };
 struct Rect { float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f; };
 struct Color { uint8_t r = 0, g = 0, b = 0, a = 255; };
 
+// A point/direction in 3D. The 2D widgets never see one; the scene layer does.
+struct Vec3 { float x = 0.0f, y = 0.0f, z = 0.0f; };
+
+inline Vec3 operator+(const Vec3& a, const Vec3& b) { return {a.x + b.x, a.y + b.y, a.z + b.z}; }
+inline Vec3 operator-(const Vec3& a, const Vec3& b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
+inline Vec3 operator*(const Vec3& a, float s) { return {a.x * s, a.y * s, a.z * s}; }
+inline float dot(const Vec3& a, const Vec3& b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+inline Vec3 cross(const Vec3& a, const Vec3& b) {
+    return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
+}
+// Zero-length input returns a zero vector rather than NaN.
+Vec3 normalize(const Vec3& v);
+
 // 4x4 column-major matrix (OpenGL style). Default -> identity.
+// ortho() builds the 2D projection the UI uses; perspective/lookAt are the 3D
+// pair. Nothing here knows about the GPU: the software side can use the same
+// matrices for its own maths.
 struct Matrix4x4 {
     std::array<float, 16> m{};
 
@@ -64,6 +80,27 @@ struct Matrix4x4 {
     void setIdentity();
     static Matrix4x4 ortho(float left, float right, float bottom, float top,
                            float nearVal, float farVal);
+
+    // Standard OpenGL projection: the camera looks down its own -z, ndc z in
+    // [-1, 1], y up, and the returned matrix divides by w.
+    static Matrix4x4 perspective(float fovYDegrees, float aspect,
+                                 float nearZ, float farZ);
+    // Right-handed view matrix with `up` only deciding the roll; the target
+    // lands on the -z axis.
+    static Matrix4x4 lookAt(const Vec3& eye, const Vec3& target, const Vec3& up);
+    static Matrix4x4 translation(const Vec3& t);
+    static Matrix4x4 scaling(const Vec3& s);
+    static Matrix4x4 rotationX(float radians);
+    static Matrix4x4 rotationY(float radians);
+    static Matrix4x4 rotationZ(float radians);
+
+    // this * rhs, i.e. rhs is applied first (the way matrices compose).
+    Matrix4x4 operator*(const Matrix4x4& rhs) const;
+
+    // Transforms `p` and divides by w when there is one, so a point run
+    // through a projection matrix comes back in ndc. Points at w == 0 are
+    // returned untransformed by w (no NaN).
+    Vec3 transformPoint(const Vec3& p) const;
 
     float* data() { return m.data(); }
     const float* data() const { return m.data(); }

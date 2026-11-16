@@ -1,6 +1,7 @@
 <?xml version="1.0"?>
 <!-- layout_cockpit.xml : a South American Farming driving HUD built from the
-     vehicle widgets. The wheel turns under the pointer (or Left/Right), the
+     vehicle widgets. It is authored for the gallery's 800x600 canvas -- the
+     wheel turns under the pointer (or Left/Right), the
      pedals travel while held, and a Lua chunk integrates a speed out of the
      two pedals and feeds it to the speedometer -- so every control here is
      wired the way a host would wire it, through the property registry. -->
@@ -10,77 +11,78 @@
 
   <panel x="0" y="0" width="100%" height="100%" background="#10140f"/>
 
-  <!-- barra de contexto: cultura, fazenda e hora -->
-  <panel x="0" y="0" width="100%" height="48" background="#1b211a"/>
-  <label text="SOUTH AMERICAN FARMING" x="20" y="11" width="340" height="26"
-         font="anton" fontSize="18" color="#e8d9a8"/>
-  <label id="crop" text="SOJA - TALHAO 07" x="372" y="14" width="260" height="22"
+  <!-- barra de contexto: cultura, fazenda e hora. Tudo comeca em y=52 porque
+       a galeria injeta a barra de navegacao nos primeiros 52px. -->
+  <panel x="0" y="52" width="100%" height="44" background="#1b211a"/>
+  <label text="SOUTH AMERICAN FARMING" x="20" y="63" width="340" height="24"
+         font="anton" fontSize="16" color="#e8d9a8"/>
+  <label id="crop" text="SOJA - TALHAO 07" x="372" y="64" width="260" height="22"
          color="#9fb08f"/>
-  <label id="clock" text="06:40" align="right" x="1088" y="14" width="120" height="22"
+  <label id="clock" text="06:40" align="right" x="660" y="64" width="120" height="22"
          color="#e8d9a8"/>
 
   <!-- velocimetro: 0..60 km/h, zona vermelha acima de 45 -->
-  <speedometer id="speedo" x="34" y="78" width="290" height="290"
+  <speedometer id="speedo" x="24" y="104" width="250" height="250"
                min="0" max="60" value="0" redline="45"
                unit="km/h" label="VELOCIDADE"
                background="#151a15" needlecolor="#e0612a" tickcolor="#c9cdc0"
-               font="anton" fontSize="34"
+               font="anton" fontSize="30"
                tooltip="Velocidade do trator (km/h)"/>
 
   <!-- implementos engatados -->
-  <panel x="34" y="392" width="290" height="240" background="#161b16"
+  <panel x="24" y="366" width="250" height="186" background="#161b16"
          border="#2c3a2c" borderWidth="1" radius="8"/>
-  <label text="IMPLEMENTOS" x="52" y="406" width="200" height="22"
-         fontSize="14" color="#c49b3c"/>
+  <label text="IMPLEMENTOS" x="38" y="374" width="200" height="20"
+         fontSize="13" color="#c49b3c"/>
   <checkbox id="impl_planter" text="Plantadeira 24 linhas" checked="true"
-            x="52" y="438" width="250" height="26"/>
-  <checkbox id="impl_harrow" text="Grade niveladora" x="52" y="472" width="250" height="26"/>
+            x="38" y="398" width="222" height="26"/>
+  <checkbox id="impl_harrow" text="Grade niveladora" x="38" y="428" width="222" height="26"/>
   <checkbox id="impl_sprayer" text="Pulverizador 2000 L" checked="true"
-            x="52" y="506" width="250" height="26"/>
-  <separator x="52" y="548" width="254" height="1"/>
-  <label text="PESO NO ENGATE" x="52" y="562" width="180" height="20"
+            x="38" y="458" width="222" height="26"/>
+  <separator x="38" y="490" width="222" height="1"/>
+  <label text="PESO NO ENGATE" x="38" y="496" width="180" height="18"
          fontSize="12" color="#7f8c76"/>
-  <progress id="weight" value="0.42" x="52" y="590" width="254" height="14"/>
-  <label id="heading" text="EM LINHA RETA" x="52" y="612" width="254" height="20"
+  <progress id="weight" value="0.42" x="38" y="516" width="222" height="14"/>
+  <label id="heading" text="EM LINHA RETA" x="38" y="534" width="222" height="18"
          fontSize="12" color="#9fb08f"/>
 
   <!-- volante: 220 graus para cada lado -->
-  <steeringwheel id="steer" x="362" y="296" width="330" height="330"
+  <steeringwheel id="steer" x="300" y="120" width="300" height="300"
                  maxangle="220" label="VOLANTE"
                  rimcolor="#1f231d" hubcolor="#3a4034" spokecolor="#9aa28e"
                  font="anton" color="#d8d2bd" fontSize="14"
                  tooltip="Arraste o volante para estercar"/>
 
   <!-- pedais: freio a esquerda, acelerador a direita -->
-  <pedal id="brake" x="742" y="386" width="104" height="230" label="FREIO"
+  <pedal id="brake" x="636" y="372" width="70" height="180" label="FREIO"
          background="#1c1313" platecolor="#3d2b2b" accent="#d2503c"
          font="anton" color="#f0dede" fontSize="14" tooltip="Segure para frear"/>
-  <pedal id="accel" x="866" y="386" width="104" height="230" label="ACELERADOR"
+  <pedal id="accel" x="716" y="372" width="70" height="180" label="ACELERADOR"
          background="#121a12" platecolor="#2e3c2b" accent="#67c04a"
          font="anton" color="#e2efdc" fontSize="14" tooltip="Segure para acelerar"/>
 
   <!-- painel do motor -->
-  <panel x="1002" y="78" width="192" height="290" background="#161b16"
+  <panel x="628" y="104" width="156" height="250" background="#161b16"
          border="#2c3a2c" borderWidth="1" radius="8"/>
-  <label text="MARCHA" x="1018" y="92" width="120" height="20"
+  <label text="MARCHA" x="640" y="114" width="130" height="18"
          fontSize="12" color="#7f8c76"/>
-  <label id="gear" text="N" x="1018" y="112" width="160" height="64"
-         font="anton" fontSize="52" color="#e8d9a8"/>
-  <label text="MOTOR" x="1018" y="190" width="120" height="20"
+  <label id="gear" text="N" x="640" y="132" width="130" height="58"
+         font="anton" fontSize="46" color="#e8d9a8"/>
+  <label text="MOTOR" x="640" y="192" width="120" height="18"
          fontSize="12" color="#7f8c76"/>
-  <label id="rpm" text="850 rpm" x="1018" y="210" width="160" height="24"
+  <label id="rpm" text="850 rpm" x="640" y="210" width="130" height="24"
          font="anton" fontSize="20" color="#c9cdc0"/>
-  <separator x="1018" y="246" width="160" height="1"/>
-  <label text="COMBUSTIVEL" x="1018" y="258" width="140" height="20"
+  <separator x="640" y="244" width="130" height="1"/>
+  <label text="COMBUSTIVEL" x="640" y="254" width="130" height="18"
          fontSize="12" color="#7f8c76"/>
-  <progress id="fuel" value="0.72" color="#c49b3c" x="1018" y="284" width="160" height="14"/>
-  <label text="Fazenda Santa Rita" x="1018" y="316" width="160" height="20"
+  <progress id="fuel" value="0.72" color="#c49b3c" x="640" y="278" width="130" height="14"/>
+  <label text="Fazenda Santa Rita" x="640" y="300" width="130" height="20"
          color="#9fb08f"/>
-  <label text="Cascavel - PR" x="1018" y="336" width="160" height="20"
+  <label text="Cascavel - PR" x="640" y="322" width="130" height="18"
          fontSize="12" color="#7f8c76"/>
 
   <!-- rodape -->
-  <statusbar x="0" y="656" width="100%" height="44" background="#1b211a"
+  <statusbar x="0" y="562" width="100%" height="38" background="#1b211a"
              left="TALHAO 07 - SOJA" center="SAFRA 2026/27"
              right="Arraste o volante - segure os pedais" size="13"/>
 

@@ -1,6 +1,7 @@
 #include "ogui/xmlparser.hpp"
 #include "ogui/widget.hpp"
 #include "ogui/widgets.hpp"
+#include "ogui/scene3d.hpp"
 #include "ogui/font.hpp"
 #include "ogui/assets.hpp"
 #include "ogui/properties.hpp"
@@ -18,6 +19,28 @@ namespace ogui {
 static Color colorOf(const std::string& v) {
     if (!v.empty() && v[0] == '@') return palette().token(v.substr(1));
     return hexColor(v);
+}
+
+// "x,y,z" (spaces and semicolons accepted too) -> Vec3. Returns false when no
+// component parses, so a typo leaves the default in place instead of zeroing
+// the camera.
+static bool vec3Of(const std::string& v, Vec3& out) {
+    float parts[3] = {0.0f, 0.0f, 0.0f};
+    int n = 0;
+    std::string tok;
+    auto flush = [&]() {
+        if (tok.empty() || n >= 3) { tok.clear(); return; }
+        parts[n++] = std::strtof(tok.c_str(), nullptr);
+        tok.clear();
+    };
+    for (char c : v) {
+        if (c == ',' || c == ';' || c == ' ' || c == '\t') flush();
+        else tok.push_back(c);
+    }
+    flush();
+    if (n == 0) return false;
+    out = Vec3{parts[0], n > 1 ? parts[1] : 0.0f, n > 2 ? parts[2] : 0.0f};
+    return true;
 }
 
 namespace {
@@ -855,7 +878,48 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
     if (hasStyle) w->applyStyle(st);
 
     // ---- typed widget attributes ----
-    if (auto* p = dynamic_cast<Label*>(w.get())) {
+    if (auto* v3 = dynamic_cast<SceneView*>(w.get())) {
+        // Meshes are the host's data (int handles), so XML configures the
+        // camera, the light and the clear colour; the host adds geometry.
+        Scene3D& scene = v3->scene();
+        if (const std::string* v = get("camera")) {
+            Vec3 p;
+            if (vec3Of(*v, p)) scene.camera.position = p;
+        }
+        if (const std::string* v = get("target")) {
+            Vec3 t;
+            if (vec3Of(*v, t)) scene.camera.target = t;
+        }
+        if (const std::string* v = get("up")) {
+            Vec3 u;
+            if (vec3Of(*v, u)) scene.camera.up = u;
+        }
+        if (const std::string* v = get("fov")) {
+            float f = scene.camera.fovY;
+            if (toFloat(*v, f) && f > 0.0f) scene.camera.fovY = f;
+        }
+        if (const std::string* v = get("near")) {
+            float z = scene.camera.nearZ;
+            if (toFloat(*v, z) && z > 0.0f) scene.camera.nearZ = z;
+        }
+        if (const std::string* v = get("far")) {
+            float z = scene.camera.farZ;
+            if (toFloat(*v, z) && z > scene.camera.nearZ) scene.camera.farZ = z;
+        }
+        if (const std::string* v = get("light")) {
+            Vec3 l;
+            if (vec3Of(*v, l)) scene.light.direction = l;
+        }
+        if (const std::string* v = get("lightcolor")) scene.light.color = colorOf(*v);
+        if (const std::string* v = get("ambient")) {
+            float am = scene.light.ambient;
+            if (toFloat(*v, am)) scene.light.ambient = std::clamp(am, 0.0f, 1.0f);
+        }
+        // `background` is also the widget's style colour; on a scene view it
+        // additionally decides what the offscreen target is cleared to.
+        if (const std::string* v = get("background"))
+            scene.background = colorOf(*v);
+    } else if (auto* p = dynamic_cast<Label*>(w.get())) {
         if (const std::string* v = get("text")) p->setText(*v);
         if (const std::string* v = get("wrap")) p->setWrap(toBool(*v));
         if (hasStyle) { p->setFontFamily(st.fontFamily); p->setFontSize(st.fontSize); p->setTextColor(st.textColor); }

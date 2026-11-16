@@ -3,6 +3,7 @@
 #include "ogui/style.hpp"
 #include "ogui/widget.hpp"
 #include "ogui/widgets.hpp"
+#include "ogui/scene3d.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -3102,6 +3103,106 @@ std::vector<PropertyDef> speedometerProps() {
     };
 }
 
+// ---- SceneView (3D viewport) ----------------------------------------------
+// Vectors travel as "x,y,z" -- the same spelling the XML attributes take --
+// so `ogui.set("view", "camera", "0,4,-8")` re-frames the shot at runtime.
+std::string formatVec3(const Vec3& v) {
+    return formatNumber(v.x) + "," + formatNumber(v.y) + "," + formatNumber(v.z);
+}
+
+bool parseVec3(const std::string& text, Vec3& out) {
+    float parts[3] = {0.0f, 0.0f, 0.0f};
+    int n = 0;
+    std::string tok;
+    auto flush = [&]() {
+        if (tok.empty() || n >= 3) { tok.clear(); return; }
+        parts[n++] = std::strtof(tok.c_str(), nullptr);
+        tok.clear();
+    };
+    for (char c : text) {
+        if (c == ',' || c == ';' || c == ' ' || c == '\t') flush();
+        else tok.push_back(c);
+    }
+    flush();
+    if (n != 3) return false;
+    out = Vec3{parts[0], parts[1], parts[2]};
+    return true;
+}
+
+std::vector<PropertyDef> sceneviewProps() {
+    auto vec = [](const char* name, std::function<Vec3&(SceneView&)> field,
+                  const char* description) {
+        return stringProp<SceneView>(
+            name, [field](const SceneView& v) {
+                SceneView& mut = const_cast<SceneView&>(v);
+                return formatVec3(field(mut));
+            },
+            [field](SceneView& v, const std::string& s) {
+                Vec3 value;
+                if (!parseVec3(s, value)) return false;
+                field(v) = value;
+                return true;
+            },
+            description);
+    };
+    return {
+        vec("camera", [](SceneView& v) -> Vec3& { return v.scene().camera.position; },
+            "eye position, `x,y,z`"),
+        vec("target", [](SceneView& v) -> Vec3& { return v.scene().camera.target; },
+            "point the camera looks at, `x,y,z`"),
+        vec("up", [](SceneView& v) -> Vec3& { return v.scene().camera.up; },
+            "camera up vector, `x,y,z`"),
+        vec("light", [](SceneView& v) -> Vec3& { return v.scene().light.direction; },
+            "direction the light travels, `x,y,z`"),
+        colorProp<SceneView>(
+            "lightcolor", [](const SceneView& v) { return v.scene().light.color; },
+            [](SceneView& v, const Color& c) {
+                v.scene().light.color = c;
+                return true;
+            },
+            "colour of the directional light"),
+        numberProp<SceneView>(
+            "fov", [](const SceneView& v) { return static_cast<double>(v.scene().camera.fovY); },
+            [](SceneView& v, double f) {
+                if (f <= 0.0 || f >= 180.0) return false;
+                v.scene().camera.fovY = static_cast<float>(f);
+                return true;
+            },
+            "vertical field of view in degrees"),
+        numberProp<SceneView>(
+            "near", [](const SceneView& v) { return static_cast<double>(v.scene().camera.nearZ); },
+            [](SceneView& v, double z) {
+                if (z <= 0.0 || z >= v.scene().camera.farZ) return false;
+                v.scene().camera.nearZ = static_cast<float>(z);
+                return true;
+            },
+            "near clip plane"),
+        numberProp<SceneView>(
+            "far", [](const SceneView& v) { return static_cast<double>(v.scene().camera.farZ); },
+            [](SceneView& v, double z) {
+                if (z <= v.scene().camera.nearZ) return false;
+                v.scene().camera.farZ = static_cast<float>(z);
+                return true;
+            },
+            "far clip plane"),
+        numberProp<SceneView>(
+            "ambient", [](const SceneView& v) { return static_cast<double>(v.scene().light.ambient); },
+            [](SceneView& v, double a) {
+                if (a < 0.0 || a > 1.0) return false;
+                v.scene().light.ambient = static_cast<float>(a);
+                return true;
+            },
+            "flat ambient term, 0..1"),
+        colorProp<SceneView>(
+            "clearcolor", [](const SceneView& v) { return v.scene().background; },
+            [](SceneView& v, const Color& c) {
+                v.scene().background = c;
+                return true;
+            },
+            "colour the offscreen target is cleared to (also `background`)"),
+    };
+}
+
 }  // namespace
 
 void PropertyRegistry::loadBuiltins() {
@@ -3180,6 +3281,9 @@ void PropertyRegistry::loadBuiltins() {
     self.declare(typeid(SteeringWheel), typeid(Widget), steeringwheelProps());
     self.declare(typeid(Pedal), typeid(Widget), pedalProps());
     self.declare(typeid(Speedometer), typeid(Widget), speedometerProps());
+
+    // 3D viewport.
+    self.declare(typeid(SceneView), typeid(Widget), sceneviewProps());
 }
 
 }  // namespace ogui

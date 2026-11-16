@@ -75,6 +75,9 @@ EGLConfig pickConfig(EGLDisplay dpy, ANativeWindow* win, std::string& err) {
         EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
         EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT_KHR,
         EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8,
+        // 3D needs a depth buffer on the window surface; without asking, the
+        // chosen config may have none and the depth-tested pass reads garbage.
+        EGL_DEPTH_SIZE, 24,
         EGL_NONE};
     EGLConfig found[16];
     EGLint n = 0;
@@ -377,7 +380,9 @@ bool AndroidHost::present(Kernel& kernel) {
 
     glViewport(0, 0, m_width, m_height);
     glClearColor(m_clearR, m_clearG, m_clearB, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
+    // Depth as well: the config asks for 24 bits, and a 3D pass sharing this
+    // framebuffer must not inherit last frame's depth.
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     // flipY stays off: the draw list's y=0 is the top of the screen and GL's y=0
     // is the bottom of the framebuffer, which is the pair the default
     // projection already lines up.

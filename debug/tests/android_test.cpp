@@ -706,6 +706,29 @@ void theDesignFitsTheScreenItIsShownOn() {
     check(fitToWidthScale(0.0f, design, d) == d,
           "and so is a window that has no width yet");
 
+    // ---- both axes (the rule the app actually uses) --------------------
+    // Portrait: the width is the binding constraint, exactly as before.
+    check(std::fabs(fitToDesignScale(1080.0f, 2340.0f, design, 600.0f, d) -
+                    1080.0f / design) < 0.0001f,
+          "portrait fits the design width (height has room to spare)");
+    // Landscape: 2340 px is 832 logical at dpi, but only 384 tall -- the width
+    // fit would clip the bottom half of every screen. Fitting the height is
+    // what puts the whole 600-unit design on the device.
+    const float landscape = fitToDesignScale(2340.0f, 1080.0f, design, 600.0f, d);
+    check(std::fabs(landscape - 1080.0f / 600.0f) < 0.0001f,
+          "landscape fits the design height instead of clipping it");
+    check(2340.0f / landscape >= design - 0.001f,
+          "and the canvas that leaves is wider than the design, never narrower");
+    check(1080.0f / landscape >= 600.0f - 0.001f,
+          "while the design height fits exactly");
+    // A screen that is big enough at its own density keeps the density.
+    check(fitToDesignScale(3000.0f, 3000.0f, design, 600.0f, d) == d,
+          "a screen that fits at dpi is not zoomed in past the density");
+    check(fitToDesignScale(0.0f, 1080.0f, design, 600.0f, d) == d,
+          "a window with no size yet keeps the density");
+    check(fitToDesignScale(1080.0f, 2340.0f, 0.0f, 600.0f, d) == d,
+          "and so does a design with no authored canvas");
+
     // End to end: at the fit scale the logical canvas is exactly the design
     // width, so a widget authored near its right edge is on screen rather than
     // clipped -- which is the whole point of the zoom.
@@ -731,6 +754,24 @@ void theDesignFitsTheScreenItIsShownOn() {
           "a status bar measured in pixels becomes design units at the fit scale");
     check(std::fabs(kernel.safeRect().w - design) < 0.001f,
           "and the safe rectangle still spans the whole design width");
+
+    // End to end in landscape: the canvas is at least the design height, so a
+    // widget authored at the bottom of the 600-unit screen is inside the safe
+    // rectangle instead of below the device.
+    auto flat = std::make_shared<Screen>("landscape");
+    flat->width = 2340.0f;
+    flat->height = 1080.0f;
+    flat->scale = fitToDesignScale(flat->width, flat->height, design, 600.0f, d);
+    kernel.pushScreen(flat);
+    check(kernel.logicalHeight() >= 600.0f - 0.001f,
+          "landscape canvas is at least the design height: the bottom row is on screen");
+    // The bars installed above keep whatever units they were converted to when
+    // they arrived; the safe rectangle is the new canvas minus exactly those,
+    // so the room grows with the taller canvas instead of cropping it.
+    check(std::fabs(kernel.safeRect().h -
+                    (kernel.logicalHeight() - kernel.insets().top -
+                     kernel.insets().bottom)) < 0.001f,
+          "and the safe rectangle is the design height minus the bars");
 }
 
 } // namespace

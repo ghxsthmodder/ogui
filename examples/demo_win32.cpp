@@ -22,9 +22,12 @@
 #include "ogui/kernel.hpp"
 #include "ogui/xmlparser.hpp"
 #include "ogui/widgets.hpp"
+#include "ogui/scene3d.hpp"
 #include "ogui/host.hpp"
 #include "gallery.hpp"
 
+#include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <fstream>
 #include <string>
@@ -84,6 +87,55 @@ int main() {
     if (auto* sl = dynamic_cast<ogui::Slider*>(kernel.findWidget("sl_demo")))
         if (auto* pb = dynamic_cast<ogui::ProgressBar*>(kernel.findWidget("pb_demo")))
             sl->setOnChanged([pb](float v) { pb->setValue(v / 100.0f); });
+
+    // ---- the 3D screen (layouts/layout_scene3d.xml) ----------------------
+    // Mesh upload needs the context current, so it happens on the first frame
+    // that finds the SceneView on screen, not here. From then on one
+    // submit() per frame is all the widget asks for: it sizes its offscreen
+    // target to the box the layout gave it, renders the scene into it and
+    // draws the result in the 2D pass.
+    int cube = 0;
+    float spin = 0.0f;
+    float spinDir = 1.0f;
+    bool cubeOffscreen = false;
+    auto lastFrame = std::chrono::steady_clock::now();
+    host.setBeforeDraw([&](ogui::Kernel& k, int, int) {
+        ogui::SceneView* view = nullptr;
+        k.eachWidget([&](ogui::Widget* w) {
+            if (auto* v = dynamic_cast<ogui::SceneView*>(w)) view = v;
+        });
+        if (!view) return;
+
+        ogui::GlBackend& backend = host.backend();
+        if (!cube) {
+            cube = backend.uploadMesh(ogui::cubeMesh(1.7f));
+            if (!cube) return;
+        }
+
+        const auto now = std::chrono::steady_clock::now();
+        const float dt = std::chrono::duration<float>(now - lastFrame).count();
+        lastFrame = now;
+        spin += dt * 0.7f * spinDir;
+
+        ogui::Scene3D& scene = view->scene();
+        scene.clear();
+        const ogui::Matrix4x4 model =
+            ogui::Matrix4x4::translation({cubeOffscreen ? 40.0f : 0.0f, 0.0f, 0.0f}) *
+            ogui::Matrix4x4::rotationY(spin) * ogui::Matrix4x4::rotationX(0.35f);
+        scene.addMesh(cube, model, {ogui::Color{214, 178, 96, 255}, 0});
+
+        const float s = k.scale();
+        const ogui::Rect b = view->bounds();
+        view->submit(backend, static_cast<int>(b.w * s), static_cast<int>(b.h * s));
+
+        // The culled count is the proof the CPU skip works: the cube jumps
+        // 40 units to the side, leaves the frustum and costs no draw call.
+        k.setText("lbl3d_culled", "drawn: " +
+                  std::to_string(backend.sceneStats().drawn) + "  culled: " +
+                  std::to_string(backend.sceneStats().culled));
+    });
+    kernel.bind("btn3d_spin", [&] { spinDir = -spinDir; });
+    kernel.bind("btn3d_cull", [&] { cubeOffscreen = !cubeOffscreen; });
 
     host.setOnFilesDropped([&](const std::vector<std::string>& files) {
         std::string msg = files.empty() ? "Drop vazio?" : "Arquivos:";

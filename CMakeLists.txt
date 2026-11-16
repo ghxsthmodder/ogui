@@ -94,6 +94,7 @@ add_library(ogui STATIC
     src/widgets_list.cpp
     src/widgets_editor.cpp
     src/widgets_vehicle.cpp
+    src/scene3d.cpp
     src/clipboard.cpp
     src/software.cpp
     src/kernel.cpp
@@ -254,6 +255,16 @@ if(OGUI_BUILD_TESTS)
     target_compile_definitions(ogui_screens_test PRIVATE
         OGUI_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 
+    # Every gallery screen must fit the canvas the host lays it out on -- the
+    # desktop window and the portrait/landscape phone canvases. A widget whose
+    # box leaves the canvas is content cut off at the screen edge.
+    add_executable(ogui_responsive_test debug/tests/responsive_test.cpp)
+    target_link_libraries(ogui_responsive_test PRIVATE ogui)
+    target_include_directories(ogui_responsive_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/examples)
+    target_compile_definitions(ogui_responsive_test PRIVATE
+        OGUI_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+
     # Presses on the list/tree/table scrollbars must scroll, not select.
     add_executable(ogui_scrollbar_test debug/tests/scrollbar_test.cpp)
     target_link_libraries(ogui_scrollbar_test PRIVATE ogui)
@@ -265,6 +276,10 @@ if(OGUI_BUILD_TESTS)
     # Typed property registry: class chains, validation, round-trips, Lua API.
     add_executable(ogui_properties_test debug/tests/properties_test.cpp)
     target_link_libraries(ogui_properties_test PRIVATE ogui)
+
+    # The 3D layer's CPU half: camera/projection maths and the SceneView quad.
+    add_executable(ogui_scene3d_test debug/tests/scene3d_test.cpp)
+    target_link_libraries(ogui_scene3d_test PRIVATE ogui)
 
     # The vehicle cockpit controls: a dragged wheel, a held pedal, a dial.
     add_executable(ogui_cockpit_test debug/tests/cockpit_test.cpp)
@@ -352,10 +367,12 @@ if(OGUI_BUILD_TESTS)
     add_test(NAME asset COMMAND ogui_asset_test)
     add_test(NAME unicode COMMAND ogui_unicode_test)
     add_test(NAME screens COMMAND ogui_screens_test)
+    add_test(NAME responsive COMMAND ogui_responsive_test)
     add_test(NAME scrollbar COMMAND ogui_scrollbar_test)
     add_test(NAME script COMMAND ogui_script_test)
     add_test(NAME properties COMMAND ogui_properties_test)
     add_test(NAME cockpit COMMAND ogui_cockpit_test)
+    add_test(NAME scene3d COMMAND ogui_scene3d_test)
     add_test(NAME templates COMMAND ogui_templates_test)
     add_test(NAME examples COMMAND ogui_examples_test)
     add_test(NAME bench COMMAND ogui_bench_test)
@@ -406,6 +423,7 @@ install(FILES
     include/ogui/glbackend.hpp
     include/ogui/kernel.hpp
     include/ogui/rasterizer.hpp
+    include/ogui/scene3d.hpp
     include/ogui/software.hpp
     include/ogui/style.hpp
     include/ogui/widget.hpp

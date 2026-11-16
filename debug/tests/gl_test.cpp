@@ -23,6 +23,7 @@
 #include "ogui/font.hpp"
 #include "ogui/glbackend.hpp"
 #include "ogui/kernel.hpp"
+#include "ogui/scene3d.hpp"
 #include "ogui/software.hpp"
 #include "ogui/style.hpp"
 #include "golden_scene.hpp"
@@ -111,6 +112,10 @@ public:
                                      es ? EGL_OPENGL_ES3_BIT : EGL_OPENGL_BIT,
                                      EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8,
                                      EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8,
+                                     // The 3D pass depth-tests; without this the
+                                     // driver may hand back a config with no depth
+                                     // buffer and every fragment would pass.
+                                     EGL_DEPTH_SIZE, 24,
                                      EGL_NONE};
         EGLConfig cfg = nullptr;
         EGLint n = 0;
@@ -405,6 +410,151 @@ bool runPass(bool es, const char* label) {
     return true;
 }
 
+// ---- the 3D pass -----------------------------------------------------------
+// Everything above compares two implementations of the same 2D painter. This
+// pass has no CPU reference: it asks whether the depth-tested, lit pass on the
+// GPU produces the pixels its contract promises, which is the half of the 3D
+// layer that only a driver can answer.
+//
+// The setup is deliberately the one a game uses: a near cube drawn first, a far
+// cube drawn second, both solid colours. Without a depth test the second cube
+// would paint over the first and the centre pixel would be red; with one it
+// stays green. Then both cubes are moved out of the frustum and the cull has to
+// report them and leave the frame at the clear colour.
+const uint8_t* pixelAt(const ogui::Framebuffer& fb, int x, int y) {
+    return &fb.px[(static_cast<size_t>(y) * static_cast<size_t>(fb.w) +
+                   static_cast<size_t>(x)) * 4];
+}
+
+bool runScenePass(bool es, const char* label) {
+    std::printf("gl_test: %s 3D pass\n", label);
+    GlContext gl;
+    std::string why;
+    if (!gl.open(kW, kH, es, why)) {
+        std::printf("gl_test:   SKIP - %s\n", why.c_str());
+        return false;
+    }
+
+    ogui::GlBackend backend;
+    if (!backend.init(es ? &hostGetProc : nullptr, ogui::GlBackend::Profile::Auto)) {
+        check(false, std::string(label) + " 3D: init failed: " + backend.lastError());
+        return true;
+    }
+
+    const int cube = backend.uploadMesh(ogui::cubeMesh(1.6f));
+    check(cube > 0, std::string(label) + " 3D: cubeMesh did not upload");
+    if (!cube) return true;
+
+    ogui::Scene3D scene;
+    scene.camera = ogui::Camera3D{};
+    scene.camera.position = {0.0f, 0.0f, 3.4f};
+    scene.camera.target = {0.0f, 0.0f, 0.0f};
+    scene.camera.fovY = 50.0f;
+    scene.light.direction = {-0.3f, -0.7f, -0.6f};
+    scene.light.ambient = 0.2f;
+    scene.background = ogui::Color{20, 24, 30, 255};
+
+    const ogui::Color green{40, 200, 80, 255};
+    const ogui::Color red{220, 40, 40, 255};
+    // Near first, far second: depth, not paint order, must decide the centre.
+    scene.addMesh(cube, ogui::Matrix4x4::translation({0.0f, 0.0f, 0.7f}), {green, 0});
+    scene.addMesh(cube, ogui::Matrix4x4::translation({0.0f, 0.0f, -0.7f}), {red, 0});
+
+    ogui::Framebuffer fb;
+    fb.resize(kW, kH);
+    const auto before = captureState();
+    glClearColor(scene.background.r / 255.0f, scene.background.g / 255.0f,
+                 scene.background.b / 255.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    backend.renderScene(scene, kW, kH);
+    readInto(fb);
+    const auto after = captureState();
+
+    for (size_t i = 0; i < kStateCount; ++i) {
+        check(before[i] == after[i], std::string(label) + " 3D: renderScene() left GL_" +
+                                         kStateNames[i] + " changed");
+    }
+    check(backend.sceneStats().drawn == 2 && backend.sceneStats().culled == 0,
+          std::string(label) + " 3D: two visible cubes reported " +
+              std::to_string(backend.sceneStats().drawn) + " drawn / " +
+              std::to_string(backend.sceneStats().culled) + " culled");
+
+    const uint8_t* corner = pixelAt(fb, 2, 2);
+    check(std::abs(int(corner[0]) - 20) <= 2 && std::abs(int(corner[1]) - 24) <= 2,
+          std::string(label) + " 3D: the frame did not start at the clear colour");
+
+    const uint8_t* mid = pixelAt(fb, kW / 2, kH / 2);
+    check(mid[1] > 100 && mid[1] > int(mid[0]) + 60,
+          std::string(label) + " 3D: centre pixel is not the near cube (" +
+              std::to_string(mid[0]) + "," + std::to_string(mid[1]) + "," +
+              std::to_string(mid[2]) + ") -- depth test did not win over draw order");
+
+    // Frustum culling: both cubes 40 units to the side are outside the view, so
+    // the pass must draw nothing and leave every pixel at the clear colour.
+    scene.clear();
+    scene.addMesh(cube, ogui::Matrix4x4::translation({40.0f, 0.0f, 0.0f}), {green, 0});
+    scene.addMesh(cube, ogui::Matrix4x4::translation({-40.0f, 0.0f, 0.0f}), {red, 0});
+    glClearColor(scene.background.r / 255.0f, scene.background.g / 255.0f,
+                 scene.background.b / 255.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    backend.renderScene(scene, kW, kH);
+    readInto(fb);
+    check(backend.sceneStats().drawn == 0 && backend.sceneStats().culled == 2,
+          std::string(label) + " 3D: off-screen cubes reported " +
+              std::to_string(backend.sceneStats().drawn) + " drawn / " +
+              std::to_string(backend.sceneStats().culled) + " culled, wanted 0/2");
+    const uint8_t* stillBg = pixelAt(fb, kW / 2, kH / 2);
+    check(std::abs(int(stillBg[1]) - 24) <= 2,
+          std::string(label) + " 3D: a culled frame still painted the centre");
+
+    // One in, one out: the cull is per item, not per scene.
+    scene.addMesh(cube, ogui::Matrix4x4::translation({0.0f, 0.0f, 0.0f}), {green, 0});
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    backend.renderScene(scene, kW, kH);
+    readInto(fb);
+    check(backend.sceneStats().drawn == 1 && backend.sceneStats().culled == 2,
+          std::string(label) + " 3D: mixed scene reported " +
+              std::to_string(backend.sceneStats().drawn) + " drawn / " +
+              std::to_string(backend.sceneStats().culled) + " culled, wanted 1/2");
+    const uint8_t* kept = pixelAt(fb, kW / 2, kH / 2);
+    check(kept[1] > 100, std::string(label) + " 3D: the visible cube was not painted");
+
+    // ---- offscreen target (the SceneView path) ---------------------------
+    const int target = backend.createSceneTarget(160, 120);
+    check(target > 0, std::string(label) + " 3D: createSceneTarget failed: " +
+                          backend.lastError());
+    if (target > 0) {
+        const int slot = backend.sceneTargetSlot(target);
+        check(slot > 0, std::string(label) + " 3D: a target has no texture slot");
+        check(backend.resizeSceneTarget(target, 200, 150),
+              std::string(label) + " 3D: resizeSceneTarget failed");
+        check(backend.sceneTargetSlot(target) == slot,
+              std::string(label) + " 3D: the slot changed across a resize");
+
+        ogui::Scene3D small;
+        small.camera.position = {0.0f, 0.0f, 3.4f};
+        small.background = ogui::Color{10, 12, 16, 255};
+        small.addMesh(cube, ogui::Matrix4x4{}, {green, 0});
+        const auto tBefore = captureState();
+        check(backend.renderSceneToTarget(small, target),
+              std::string(label) + " 3D: renderSceneToTarget failed");
+        const auto tAfter = captureState();
+        check(backend.sceneStats().drawn == 1,
+              std::string(label) + " 3D: the target pass did not draw its mesh");
+        for (size_t i = 0; i < 5; ++i) {
+            check(tBefore[i] == tAfter[i],
+                  std::string(label) + " 3D: renderSceneToTarget() left GL_" +
+                      kStateNames[i] + " changed");
+        }
+        check(tBefore[11] == tAfter[11] && tBefore[14] == tAfter[14],
+              std::string(label) + " 3D: renderSceneToTarget() left the viewport changed");
+        backend.destroySceneTarget(target);
+    }
+
+    backend.shutdown();
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -420,6 +570,8 @@ int main() {
 
     const bool esRan = wantES ? runPass(true, "OpenGL ES") : false;
     const bool glRan = wantGL ? runPass(false, "OpenGL desktop") : false;
+    if (esRan) runScenePass(true, "OpenGL ES");
+    if (glRan) runScenePass(false, "OpenGL desktop");
 
     if (!esRan && !glRan) {
         std::printf("gl_test: SKIP - no usable EGL GL context on this machine\n");

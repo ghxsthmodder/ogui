@@ -569,6 +569,39 @@ while `setValue()`/`ogui.set` can drive an analog value in between. The wheel
 and the pedal fire `change` on user interaction, so a script can react instead
 of polling; the speedometer is read-only apart from its `value` property.
 
+### 3D viewport
+
+The one element in the tree that shows something the CPU never draws. A
+`sceneview` owns a `Scene3D` (camera, light, clear colour) and displays an
+offscreen colour texture produced by the GPU; the layout only ever sees a
+textured quad, so it clips, scrolls and stacks like any other box.
+
+| Element | Typed attributes | Children |
+|---|---|---|
+| `sceneview` | `camera="x,y,z"` (eye, default `0,0,3`), `target="x,y,z"` (look-at point), `up="x,y,z"`, `fov` (vertical degrees, default 60), `near`, `far`, `light="x,y,z"` (direction the light travels), `lightcolor`, `ambient` (0..1), `background` (also the clear colour of the target) | — |
+
+A tag is layout and camera only: geometry is host data. Upload the meshes once
+and add them to the view's scene, then hand it the box it ended up with:
+
+```cpp
+if (auto* view = dynamic_cast<ogui::SceneView*>(kernel.findWidget("view3d"))) {
+    if (!view->scene().itemCount()) {
+        const int cube = backend.uploadMesh(ogui::cubeMesh());
+        view->scene().addMesh(cube, ogui::Matrix4x4::rotationY(t));
+    }
+    const float s = kernel.scale();
+    view->submit(backend, static_cast<int>(view->bounds().w * s),
+                          static_cast<int>(view->bounds().h * s));
+}
+```
+
+`submit()` creates or resizes the target to that pixel size, renders the scene
+into it and points the quad at the result, so one call per frame is the whole
+contract. A host that owns the target itself (a minimap, a second camera) can
+call `setTextureSlot()` instead and skip `submit()`. Without a target the
+widget draws a flat placeholder, which is what the software renderer and the
+golden frames show.
+
 ### Options & toggles
 
 | Element | Typed attributes | Children |

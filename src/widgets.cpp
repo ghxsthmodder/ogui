@@ -1,4 +1,5 @@
 #include "widgets_internal.hpp"
+#include "ogui/scene3d.hpp"
 
 namespace ogui {
 
@@ -483,6 +484,9 @@ std::map<std::string, WidgetFactory>& widgetRegistry() {
         reg["steeringwheel"] = mk<SteeringWheel>;
         reg["pedal"] = mk<Pedal>;
         reg["speedometer"] = mk<Speedometer>;
+        // 3D viewport: the host attaches the scene's meshes and calls
+        // SceneView::submit() each frame; the tag itself is layout + camera.
+        reg["sceneview"] = mk<SceneView>;
     }
     return reg;
 }
