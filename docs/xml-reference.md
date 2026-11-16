@@ -531,7 +531,21 @@ and expands in place:
 | `badge` | `text`, `count`, `removable` | — |
 | `sparkline` | `values` (comma list), `label`, `max` | — |
 | `separator` | `thickness` | — |
-| `image` | `source`, `tile`, `zoom` (1..8), `pinchzoom` | — |
+| `image` | `source`, `tile`, `fit`, `zoom` (1..8), `pinchzoom` | — |
+
+`fit` decides how a picture that is not the shape of its box gets in:
+
+| Value | Meaning |
+|---|---|
+| `stretch` (default) | fills both axes, so the aspect is the box's — a 1672x941 background in an 800x600 box is a third too narrow in x |
+| `cover` | one scale for both axes, large enough to fill the box; the overflow is cropped from the UV window, so the picture never paints outside its bounds |
+| `contain` | one scale for both axes, small enough to fit; the loose axis keeps the panel behind it as bars |
+
+`cover` is the one to reach for on a background (`<image ... width="100%"
+height="100%" fit="cover"/>`) and `contain` for a logo or icon whose box may
+stop matching the file. `zoom`/`pinchzoom` act on the stretched picture and
+are ignored by `cover`/`contain`, which already own the mapping from file to
+box.
 
 ### Inputs
 
@@ -557,7 +571,7 @@ reads, and the speedometer displays a number it is given.
 
 | Element | Typed attributes | Children |
 |---|---|---|
-| `steeringwheel` | `angle` (degrees, negative = left), `maxAngle` (half of lock-to-lock, default 180), `autoCenter` (default true), `label`, `rimColor`, `hubColor`, `spokeColor`; drag the rim or use `Left`/`Right` (`Home` recentres) | — |
+| `steeringwheel` | `angle` (degrees, negative = left), `maxAngle` (half of lock-to-lock, default 180; `max` is accepted as the same attribute), `autoCenter` (default true), `label`, `rimColor`, `hubColor`, `spokeColor`; drag the rim or use `Left`/`Right` (`Home` recentres) | — |
 | `pedal` | `label`, `value` (travel 0..1), `speed` (full presses per second, default 7), `plateColor`, `accent`, `housingColor` (`background` also fills the housing); hold the pointer or `Space`/`Enter` to press it | — |
 | `speedometer` | `value`, `min`, `max`, `redline` (value the red zone starts at; max = none), `unit` (default `km/h`), `label`, `needleColor`, `tickColor`, `dialColor` (`background` also fills the dial) | — |
 

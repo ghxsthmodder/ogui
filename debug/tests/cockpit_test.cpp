@@ -258,6 +258,66 @@ int main() {
               "the gauge did not coast back down: " +
                   std::to_string(gauge->value()));
 
+    // Widening the dial has to widen the needle's travel. The script used to
+    // clamp the speed to a literal 60, so raising `max` in the XML left the
+    // pointer parked mid-dial however far the pedal was held; it now reads the
+    // range from the widget, which is the only place that number lives.
+    {
+        std::string error;
+        CHECK(setWidgetProperty(*gauge, "max", "120", &error));
+        CHECK(gauge->maximum() == 120.0f);
+        hin.mouseX = pedalBox.x + pedalBox.w * 0.5f;
+        hin.mouseY = pedalBox.y + pedalBox.h * 0.5f;
+        hin.mouseDown[0] = true;
+        hin.mouseButton = 0;
+        for (int i = 0; i < 60 && gauge->value() < 90.0f; ++i) frame(hud, hin, 0.1f);
+        CHECK_MSG(gauge->value() > 60.0f,
+                  "the needle stopped at the old 60 cap: " +
+                      std::to_string(gauge->value()));
+        CHECK(gauge->value() <= 120.0f);
+        for (const auto& e : hud.script().errors())
+            std::cerr << "  script: " << e << '\n';
+        CHECK(hud.script().errors().empty());
+        hin.mouseDown[0] = false;
+        hin.mouseButton = -1;
+    }
+
+    // The wheel's lock is authored too, and it is 220 in the shipped layout:
+    // nothing in the widget or in its drawing clamps the rim to the 60 that
+    // used to read like a limit. A write of 200 lands on 200 and the
+    // normalized value a vehicle model consumes is 200/220.
+    CHECK_MSG(steer2->maxAngle() == 220.0f,
+              "shipped wheel lock is " + std::to_string(steer2->maxAngle()));
+    steer2->setAngle(200.0f);
+    CHECK_MSG(steer2->angle() == 200.0f,
+              "wheel clamped at " + std::to_string(steer2->angle()));
+    CHECK(std::fabs(steer2->steering() - 200.0f / 220.0f) < 0.001f);
+    steer2->setAngle(0.0f);
+
+    // `max` is accepted as the wheel's lock too, the spelling every other range
+    // widget uses; declaring it above 60 must widen the travel, not cap it.
+    {
+        XmlParser p;
+        auto res2 = p.parse(R"XML(<screen id="w">
+  <steeringwheel id="w1" max="240"/>
+  <steeringwheel id="w2" maxangle="120"/>
+</screen>)XML");
+        CHECK(res2.root != nullptr);
+        if (res2.root) {
+            auto probe = std::make_shared<Screen>("w");
+            probe->widgets.push_back(res2.root);
+            probe->width = 400.0f;
+            probe->height = 300.0f;
+            Kernel k2;
+            k2.init();
+            k2.pushScreen(probe);
+            auto* w1 = dynamic_cast<SteeringWheel*>(k2.findWidget("w1"));
+            auto* w2 = dynamic_cast<SteeringWheel*>(k2.findWidget("w2"));
+            CHECK(w1 && w1->maxAngle() == 240.0f);
+            CHECK(w2 && w2->maxAngle() == 120.0f);
+        }
+    }
+
     std::printf("cockpit: %s (%zu vertices)\n",
                 g_failures ? "FAILED" : "ok", kernel.drawList().vertices.size());
     return g_failures ? 1 : 0;

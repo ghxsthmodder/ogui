@@ -4,6 +4,7 @@
 // ogui_gl_test (EGL); what is asserted here is the maths that pass depends on
 // (projection, view, model composition) and the one thing SceneView puts into
 // a DrawList: a texture slot covering its bounds, with the V axis flipped.
+#include "ogui/glbackend.hpp"
 #include "ogui/rasterizer.hpp"
 #include "ogui/scene3d.hpp"
 
@@ -216,6 +217,28 @@ void testSceneViewDraws() {
     }
 }
 
+// A target handle names a GL object inside one backend's context. Android
+// replaces that context on resume, and the new backend knows nothing about the
+// handle -- submitting it must drop it rather than keep a dead framebuffer and
+// an empty viewport until the next resize.
+void testSceneViewBackendSwap() {
+    SceneView view;
+    view.setBounds({0.0f, 0.0f, 200.0f, 120.0f});
+    view.setTarget(4);
+    view.setTextureSlot(1000007);
+
+    GlBackend backend;   // never init()'d: it cannot create a target here
+    CHECK(!view.submit(backend, 200, 120));
+    CHECK(view.target() == 0);   // the stale handle was dropped
+
+    CHECK(view.textureSlot() == 0);
+    CHECK(!view.ownsTarget());
+
+    // And a second submit does not read the slot as "an owned target".
+    CHECK(!view.submit(backend, 200, 120));
+    CHECK(view.target() == 0 && view.textureSlot() == 0);
+}
+
 // The cube the demo spins is generated here, so its winding and its per-face
 // normals are data this test can pin down: a face with a flipped normal is a
 // face that goes black in the lit pass, and one with the wrong winding vanishes
@@ -306,6 +329,7 @@ int main() {
     testFrustum();
     testScene();
     testSceneViewDraws();
+    testSceneViewBackendSwap();
 
     if (g_failures == 0) {
         std::cout << "scene3d: all checks passed\n";

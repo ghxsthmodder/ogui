@@ -114,6 +114,21 @@ void Button::onDraw(Rasterizer& r) const {
 Image::Image() = default;
 Image::~Image() = default;
 
+bool Image::setFitName(const std::string& name) {
+    if (name == "stretch" || name == "fill") { m_fit = Fit::Stretch; return true; }
+    if (name == "cover" || name == "crop") { m_fit = Fit::Cover; return true; }
+    if (name == "contain" || name == "fit") { m_fit = Fit::Contain; return true; }
+    return false;
+}
+
+const char* Image::fitName() const {
+    switch (m_fit) {
+        case Fit::Cover: return "cover";
+        case Fit::Contain: return "contain";
+        default: return "stretch";
+    }
+}
+
 void Image::setZoom(float z) {
     m_zoom = std::clamp(z, 1.0f, 8.0f);
     m_uvX = m_uvY = -1.0f;   // no gesture has placed the window yet
@@ -159,10 +174,37 @@ void Image::onDraw(Rasterizer& r) const {
         // White tint: the vertex colour multiplies the texture, so 255
         // leaves the image's own colours untouched.
         const Color tint{255, 255, 255, 255};
-        if (!m_tile) {
+        if (!m_tile && m_fit == Fit::Stretch) {
             float u = 0.0f, v = 0.0f, span = 0.0f;
             uvWindow(u, v, span);
             r.drawRectUV(b, Rect{u, v, span, span}, tint, img->id);
+        } else if (!m_tile) {
+            // Aspect-preserving: one scale for both axes, so the picture is
+            // never squeezed along a single one. Cover takes the larger scale
+            // (the file fills the box and overflows, and the overflow is cut
+            // by moving the UV window, never by hoping the clip does it) and
+            // Contain the smaller (the file fits with bars on the loose axis).
+            const float iw = static_cast<float>(img->w);
+            const float ih = static_cast<float>(img->h);
+            const float sx = b.w / iw, sy = b.h / ih;
+            const float s = (m_fit == Fit::Cover) ? std::max(sx, sy)
+                                                  : std::min(sx, sy);
+            Rect dst{b.x + (b.w - iw * s) * 0.5f,
+                     b.y + (b.h - ih * s) * 0.5f, iw * s, ih * s};
+            Rect uv{0.0f, 0.0f, 1.0f, 1.0f};
+            if (m_fit == Fit::Cover) {
+                const float left = dst.x < b.x ? b.x : dst.x;
+                const float top = dst.y < b.y ? b.y : dst.y;
+                const float right = dst.x + dst.w > b.x + b.w ? b.x + b.w
+                                                              : dst.x + dst.w;
+                const float bottom = dst.y + dst.h > b.y + b.h ? b.y + b.h
+                                                              : dst.y + dst.h;
+                uv = Rect{(left - dst.x) / dst.w, (top - dst.y) / dst.h,
+                          (right - left) / dst.w, (bottom - top) / dst.h};
+                dst = Rect{left, top, right - left, bottom - top};
+            }
+            if (dst.w > 0.0f && dst.h > 0.0f)
+                r.drawRectUV(dst, uv, tint, img->id);
         } else {
             // One full-UV quad per tile keeps both backends' samplers on
             // their clamp-to-edge default.

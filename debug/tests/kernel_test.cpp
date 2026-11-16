@@ -2659,6 +2659,10 @@ static void testImage() {
   <panel id="bg" x="0" y="0" width="800" height="600" background="#101010"/>
   <image id="fit" source=")XML");
     xml += png + R"XML(/checker.png" x="10" y="60" width="64" height="64"/>
+  <image id="cover" source=")XML";
+    xml += png + R"XML(/checker.png" x="90" y="60" width="200" height="60" fit="cover"/>
+  <image id="contain" source=")XML";
+    xml += png + R"XML(/checker.png" x="300" y="60" width="200" height="60" fit="contain"/>
   <image id="tile" source=")XML";
     xml += png + R"XML(/checker.png" x="100" y="60" width="200" height="90" tile="true"/>
   <image id="miss" source=")XML";
@@ -2672,10 +2676,24 @@ static void testImage() {
     s->height = 600;
     k.pushScreen(s);
 
+    std::string error;
     auto* fit = dynamic_cast<Image*>(k.findWidget("fit"));
     auto* tile = dynamic_cast<Image*>(k.findWidget("tile"));
+    auto* cover = dynamic_cast<Image*>(k.findWidget("cover"));
+    auto* contain = dynamic_cast<Image*>(k.findWidget("contain"));
     CHECK(fit && !fit->imagePath().empty());
     CHECK(tile && tile->tile());
+    // An image that says nothing still fills both axes, which is what every
+    // layout authored before `fit` existed expects.
+    CHECK(fit && fit->fit() == Image::Fit::Stretch);
+    CHECK(cover && cover->fit() == Image::Fit::Cover);
+    CHECK(contain && contain->fit() == Image::Fit::Contain);
+    CHECK(setWidgetProperty(*cover, "fit", "stretch", &error));
+    CHECK(cover->fit() == Image::Fit::Stretch);
+    CHECK(widgetProperty(*cover, "fit") == "stretch");
+    CHECK(!setWidgetProperty(*cover, "fit", "squash", &error));
+    CHECK(cover->fit() == Image::Fit::Stretch);
+    CHECK(setWidgetProperty(*cover, "fit", "cover", &error));
 
     const DrawList& dl = k.buildDrawList();
 
@@ -2685,8 +2703,10 @@ static void testImage() {
     CHECK(texId > 0);
     CHECK(ImageManager::instance().ownsSlot(texId));
 
-    // fit = 1 quad; tile = ceil(200/64) * ceil(90/64) = 4*2 = 8 quads.
-    // Same-texture quads batch into one cmd, so count triangles instead.
+    // Three aspect-aware images (stretch, cover, contain: 1 quad each, cover
+    // with the overflow cut by its UV window, never by a second draw) plus
+    // tile = ceil(200/64) * ceil(90/64) = 4*2 = 8: eleven is what the list must
+    // hold. Same-texture quads batch into one cmd, so count triangles instead.
     int quads = 0;
     for (const auto& c : dl.cmds) {
         if (c.texId == texId) quads += static_cast<int>(c.indexCount / 6);
@@ -2694,7 +2714,7 @@ static void testImage() {
         // ids in the list are ImageManager slots (fonts are negative).
         if (c.texId > 0) CHECK(ImageManager::instance().ownsSlot(c.texId));
     }
-    CHECK(quads == 9);
+    CHECK(quads == 11);
     // The missing file must not emit textured geometry of its own.
     CHECK(dl.cmds.size() >= 1);
 }

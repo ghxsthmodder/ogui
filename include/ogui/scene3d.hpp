@@ -203,6 +203,10 @@ private:
     int m_slot = 0;
     int m_w = 0, m_h = 0;
     bool m_ownsTarget = false;
+    // Which backend made the handles above. A phone that loses and re-creates
+    // its context gets a new backend, and m_target then names an object that
+    // never existed there -- the view would keep the box empty until a resize.
+    const GlBackend* m_backend = nullptr;
 };
 
 } // namespace ogui

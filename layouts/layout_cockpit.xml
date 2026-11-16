@@ -89,11 +89,14 @@
   <script>
 speed = 0
 
-local function gearFor(v)
-  if v < 0.5 then return "N" end
-  if v < 12 then return "1" end
-  if v < 24 then return "2" end
-  if v < 38 then return "3" end
+-- As faixas sao fracoes do fundo de escala, para uma mudanca de `max` no
+-- XML nao deixar a quarta marcha entrando em 38 de 200.
+local function gearFor(v, vmax)
+  local k = vmax / 60
+  if v < 0.5 * k then return "N" end
+  if v < 12 * k then return "1" end
+  if v < 24 * k then return "2" end
+  if v < 38 * k then return "3" end
   return "4"
 end
 
@@ -105,13 +108,24 @@ function ogui_on_update(t, dt)
   local acc   = tonumber(ogui.get("accel", "value")) or 0
   local brake = tonumber(ogui.get("brake", "value")) or 0
 
+  -- O teto vem do proprio mostrador: com max="120" o ponteiro vai ate 120
+  -- em vez de parar no 60 que o script tinha fixo. Aceleracao e atrito
+  -- acompanham a mesma escala, entao o velocimetro leva o mesmo tempo para
+  -- cruzar o mostrador qualquer que seja o fundo de escala.
+  local vmax = tonumber(ogui.get("speedo", "max")) or 60
+  if vmax <= 0 then vmax = 60 end
+  local k = vmax / 60
+
   -- modelo longitudinal minimo: acelerador vence o atrito e o freio
-  speed = speed + (acc * 11.0 - brake * 18.0 - 0.8) * dt
-  speed = math.max(0, math.min(60, speed))
+  speed = speed + (acc * 11.0 - brake * 18.0 - 0.8) * k * dt
+  speed = math.max(0, math.min(vmax, speed))
   ogui.set("speedo", "value", string.format("%.1f", speed))
 
-  ogui.set("gear", "text", gearFor(speed))
-  ogui.set("rpm", "text", string.format("%d rpm", 850 + acc * 1550 + (speed % 12) * 30))
+  ogui.set("gear", "text", gearFor(speed, vmax))
+  -- math.floor: speed is fractional, and Lua 5.3's %d rejects a number that
+  -- has no integer representation (it used to depend on the speed happening
+  -- to land on a whole number, which the wider dial made rare).
+  ogui.set("rpm", "text", string.format("%d rpm", math.floor(850 + acc * 1550 + (speed % 12) * 30)))
 
   local wheel = tonumber(ogui.get("steer", "angle")) or 0
   if wheel < -5 then

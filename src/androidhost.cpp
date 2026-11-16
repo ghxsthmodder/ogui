@@ -383,6 +383,12 @@ bool AndroidHost::present(Kernel& kernel) {
     // Depth as well: the config asks for 24 bits, and a 3D pass sharing this
     // framebuffer must not inherit last frame's depth.
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    // The host's own pass, with the context current and the default
+    // framebuffer bound: a SceneView sizes its target here and returns a quad
+    // that the 2D pass below draws like any other textured box. A frame with
+    // no 3D on screen skips it entirely.
+    if (m_beforeDraw) m_beforeDraw(kernel, m_width, m_height);
+
     // flipY stays off: the draw list's y=0 is the top of the screen and GL's y=0
     // is the bottom of the framebuffer, which is the pair the default
     // projection already lines up.
@@ -447,6 +453,11 @@ void AndroidHost::setClearColor(float r, float g, float b) {
     m_clearR = r; m_clearG = g; m_clearB = b;
 }
 
+void AndroidHost::setBeforeDraw(
+    std::function<void(Kernel&, int, int)> fn) {
+    m_beforeDraw = std::move(fn);
+}
+
 } // namespace ogui
 
 #else   // !__ANDROID__ -- the host is declared everywhere and opens nowhere else
@@ -484,6 +495,9 @@ bool AndroidHost::hasImeBridge() const { return false; }
 void AndroidHost::hideKeyboard() {}
 void AndroidHost::setClearColor(float r, float g, float b) {
     m_clearR = r; m_clearG = g; m_clearB = b;
+}
+void AndroidHost::setBeforeDraw(std::function<void(Kernel&, int, int)>) {
+    // No EGL, no frames: there is nothing for the hook to run against.
 }
 } // namespace ogui
 

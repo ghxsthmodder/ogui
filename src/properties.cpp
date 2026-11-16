@@ -976,6 +976,10 @@ std::vector<PropertyDef> imageProps() {
                 return true;
             },
             "a two-finger pinch scales this image instead of scrolling"),
+        stringProp<Image>(
+            "fit", [](const Image& i) { return std::string(i.fitName()); },
+            [](Image& i, const std::string& v) { return i.setFitName(v); },
+            "how the file meets the bounds: stretch, cover or contain"),
     };
 }
 
@@ -2950,6 +2954,15 @@ std::vector<PropertyDef> steeringwheelProps() {
                 return true;
             },
             "half of the lock-to-lock travel, in degrees"),
+        // The same number under the name every other range widget uses, so
+        // `max` in the XML, in a script and in the property table all agree.
+        numberProp<SteeringWheel>(
+            "max", [](const SteeringWheel& s) { return static_cast<double>(s.maxAngle()); },
+            [](SteeringWheel& s, double v) {
+                s.setMaxAngle(static_cast<float>(v));
+                return true;
+            },
+            "alias of maxangle"),
         boolProp<SteeringWheel>(
             "autocenter", [](const SteeringWheel& s) { return s.autoCenter(); },
             [](SteeringWheel& s, bool v) {

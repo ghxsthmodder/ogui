@@ -6,16 +6,22 @@
   <!-- fonte Anton + estilos menu-on/menu-off vêm da stylesheet externa -->
   <stylesheet path="themes/game.xml"/>
 
-  <!-- fundo fullscreen (mesma distensao do draw_texture_pro de referencia) -->
-  <image source="assets/back.png" x="0" y="0" width="100%" height="100%"/>
+  <!-- fundo fullscreen. `fit="cover"` em vez de esticar: back.png e 1672x941
+       e a tela e 800x600, entao esticar apertava a foto em x (33% mais
+       estreita) e o olho lia isso como imagem amassada. Cover escala os dois
+       eixos pelo mesmo fator e corta o excesso nas laterais. -->
+  <image source="assets/back.png" x="0" y="0" width="100%" height="100%"
+         fit="cover"/>
 
   <!-- gradiente horizontal escuro: equivale ao draw_rectangle_gradient_h
        520px, rgba(0,0,0,170) -> transparente -->
   <panel x="0" y="0" width="520" height="100%"
          background="#000000aa" gradient="#00000000" gradientDirection="horizontal"/>
 
-  <!-- logo 662x377 escala 0.5 -->
-  <image source="assets/logo.png" x="0" y="0" width="331" height="189"/>
+  <!-- logo 662x377 escala 0.5; contain para o dia em que a caixa nao for
+       exatamente a metade do arquivo (hoje e 331x189 = 0,5 * 662x377). -->
+  <image source="assets/logo.png" x="0" y="0" width="331" height="189"
+         fit="contain"/>
 
   <!-- menu: retangulos 250x46 em x=42, y=274+58k. Fonte, tamanho e
        alinhamento vem do <style element="button"> da stylesheet; so a

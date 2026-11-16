@@ -995,6 +995,8 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
             if (toFloat(*v, z)) img->setZoom(z);
         }
         if (const std::string* v = get("pinchzoom")) img->setPinchZoom(toBool(*v));
+        // How the file meets the box: stretch (default), cover or contain.
+        if (const std::string* v = get("fit")) img->setFitName(*v);
     } else if (auto* grp = dynamic_cast<Group*>(w.get())) {
         if (const std::string* v = get("name")) grp->setGroupName(*v);
         if (hasStyle) {
@@ -1156,10 +1158,14 @@ void XmlParser::applyAttributes(const std::shared_ptr<Widget>& w,
         if (const std::string* v = get("background")) sl->setBgColor(colorOf(*v));
     } else if (auto* sw = dynamic_cast<SteeringWheel*>(w.get())) {
         // maxAngle first: authoring both must not clamp the authored angle
-        // against the default lock-to-lock.
-        if (const std::string* v = get("maxangle")) {
+        // against the default lock-to-lock. `max` is the same attribute under
+        // the name every other range widget uses (slider, spinbox, speedometer),
+        // because `max="220"` on a wheel is what an author writes by habit.
+        const std::string* maxAttr = get("maxangle");
+        if (!maxAttr) maxAttr = get("max");
+        if (maxAttr) {
             float m = 180.0f;
-            toFloat(*v, m);
+            toFloat(*maxAttr, m);
             sw->setMaxAngle(m);
         }
         if (const std::string* v = get("angle")) { float a = 0.0f; toFloat(*v, a); sw->setAngle(a); }

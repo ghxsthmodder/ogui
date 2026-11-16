@@ -11,6 +11,8 @@
 // Build: ./scripts/build.sh android  (NDK toolchain, arm64-v8a + the APK)
 #include "ogui/androidhost.hpp"
 #include "ogui/kernel.hpp"
+#include "ogui/glbackend.hpp"
+#include "ogui/scene3d.hpp"
 #include "ogui/style.hpp"
 #include "ogui/widgets.hpp"
 #include "ogui/xmlparser.hpp"
@@ -18,6 +20,7 @@
 #include "gallery.hpp"
 #include <android_native_app_glue.h>
 
+#include <algorithm>
 #include <cstdint>
 
 namespace {
@@ -152,6 +155,76 @@ extern "C" void android_main(struct android_app* app) {
     a.gallery = gallery::loadAll(kDesignWidth, kDesignHeight);
     int navIndex = 0;
     gallery::install(a.kernel, a.gallery, navIndex, 0, kDesignWidth, kDesignHeight);
+
+    // ---- the 3D screen ---------------------------------------------------
+    // The SceneView on screen 3D is wired exactly like the desktop demo's: the
+    // mesh upload needs the context, so it waits for the first frame that finds
+    // the widget, and from then on one submit() per frame fills its target and
+    // leaves a textured quad for the 2D pass. The phone used to show that
+    // screen with nothing in it -- the layout was there and no host ever ran a
+    // pass -- so the cube is the proof this path is the same one the desktop
+    // exercises, not a second implementation of it.
+    struct ScenePass {
+        int cube = 0;
+        float angle = 0.0f;
+        float dir = 1.0f;
+        float last = -1.0f;
+        bool offscreen = false;
+        // Which backend the mesh id belongs to: a context the phone re-creates
+        // makes a new backend, and the old id then names nothing.
+        const void* owner = nullptr;
+    } scene;
+    a.host.setBeforeDraw([&](ogui::Kernel& k, int, int) {
+        ogui::SceneView* view = nullptr;
+        k.eachWidget([&](ogui::Widget* w) {
+            if (auto* v = dynamic_cast<ogui::SceneView*>(w)) view = v;
+        });
+        if (!view) {
+            // Off screen: drop the clock, so coming back does not advance the
+            // cube by the seconds spent on another screen.
+            scene.last = -1.0f;
+            return;
+        }
+
+        ogui::GlBackend* backend = a.host.backend();
+        if (!backend) return;
+        if (scene.owner != backend) {
+            scene.owner = backend;
+            scene.cube = 0;
+        }
+        if (!scene.cube) {
+            scene.cube = backend->uploadMesh(ogui::cubeMesh(1.7f));
+            if (!scene.cube) return;
+        }
+
+        const float now = a.host.elapsed();
+        const float dt = scene.last < 0.0f ? 0.0f :
+                         std::min(0.1f, now - scene.last);
+        scene.last = now;
+        scene.angle += dt * 0.7f * scene.dir;
+
+        ogui::Scene3D& s = view->scene();
+        s.clear();
+        const ogui::Matrix4x4 model =
+            ogui::Matrix4x4::translation(
+                {scene.offscreen ? 40.0f : 0.0f, 0.0f, 0.0f}) *
+            ogui::Matrix4x4::rotationY(scene.angle) *
+            ogui::Matrix4x4::rotationX(0.35f);
+        s.addMesh(scene.cube, model, {ogui::Color{214, 178, 96, 255}, 0});
+
+        // The box is in logical units and the target in device pixels, which is
+        // the screen's fit scale -- the same factor the 2D pass uses.
+        const float sc = k.scale();
+        const ogui::Rect b = view->bounds();
+        view->submit(*backend, static_cast<int>(b.w * sc),
+                     static_cast<int>(b.h * sc));
+
+        k.setText("lbl3d_culled", "drawn: " +
+                  std::to_string(backend->sceneStats().drawn) + "  culled: " +
+                  std::to_string(backend->sceneStats().culled));
+    });
+    a.kernel.bind("btn3d_spin", [&scene] { scene.dir = -scene.dir; });
+    a.kernel.bind("btn3d_cull", [&scene] { scene.offscreen = !scene.offscreen; });
 
     const ogui::Color& bg = ogui::activeTheme().palette.screen;
     a.host.setClearColor(bg.r / 255.0f, bg.g / 255.0f, bg.b / 255.0f);

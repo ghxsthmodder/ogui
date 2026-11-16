@@ -3,6 +3,7 @@
 #include "ogui/kernel.hpp"
 #include <bitset>
 #include <cstdint>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -457,7 +458,19 @@ public:
     // Clear, draw the Kernel's current list, present. Returns false when the
     // surface or the context is gone -- the app then releases and re-creates
     // the window rather than spinning on a dead swap.
+    //
+    // beforeDraw runs between the clear and the 2D pass, with the context
+    // current: that is where a host uploads a mesh and submits a SceneView, so
+    // a 3D viewport in a layout is filled on a phone exactly as it is on the
+    // desktop. Without it the widget is on the screen but no scene is ever
+    // rendered into it, which is an empty box.
     bool present(Kernel& kernel);
+    void setBeforeDraw(std::function<void(Kernel&, int fbWidth, int fbHeight)> fn);
+
+    // The context's renderer, valid once create() succeeded (nullptr if the
+    // phone has no EGL). A host uses it for its own passes -- uploadMesh() and
+    // the SceneView -- without opening a second context.
+    GlBackend* backend() { return m_gl; }
 
     // ---- the soft keyboard -------------------------------------------------
     // A composing keyboard commits through an input connection, and that object
@@ -524,6 +537,7 @@ public:
     // closes the composition it is in the middle of.
     ImeRequest m_imeSent;
     bool m_imeSentKnown = false;
+    std::function<void(Kernel&, int, int)> m_beforeDraw;
 };
 
 } // namespace ogui

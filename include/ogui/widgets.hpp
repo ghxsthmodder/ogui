@@ -150,19 +150,34 @@ private:
 // Image
 //
 // Draws an RGBA image file (PNG/JPG/... decoded through ImageManager)
-// inside its bounds. Without tile the texture is stretched to the
-// bounds; with tile it is repeated at native size. A `border` style
-// draws a frame on top. An unreadable path simply draws nothing.
+// inside its bounds. How the picture meets those bounds is `fit`:
+// Stretch fills them in both axes (the default, and what a layout that
+// says nothing has always got), Cover fills them and crops the overflow
+// so the aspect stays the file's own, Contain fits inside and leaves
+// bars. With tile the texture is repeated at native size instead. A
+// `border` style draws a frame on top. An unreadable path draws nothing.
 // ------------------------------------------------------------------
 class Image : public Widget {
 public:
     Image();
     virtual ~Image() override;
 
+    // Stretch = fill both axes, Cover = fill and crop, Contain = fit inside.
+    // Cover and Contain keep the file's aspect, which is the whole point on a
+    // background: a 1672x941 picture stretched into 800x600 is a third too
+    // narrow in x, and the eye reads that as a squashed picture, not a fill.
+    enum class Fit { Stretch, Cover, Contain };
+
     void setImagePath(const std::string& path) { m_path = path; }
     const std::string& imagePath() const { return m_path; }
     void setTile(bool t) { m_tile = t; }
     bool tile() const { return m_tile; }
+    void setFit(Fit f) { m_fit = f; }
+    Fit fit() const { return m_fit; }
+    // `stretch`, `cover`, `contain`; anything else leaves the fit alone and
+    // returns false, which is what the XML parser and the property both want.
+    bool setFitName(const std::string& name);
+    const char* fitName() const;
 
     // Zoom into the picture: the destination stays the widget's bounds and the
     // source window shrinks, so a magnified image is cropped by its own frame
@@ -188,6 +203,7 @@ private:
 
     std::string m_path;
     bool m_tile = false;
+    Fit m_fit = Fit::Stretch;
     bool m_pinchZoom = false;
     float m_zoom = 1.0f;
     float m_uvX = -1.0f, m_uvY = -1.0f;

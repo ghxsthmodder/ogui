@@ -179,6 +179,16 @@ MeshData cubeMesh(float size) {
 // ---- SceneView ------------------------------------------------------------
 bool SceneView::submit(GlBackend& backend, int widthPx, int heightPx) {
     if (widthPx <= 0 || heightPx <= 0) return false;
+    // The context behind the handles can be gone and replaced by another one
+    // (Android does this on resume). The target then belongs to nothing that
+    // exists, and there is no GL object left to delete: forget it and build a
+    // new one in the backend that is asking.
+    if (m_backend != &backend) {
+        m_backend = &backend;
+        m_target = 0;
+        m_slot = 0;
+        m_ownsTarget = false;
+    }
     if (!m_ownsTarget || m_slot <= 0) {
         m_target = backend.createSceneTarget(widthPx, heightPx);
         if (m_target <= 0) return false;
